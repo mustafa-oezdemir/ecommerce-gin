@@ -1,6 +1,7 @@
 package handlers
 
 import (
+    "fmt"
     "net/http"
     "github.com/gin-gonic/gin"
     "github.com/mustafa-oezdemir/ecommerce-gin/internal/db"

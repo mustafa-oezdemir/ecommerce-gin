@@ -1,23 +1,17 @@
-{{ define "content" }}
-<h1>Your Cart</h1>
+{{template "layout" .}}
 
-{{ if .Items }}
+{{define "title"}}Sepet{{end}}
+
+{{define "content"}}
+<h2>Sepetiniz</h2>
 <ul>
-  {{ range .Items }}
-    <li>
-      {{ .Product.Name }} — {{ .Quantity }} × {{ .Product.Price }}
-    </li>
-  {{ end }}
+  {{range .Items}}
+    <li>{{.Product.Name}} x {{.Quantity}}</li>
+  {{else}}
+    <li>Sepetiniz boş</li>
+  {{end}}
 </ul>
-
-<form method="POST" action="/checkout">
-  <button type="submit">Checkout</button>
+<form method="post" action="/checkout">
+  <button type="submit">Satın Al</button>
 </form>
-
-{{ else }}
-<p>Your cart is empty.</p>
-{{ end }}
-
-{{ end }}
-
-{{ template "layout" . }}
+{{end}}

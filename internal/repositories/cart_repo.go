@@ -1,8 +1,8 @@
 package repositories
 
 import (
-    "github.com/mustafa/ecommerce-gin/internal/db"
-    "github.com/mustafa/ecommerce-gin/internal/models"
+    "github.com/mustafa-oezdemir/ecommerce-gin/internal/db"
+    "github.com/mustafa-oezdemir/ecommerce-gin/internal/models"
 )
 
 type CartRepository struct{}

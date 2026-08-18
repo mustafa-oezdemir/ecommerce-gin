@@ -5,8 +5,8 @@ import (
     "strconv"
 
     "github.com/gin-gonic/gin"
-    "github.com/mustafa/ecommerce-gin/internal/db"
-    "github.com/mustafa/ecommerce-gin/internal/models"
+    "github.com/mustafa-oezdemir/ecommerce-gin/internal/db"
+    "github.com/mustafa-oezdemir/ecommerce-gin/internal/models"
 )
 
 type EmployeeHandler struct{}

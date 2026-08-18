@@ -1,8 +1,8 @@
 package services
 
 import (
-    "github.com/mustafa/ecommerce-gin/internal/models"
-    "github.com/mustafa/ecommerce-gin/internal/repositories"
+    "github.com/mustafa-oezdemir/ecommerce-gin/internal/models"
+    "github.com/mustafa-oezdemir/ecommerce-gin/internal/repositories"
 )
 
 type CartService struct {

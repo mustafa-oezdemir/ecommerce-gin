@@ -1,21 +1,16 @@
-{{ define "layout" }}
-<!DOCTYPE html>
+{{define "layout"}}
+<!doctype html>
 <html>
 <head>
-  <title>{{ .Title }}</title>
-  <link rel="stylesheet" href="/static/css/style.css">
+  <meta charset="utf-8">
+  <title>{{block "title" .}}Ecommerce{{end}}</title>
 </head>
 <body>
-  <header>
-    <a href="/">Shop</a> |
-    <a href="/admin/dashboard">Admin</a> |
-    <a href="/employee/products">Employee</a> |
-    <a href="/cart">Cart</a> |
-    <a href="/login">Login</a>
-  </header>
+  <header><h1>My Shop</h1></header>
   <main>
-    {{ template "content" . }}
+    {{block "content" .}}{{end}}
   </main>
+  <footer><small>© 2026</small></footer>
 </body>
 </html>
-{{ end }}
+{{end}}
