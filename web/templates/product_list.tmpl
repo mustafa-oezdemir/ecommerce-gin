@@ -1,0 +1,12 @@
+{{ define "content" }}
+<h1>Products</h1>
+<ul>
+  {{ range .Products }}
+    <li>
+      <a href="/products/{{ .ID }}">{{ .Name }}</a> - {{ .Price }}
+    </li>
+  {{ end }}
+</ul>
+{{ end }}
+
+{{ template "layout" . }}
