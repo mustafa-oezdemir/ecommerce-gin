@@ -57,3 +57,12 @@ func (h *AdminHandler) CreateUser(c *gin.Context) {
 
     c.Redirect(http.StatusFound, "/admin/users")
 }
+
+func (h *AdminHandler) ListOrders(c *gin.Context) {
+    var orders []models.Order
+    db.DB.Preload("Items.Product").Preload("User").Find(&orders)
+
+    c.HTML(http.StatusOK, "admin_orders.tmpl", gin.H{
+        "Orders": orders,
+    })
+}

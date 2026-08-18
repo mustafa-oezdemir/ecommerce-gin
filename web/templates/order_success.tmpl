@@ -1,0 +1,10 @@
+{{ define "content" }}
+<h1>Order Completed</h1>
+
+<p>Your order ID: <strong>{{ .Order.ID }}</strong></p>
+<p>Status: {{ .Order.Status }}</p>
+
+<a href="/products">Continue Shopping</a>
+{{ end }}
+
+{{ template "layout" . }}

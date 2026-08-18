@@ -25,6 +25,8 @@ func Init(cfg *config.Config) {
         &models.Product{},
         &models.Order{},
         &models.OrderItem{},
+        &models.Cart{},
+        &models.CartItem{},
     )
     if err != nil {
         log.Fatalf("migration error: %v", err)

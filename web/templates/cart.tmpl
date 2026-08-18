@@ -1,0 +1,23 @@
+{{ define "content" }}
+<h1>Your Cart</h1>
+
+{{ if .Items }}
+<ul>
+  {{ range .Items }}
+    <li>
+      {{ .Product.Name }} — {{ .Quantity }} × {{ .Product.Price }}
+    </li>
+  {{ end }}
+</ul>
+
+<form method="POST" action="/checkout">
+  <button type="submit">Checkout</button>
+</form>
+
+{{ else }}
+<p>Your cart is empty.</p>
+{{ end }}
+
+{{ end }}
+
+{{ template "layout" . }}

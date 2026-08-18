@@ -44,16 +44,61 @@ func (h *ShopHandler) ProductDetail(c *gin.Context) {
     })
 }
 
-// Cart & Checkout için basit session/cookie tabanlı sepet mantığını sonra ekleyebiliriz.
+
 func (h *ShopHandler) AddToCart(c *gin.Context) {
-    // TODO: basit cart implementasyonu
-    c.String(http.StatusOK, "Added to cart")
+    userAny, exists := c.Get("currentUser")
+    if !exists {
+        c.Redirect(http.StatusFound, "/login")
+        return
+    }
+    user := userAny.(models.User)
+
+    productID, _ := strconv.Atoi(c.Param("id"))
+
+    err := h.cartService.AddToCart(user, uint(productID), 1)
+    if err != nil {
+        c.String(http.StatusInternalServerError, "Error adding to cart")
+        return
+    }
+
+    c.Redirect(http.StatusFound, "/cart")
 }
 
 func (h *ShopHandler) ViewCart(c *gin.Context) {
-    c.HTML(http.StatusOK, "cart.tmpl", gin.H{})
+    userAny, exists := c.Get("currentUser")
+    if !exists {
+        c.Redirect(http.StatusFound, "/login")
+        return
+    }
+    user := userAny.(models.User)
+
+    cart, err := h.cartService.GetCart(user)
+    if err != nil {
+        c.String(http.StatusInternalServerError, "Error loading cart")
+        return
+    }
+
+    c.HTML(http.StatusOK, "cart.tmpl", gin.H{
+        "Items": cart.Items,
+    })
 }
 
 func (h *ShopHandler) Checkout(c *gin.Context) {
-    c.String(http.StatusOK, "Checkout complete")
+    userAny, exists := c.Get("currentUser")
+    if !exists {
+        c.Redirect(http.StatusFound, "/login")
+        return
+    }
+    user := userAny.(models.User)
+
+    order, err := h.orderService.CreateOrder(user)
+    if err != nil {
+        c.String(http.StatusBadRequest, err.Error())
+        return
+    }
+
+    c.HTML(http.StatusOK, "order_success.tmpl", gin.H{
+        "Order": order,
+    })
 }
+

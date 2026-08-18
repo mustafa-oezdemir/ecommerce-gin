@@ -45,6 +45,8 @@ func main() {
         adminGroup.GET("/dashboard", admin.Dashboard)
         adminGroup.GET("/users", admin.ListUsers)
         adminGroup.POST("/users", admin.CreateUser)
+		adminGroup.GET("/orders", admin.ListOrders)
+
     }
 
     employee := handlers.NewEmployeeHandler()
