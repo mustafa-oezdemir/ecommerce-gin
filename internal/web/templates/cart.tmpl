@@ -1,0 +1,17 @@
+{{template "layout" .}}
+
+{{define "title"}}Sepet{{end}}
+
+{{define "content"}}
+<h2>Sepetiniz</h2>
+<ul>
+  {{range .Items}}
+    <li>{{.Product.Name}} x {{.Quantity}}</li>
+  {{else}}
+    <li>Sepetiniz boş</li>
+  {{end}}
+</ul>
+<form method="post" action="/checkout">
+  <button type="submit">Satın Al</button>
+</form>
+{{end}}

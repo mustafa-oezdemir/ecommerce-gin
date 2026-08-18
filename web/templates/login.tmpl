@@ -1,0 +1,14 @@
+{{template "layout" .}}
+
+{{define "title"}}Giriş{{end}}
+
+{{define "content"}}
+<h2>Giriş Yap</h2>
+<form method="post" action="/login">
+  <label>Email</label><br>
+  <input type="email" name="email" required><br>
+  <label>Şifre</label><br>
+  <input type="password" name="password" required><br>
+  <button type="submit">Giriş</button>
+</form>
+{{end}}

@@ -16,10 +16,11 @@
         r := gin.Default()
 
     r.LoadHTMLFiles(
-    "internal/web/templates/layout.tmpl",
-    "internal/web/templates/product_list.tmpl",
-    "internal/web/templates/cart.tmpl",
-    "internal/web/templates/order_success.tmpl",
+    "web/templates/layout.tmpl",
+    "web/templates/product_list.tmpl",
+    "web/templates/cart.tmpl",
+    "web/templates/order_success.tmpl",
+    "web/templates/login.tmpl",
     )
     r.Static("/static", "./internal/web/static")
         // Shop

@@ -1,0 +1,16 @@
+{{define "layout"}}
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>{{block "title" .}}Ecommerce{{end}}</title>
+</head>
+<body>
+  <header><h1>My Shop</h1></header>
+  <main>
+    {{block "content" .}}{{end}}
+  </main>
+  <footer><small>© 2026</small></footer>
+</body>
+</html>
+{{end}}
