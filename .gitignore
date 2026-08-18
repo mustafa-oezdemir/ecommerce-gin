@@ -1,3 +1,5 @@
 .env
 
 MYSQL_DSN
+
+main.exe
