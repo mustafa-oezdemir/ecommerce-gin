@@ -1,0 +1,15 @@
+{{ define "users" }}
+<h1>Users</h1>
+
+{{ if .Users }}
+<ul>
+	{{ range .Users }}
+	<li>
+		{{ if .Name }}{{ .Name }}{{ else if .Username }}{{ .Username }}{{ else }}{{ . }}{{ end }}
+	</li>
+	{{ end }}
+</ul>
+{{ else }}
+<p>No users found.</p>
+{{ end }}
+{{ end }}
