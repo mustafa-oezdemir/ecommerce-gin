@@ -10,6 +10,7 @@
 bin/
 dist/
 coverage.out
+.gotmp/
 
 # IDE / OS
 .idea/

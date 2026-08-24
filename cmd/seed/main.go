@@ -65,8 +65,12 @@ func main() {
 	for _, product := range products {
 		var existing models.Product
 		if err := appdb.DB.Where("name = ?", product.Name).First(&existing).Error; errors.Is(err, gorm.ErrRecordNotFound) {
-			if err := appdb.DB.Create(&product).Error; err != nil { log.Fatalf("seed product %s failed: %v", product.Name, err) }
-		} else if err != nil { log.Fatalf("seed product lookup %s failed: %v", product.Name, err) }
+			if err := appdb.DB.Create(&product).Error; err != nil {
+				log.Fatalf("seed product %s failed: %v", product.Name, err)
+			}
+		} else if err != nil {
+			log.Fatalf("seed product lookup %s failed: %v", product.Name, err)
+		}
 	}
 
 	log.Println("seed completed successfully")

@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/db"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/middleware"
+	"github.com/mustafa-oezdemir/ecommerce-gin/internal/services"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/validation"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -71,5 +72,6 @@ func (h *AccountHandler) ChangePassword(c *gin.Context) {
 		c.String(http.StatusInternalServerError, "Could not change password")
 		return
 	}
+	go services.NewMailServiceFromEnv().SendPasswordChanged(*user)
 	c.Redirect(http.StatusFound, "/account")
 }

@@ -14,6 +14,8 @@ func ParseTemplates() (*template.Template, error) {
 }
 
 func formatCents(cents int64) string {
-	if cents < 0 { return "-" + formatCents(-cents) }
+	if cents < 0 {
+		return "-" + formatCents(-cents)
+	}
 	return fmt.Sprintf("%d,%02d €", cents/100, cents%100)
 }

@@ -4,9 +4,6 @@ services:
     container_name: ecommerce-mysql
     restart: unless-stopped
 
-    env_file:
-      - .env
-
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: ${MYSQL_DATABASE}
@@ -37,12 +34,21 @@ services:
     container_name: ecommerce-app
     restart: unless-stopped
 
-    env_file:
-      - .env
-
     environment:
+      APP_ENV: ${APP_ENV}
+      APP_PORT: ${APP_PORT}
+      GIN_MODE: ${GIN_MODE}
       MYSQL_HOST: mysql
       MYSQL_PORT: 3306
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      SESSION_SECRET: ${SESSION_SECRET}
+      SESSION_SECURE: ${SESSION_SECURE}
+      CSRF_SECRET: ${CSRF_SECRET}
+      SMTP_HOST: mailhog
+      SMTP_PORT: 1025
+      SMTP_FROM: no-reply@ecommerce.local
 
     ports:
       - "8080:8080"
@@ -50,6 +56,21 @@ services:
     depends_on:
       mysql:
         condition: service_healthy
+
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/health/live >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mailhog:
+    image: mailhog/mailhog
+    container_name: ecommerce-mailhog
+    restart: unless-stopped
+    ports:
+      - "8025:8025"
+    expose:
+      - "1025"
 
 volumes:
   mysql_data:

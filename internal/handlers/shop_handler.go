@@ -16,10 +16,11 @@ import (
 type ShopHandler struct {
 	cartService  *services.CartService
 	orderService *services.OrderService
+	mailService  *services.MailService
 }
 
 func NewShopHandler() *ShopHandler {
-	return &ShopHandler{cartService: services.NewCartService(), orderService: services.NewOrderService()}
+	return &ShopHandler{cartService: services.NewCartService(), orderService: services.NewOrderService(), mailService: services.NewMailServiceFromEnv()}
 }
 
 func (h *ShopHandler) Home(c *gin.Context)         { h.renderProducts(c) }
@@ -165,6 +166,7 @@ func (h *ShopHandler) Checkout(c *gin.Context) {
 		}
 		return
 	}
+	go h.mailService.SendOrderCreated(*user, *order)
 	c.HTML(http.StatusOK, "order_success.tmpl", viewData(c, gin.H{"Order": order}))
 }
 
