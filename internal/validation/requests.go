@@ -45,12 +45,29 @@ type ProductIDURI struct {
 	ID uint `uri:"id" binding:"required,gt=0"`
 }
 
+type ProductListIDURI struct {
+	ID uint `uri:"id" binding:"required,gt=0"`
+}
+
+type ProductListProductURI struct {
+	ListID    uint `uri:"id" binding:"required,gt=0"`
+	ProductID uint `uri:"productID" binding:"required,gt=0"`
+}
+
 type CartItemIDURI struct {
 	ID uint `uri:"id" binding:"required,gt=0"`
 }
 
 type AddToCartRequest struct {
 	Quantity int `form:"quantity,default=1" binding:"gte=1,lte=100"`
+}
+
+type CreateProductListRequest struct {
+	Name string `form:"name" binding:"required,min=2,max=100"`
+}
+
+type AddProductToListRequest struct {
+	ProductID uint `form:"product_id" binding:"required,gt=0"`
 }
 
 type UpdateQuantityRequest struct {

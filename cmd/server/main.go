@@ -63,11 +63,18 @@ func main() {
 	customer.POST("/checkout", shop.Checkout)
 	customer.GET("/account/orders", shop.ListOrders)
 	customer.GET("/account/orders/:id", shop.OrderDetail)
+	customer.GET("/account/purchases", shop.ListOrders)
 	account := handlers.NewAccountHandler()
 	customer.GET("/account", account.Show)
 	customer.GET("/account/profile", account.Show)
 	customer.POST("/account/profile", account.UpdateProfile)
 	customer.POST("/account/password", account.ChangePassword)
+	customer.GET("/account/lists", account.ListProductLists)
+	customer.POST("/account/lists", account.CreateProductList)
+	customer.GET("/account/lists/:id", account.ShowProductList)
+	customer.POST("/account/lists/:id/products", account.AddProductToList)
+	customer.POST("/account/lists/:id/products/:productID/remove", account.RemoveProductFromList)
+	customer.POST("/account/lists/:id/delete", account.DeleteProductList)
 
 	// Auth
 	auth := handlers.NewAuthHandler()
