@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/base64"
 	"fmt"
 	"log"
 	"os"
@@ -21,6 +22,7 @@ type Config struct {
 	MySQLPassword string
 	SessionSecret string
 	SessionSecure bool
+	CSRFKey       []byte
 	DSN           string
 }
 
@@ -39,6 +41,7 @@ func Load() *Config {
 	mysqlPassword := strings.TrimSpace(os.Getenv("MYSQL_PASSWORD"))
 	sessionSecret := strings.TrimSpace(os.Getenv("SESSION_SECRET"))
 	sessionSecureValue := strings.TrimSpace(os.Getenv("SESSION_SECURE"))
+	csrfSecret := strings.TrimSpace(os.Getenv("CSRF_SECRET"))
 
 	if appEnv == "" {
 		log.Fatal("APP_ENV is required (development, test, or production)")
@@ -67,8 +70,13 @@ func Load() *Config {
 		log.Fatal("Required MySQL environment variables are missing: MYSQL_HOST, MYSQL_PORT, MYSQL_DATABASE, MYSQL_USER, MYSQL_PASSWORD")
 	}
 
-	if appEnv == "production" && sessionSecret == "" {
-		log.Fatal("SESSION_SECRET is required in production")
+	if len(sessionSecret) < 32 {
+		log.Fatal("SESSION_SECRET must be at least 32 characters")
+	}
+
+	csrfKey, err := base64.StdEncoding.DecodeString(csrfSecret)
+	if err != nil || len(csrfKey) != 32 {
+		log.Fatal("CSRF_SECRET must be valid base64 and decode to exactly 32 bytes")
 	}
 
 	sessionSecure, err := strconv.ParseBool(sessionSecureValue)
@@ -95,6 +103,7 @@ func Load() *Config {
 		MySQLPassword: mysqlPassword,
 		SessionSecret: sessionSecret,
 		SessionSecure: sessionSecure,
+		CSRFKey:       csrfKey,
 		DSN:           dsn,
 	}
 }

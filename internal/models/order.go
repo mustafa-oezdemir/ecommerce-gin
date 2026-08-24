@@ -2,11 +2,21 @@ package models
 
 import "gorm.io/gorm"
 
+type OrderStatus string
+
+const (
+	OrderStatusPending    OrderStatus = "pending"
+	OrderStatusProcessing OrderStatus = "processing"
+	OrderStatusShipped    OrderStatus = "shipped"
+	OrderStatusCompleted  OrderStatus = "completed"
+	OrderStatusCancelled  OrderStatus = "cancelled"
+)
+
 type Order struct {
 	gorm.Model
 	UserID uint
 	User   User
-	Status string `gorm:"size:50"`
+	Status OrderStatus `gorm:"size:50;index"`
 	Items  []OrderItem
 }
 

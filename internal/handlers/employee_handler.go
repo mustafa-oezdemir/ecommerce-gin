@@ -15,6 +15,17 @@ func NewEmployeeHandler() *EmployeeHandler {
 	return &EmployeeHandler{}
 }
 
+func (h *EmployeeHandler) Dashboard(c *gin.Context) {
+	var pendingOrders int64
+	var lowStockProducts int64
+	db.DB.Model(&models.Order{}).Where("status = ?", models.OrderStatusPending).Count(&pendingOrders)
+	db.DB.Model(&models.Product{}).Where("stock <= ?", 5).Count(&lowStockProducts)
+	c.HTML(http.StatusOK, "employee_dashboard.tmpl", viewData(c, gin.H{
+		"PendingOrders":    pendingOrders,
+		"LowStockProducts": lowStockProducts,
+	}))
+}
+
 func (h *EmployeeHandler) ListProducts(c *gin.Context) {
 	var products []models.Product
 	db.DB.Find(&products)

@@ -4,7 +4,9 @@
 
 {{define "content"}}
 <h2>Giriş Yap</h2>
+{{if .error}}<p role="alert">{{.error}}</p>{{end}}
 <form method="post" action="/login">
+  {{.CSRFField}}
   <label>Email</label><br>
   <input type="email" name="email" required><br>
   <label>Şifre</label><br>
