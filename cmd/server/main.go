@@ -105,8 +105,18 @@ func main() {
 		employeeGroup.POST("/orders/:id/status", employee.UpdateOrderStatus)
 	}
 
-	csrfMiddleware := csrf.Protect(cfg.CSRFKey, csrf.Secure(cfg.SessionSecure), csrf.HttpOnly(true), csrf.SameSite(csrf.SameSiteLaxMode), csrf.Path("/"), csrf.FieldName("_csrf"), csrf.RequestHeader("X-CSRF-Token"), csrf.ErrorHandler(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { http.Error(w, "Forbidden", http.StatusForbidden) })))
-	server := &http.Server{Addr: ":" + cfg.AppPort, Handler: csrfMiddleware(r), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second}
+	csrfMiddleware := csrf.Protect(cfg.CSRFKey, csrf.Secure(cfg.SessionSecure), csrf.HttpOnly(true), csrf.SameSite(csrf.SameSiteLaxMode), csrf.Path("/"), csrf.FieldName("_csrf"), csrf.RequestHeader("X-CSRF-Token"), csrf.ErrorHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		slog.Default().Warn("csrf validation failed", "reason", csrf.FailureReason(r))
+		http.Error(w, "Forbidden", http.StatusForbidden)
+	})))
+	csrfProtectedHandler := csrfMiddleware(r)
+	serverHandler := csrfProtectedHandler
+	if cfg.AppEnv != "production" {
+		serverHandler = http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			csrfProtectedHandler.ServeHTTP(w, csrf.PlaintextHTTPRequest(req))
+		})
+	}
+	server := &http.Server{Addr: ":" + cfg.AppPort, Handler: serverHandler, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second}
 	metricsServer := &http.Server{Addr: ":" + cfg.MetricsPort, Handler: promhttp.Handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second}
 	go func() {
 		log.Printf("server listening on %s", server.Addr)
