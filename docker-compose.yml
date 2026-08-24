@@ -1,21 +1,55 @@
-version: "3.9"
-
 services:
   mysql:
     image: mysql:8.0
     container_name: ecommerce-mysql
-    restart: always
+    restart: unless-stopped
+
     env_file:
       - .env
+
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: ${MYSQL_DATABASE}
       MYSQL_USER: ${MYSQL_USER}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+
     ports:
       - "3307:3306"
+
     volumes:
       - mysql_data:/var/lib/mysql
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "mysqladmin ping -h 127.0.0.1 -u root -p$$MYSQL_ROOT_PASSWORD"
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  app:
+    build:
+      context: .
+      dockerfile: cmd/server/Dockerfile
+
+    container_name: ecommerce-app
+    restart: unless-stopped
+
+    env_file:
+      - .env
+
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+
+    ports:
+      - "8080:8080"
+
+    depends_on:
+      mysql:
+        condition: service_healthy
 
 volumes:
   mysql_data:

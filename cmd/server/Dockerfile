@@ -1,17 +1,20 @@
-# Place this Dockerfile at the project root (same level as go.mod)
-FROM golang:1.26
+FROM golang:1.26 AS builder
 
 WORKDIR /app
 
-# Copy go.mod and go.sum first for caching
 COPY go.mod go.sum ./
 RUN go mod download
 
-# Copy the rest of the project
 COPY . .
 
-# Build the server binary
-RUN CGO_ENABLED=0 GOOS=linux go build -o /app/server ./cmd/server
+RUN CGO_ENABLED=0 GOOS=linux go build -o /server ./cmd/server
+
+
+FROM alpine:3.22
+
+WORKDIR /app
+
+COPY --from=builder /server /app/server
 
 EXPOSE 8080
 
