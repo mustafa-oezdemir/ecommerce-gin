@@ -34,6 +34,7 @@ APP_ENV=development
 APP_PORT=8080
 GIN_MODE=debug
 
+MYSQL_ROOT_PASSWORD=replace_with_secure_root_password
 MYSQL_HOST=127.0.0.1
 MYSQL_PORT=3307
 MYSQL_DATABASE=ecommerce
@@ -50,6 +51,8 @@ For Docker-based app containers, the application uses:
 MYSQL_HOST=mysql
 MYSQL_PORT=3306
 ```
+
+The `MYSQL_ROOT_PASSWORD` value is only for the MySQL container initialization and is not exposed to the application container.
 
 ## Database and seed
 
