@@ -1,14 +1,1 @@
-{{template "layout" .}}
-
-{{define "title"}}Ürünler{{end}}
-
-{{define "content"}}
-<h2>Ürünler</h2>
-<ul>
-  {{range .Products}}
-    <li><a href="/products/{{.ID}}">{{.Name}}</a> - {{.Price}}</li>
-  {{else}}
-    <li>Ürün yok</li>
-  {{end}}
-</ul>
-{{end}}
+{{define "product_list.tmpl"}}<!doctype html><html><body><nav><a href="/">Ürünler</a> <a href="/cart">Sepet</a> <a href="/account">Hesabım</a></nav><h1>Ürünler</h1><p>{{range .Categories}}<a href="/?category={{.ID}}">{{.Name}}</a> {{end}}</p><ul>{{range .Products}}<li><a href="/products/{{.ID}}">{{.Name}}</a> — {{money .PriceCents}} {{if .Category}}({{.Category.Name}}){{end}}<form method="post" action="/cart/add/{{.ID}}">{{$.CSRFField}}<input type="number" name="quantity" value="1" min="1" max="100" required><button type="submit">Sepete ekle</button></form></li>{{else}}<li>Ürün yok</li>{{end}}</ul></body></html>{{end}}

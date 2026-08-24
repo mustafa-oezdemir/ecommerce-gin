@@ -1,17 +1,1 @@
-{{template "layout" .}}
-
-{{define "title"}}Sepet{{end}}
-
-{{define "content"}}
-<h2>Sepetiniz</h2>
-<ul>
-  {{range .Items}}
-    <li>{{.Product.Name}} x {{.Quantity}}</li>
-  {{else}}
-    <li>Sepetiniz boş</li>
-  {{end}}
-</ul>
-<form method="post" action="/checkout">
-  <button type="submit">Satın Al</button>
-</form>
-{{end}}
+{{define "cart.tmpl"}}<!doctype html><html><body><h1>Sepetiniz</h1><ul>{{range .Items}}<li>{{.Product.Name}} — {{money .Product.PriceCents}} × {{.Quantity}}<form method="post" action="/cart/items/{{.ID}}">{{$.CSRFField}}<input type="number" name="quantity" value="{{.Quantity}}" min="1" max="100"><button type="submit">Güncelle</button></form><form method="post" action="/cart/items/{{.ID}}/remove">{{$.CSRFField}}<button type="submit">Kaldır</button></form></li>{{else}}<li>Sepetiniz boş</li>{{end}}</ul><p>Toplam: {{money .TotalCents}}</p><form method="post" action="/checkout">{{.CSRFField}}<button type="submit">Satın Al</button></form><p><a href="/">Alışverişe dön</a></p></body></html>{{end}}

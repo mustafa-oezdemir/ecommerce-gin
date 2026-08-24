@@ -1,8 +1,1 @@
-{{template "layout" .}}
-
-{{define "title"}}Sipariş Başarılı{{end}}
-
-{{define "content"}}
-<h2>Siparişiniz alındı</h2>
-<p>Sipariş numarası: {{.Order.ID}}</p>
-{{end}}
+{{define "order_success.tmpl"}}<!doctype html><html><body><h1>Siparişiniz alındı</h1><p>Sipariş numarası: {{.Order.ID}}</p><p>Toplam: {{money .Order.TotalCents}}</p><a href="/account/orders/{{.Order.ID}}">Siparişi görüntüle</a></body></html>{{end}}

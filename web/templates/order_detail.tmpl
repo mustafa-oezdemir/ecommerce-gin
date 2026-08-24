@@ -1,0 +1,1 @@
+{{define "order_detail.tmpl"}}<!doctype html><html><body><h1>Sipariş #{{.Order.ID}}</h1><p>Durum: {{.Order.Status}}</p><ul>{{range .Order.Items}}<li>{{.ProductName}} — {{money .UnitPriceCents}} × {{.Quantity}} = {{money .SubtotalCents}}</li>{{end}}</ul><p>Toplam: {{money .Order.TotalCents}}</p><a href="/account/orders">Geri</a></body></html>{{end}}

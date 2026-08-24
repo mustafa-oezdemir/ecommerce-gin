@@ -30,39 +30,69 @@ func (h *AdminHandler) Dashboard(c *gin.Context) {
 
 func (h *AdminHandler) ListUsers(c *gin.Context) {
 	var users []models.User
-	if err := db.DB.Order("created_at DESC").Find(&users).Error; err != nil { c.String(http.StatusInternalServerError, "Could not load users"); return }
+	if err := db.DB.Order("created_at DESC").Find(&users).Error; err != nil {
+		c.String(http.StatusInternalServerError, "Could not load users")
+		return
+	}
 	c.HTML(http.StatusOK, "admin_users.tmpl", viewData(c, gin.H{"Users": users}))
 }
 
 func (h *AdminHandler) CreateUser(c *gin.Context) {
 	var req validation.CreateUserRequest
-	if err := c.ShouldBind(&req); err != nil { c.String(http.StatusBadRequest, "Invalid user data"); return }
+	if err := c.ShouldBind(&req); err != nil {
+		c.String(http.StatusBadRequest, "Invalid user data")
+		return
+	}
 	name, email := strings.TrimSpace(req.Name), strings.ToLower(strings.TrimSpace(req.Email))
-	if name == "" || email == "" { c.String(http.StatusBadRequest, "Invalid user data"); return }
+	if name == "" || email == "" {
+		c.String(http.StatusBadRequest, "Invalid user data")
+		return
+	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
-	if err != nil { c.String(http.StatusInternalServerError, "Could not create user"); return }
+	if err != nil {
+		c.String(http.StatusInternalServerError, "Could not create user")
+		return
+	}
 	user := models.User{Name: name, Email: email, Password: string(hash), Role: models.Role(req.Role)}
-	if err := db.DB.Create(&user).Error; err != nil { c.String(http.StatusConflict, "Could not create user"); return }
+	if err := db.DB.Create(&user).Error; err != nil {
+		c.String(http.StatusConflict, "Could not create user")
+		return
+	}
 	c.Redirect(http.StatusFound, "/admin/users")
 }
 
 func (h *AdminHandler) ListOrders(c *gin.Context) {
 	var orders []models.Order
-	if err := db.DB.Preload("Items").Preload("User").Order("created_at DESC").Find(&orders).Error; err != nil { c.String(http.StatusInternalServerError, "Could not load orders"); return }
+	if err := db.DB.Preload("Items").Preload("User").Order("created_at DESC").Find(&orders).Error; err != nil {
+		c.String(http.StatusInternalServerError, "Could not load orders")
+		return
+	}
 	c.HTML(http.StatusOK, "admin_orders.tmpl", viewData(c, gin.H{"Orders": orders}))
 }
 
 func (h *AdminHandler) ListCategories(c *gin.Context) {
 	var categories []models.Category
-	if err := db.DB.Order("name ASC").Find(&categories).Error; err != nil { c.String(http.StatusInternalServerError, "Could not load categories"); return }
+	if err := db.DB.Order("name ASC").Find(&categories).Error; err != nil {
+		c.String(http.StatusInternalServerError, "Could not load categories")
+		return
+	}
 	c.HTML(http.StatusOK, "admin_categories.tmpl", viewData(c, gin.H{"Categories": categories}))
 }
 
 func (h *AdminHandler) CreateCategory(c *gin.Context) {
 	var req validation.CreateCategoryRequest
-	if err := c.ShouldBind(&req); err != nil { c.String(http.StatusBadRequest, "Invalid category data"); return }
+	if err := c.ShouldBind(&req); err != nil {
+		c.String(http.StatusBadRequest, "Invalid category data")
+		return
+	}
 	category := models.Category{Name: strings.TrimSpace(req.Name), Description: strings.TrimSpace(req.Description)}
-	if category.Name == "" { c.String(http.StatusBadRequest, "Invalid category data"); return }
-	if err := db.DB.Create(&category).Error; err != nil { c.String(http.StatusConflict, "Could not create category"); return }
+	if category.Name == "" {
+		c.String(http.StatusBadRequest, "Invalid category data")
+		return
+	}
+	if err := db.DB.Create(&category).Error; err != nil {
+		c.String(http.StatusConflict, "Could not create category")
+		return
+	}
 	c.Redirect(http.StatusFound, "/admin/categories")
 }

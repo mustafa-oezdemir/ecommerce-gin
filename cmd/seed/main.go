@@ -21,6 +21,9 @@ type seedUser struct {
 
 func main() {
 	cfg := config.Load()
+	if cfg.AppEnv == "production" {
+		log.Fatal("seed is disabled in production")
+	}
 
 	appdb.Init(cfg)
 
@@ -49,6 +52,21 @@ func main() {
 		if err := createUserIfNotExists(appdb.DB, user); err != nil {
 			log.Fatalf("seed user %s failed: %v", user.Email, err)
 		}
+	}
+
+	category := models.Category{Name: "Elektronik", Description: "Demo elektronik ürünleri"}
+	if err := appdb.DB.Where("name = ?", category.Name).FirstOrCreate(&category).Error; err != nil {
+		log.Fatalf("seed category failed: %v", err)
+	}
+	products := []models.Product{
+		{Name: "Demo Laptop", Description: "Geliştirme için demo ürün", PriceCents: 99999, Stock: 10, Active: true, CategoryID: &category.ID},
+		{Name: "Demo Kulaklık", Description: "Geliştirme için demo ürün", PriceCents: 4999, Stock: 25, Active: true, CategoryID: &category.ID},
+	}
+	for _, product := range products {
+		var existing models.Product
+		if err := appdb.DB.Where("name = ?", product.Name).First(&existing).Error; errors.Is(err, gorm.ErrRecordNotFound) {
+			if err := appdb.DB.Create(&product).Error; err != nil { log.Fatalf("seed product %s failed: %v", product.Name, err) }
+		} else if err != nil { log.Fatalf("seed product lookup %s failed: %v", product.Name, err) }
 	}
 
 	log.Println("seed completed successfully")

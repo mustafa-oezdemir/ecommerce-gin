@@ -1,0 +1,1 @@
+{{define "order_list.tmpl"}}<!doctype html><html><body><h1>Siparişlerim</h1><ul>{{range .Orders}}<li><a href="/account/orders/{{.ID}}">Sipariş #{{.ID}}</a> — {{.Status}} — {{money .TotalCents}}</li>{{else}}<li>Henüz sipariş yok</li>{{end}}</ul><a href="/account">Hesap</a></body></html>{{end}}

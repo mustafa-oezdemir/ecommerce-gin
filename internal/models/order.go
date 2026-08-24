@@ -14,8 +14,8 @@ const (
 
 type Order struct {
 	gorm.Model
-	UserID uint `gorm:"not null;index"`
-	User   User
+	UserID     uint `gorm:"not null;index"`
+	User       User
 	Status     OrderStatus `gorm:"size:50;index;not null"`
 	TotalCents int64       `gorm:"not null"`
 	Items      []OrderItem

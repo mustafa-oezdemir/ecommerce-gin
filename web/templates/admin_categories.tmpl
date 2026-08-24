@@ -1,0 +1,1 @@
+{{define "admin_categories.tmpl"}}<!doctype html><html><body><h1>Kategoriler</h1><form method="post" action="/admin/categories">{{.CSRFField}}<input name="name" placeholder="Ad" required><input name="description" placeholder="Açıklama"><button type="submit">Kategori ekle</button></form><ul>{{range .Categories}}<li>{{.Name}} — {{.Description}}</li>{{end}}</ul></body></html>{{end}}

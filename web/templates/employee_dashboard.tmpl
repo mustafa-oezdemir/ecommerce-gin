@@ -1,0 +1,1 @@
+{{define "employee_dashboard.tmpl"}}<!doctype html><html><body><h1>Çalışan paneli</h1><ul><li>Bekleyen: {{.PendingOrders}}</li><li>İşlenen: {{.ProcessingOrders}}</li><li>Düşük stok: {{.LowStockProducts}}</li><li>Tükenen: {{.OutOfStockProducts}}</li></ul><a href="/employee/products">Ürünler</a> <a href="/employee/orders">Siparişler</a></body></html>{{end}}
