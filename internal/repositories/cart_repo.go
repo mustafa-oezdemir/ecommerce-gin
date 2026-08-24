@@ -31,11 +31,20 @@ func (r *CartRepository) GetOrCreateCart(userID uint) (*models.Cart, error) {
 
 func (r *CartRepository) AddItem(cartID uint, productID uint, qty int) error {
 	var item models.CartItem
-	err := db.DB.Where("cart_id = ? AND product_id = ?", cartID, productID).First(&item).Error
+	err := db.DB.Unscoped().Where("cart_id = ? AND product_id = ?", cartID, productID).First(&item).Error
 
 	if err == nil {
+		if item.DeletedAt.Valid {
+			return db.DB.Unscoped().Model(&item).Updates(map[string]interface{}{
+				"deleted_at": nil,
+				"quantity":   qty,
+			}).Error
+		}
 		item.Quantity += qty
 		return db.DB.Save(&item).Error
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
 	}
 
 	item = models.CartItem{
