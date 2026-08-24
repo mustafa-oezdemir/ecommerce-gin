@@ -1,1 +1,86 @@
-{{define "product_list.tmpl"}}<!doctype html><html><body><nav><a href="/">Ürünler</a> <a href="/cart">Sepet</a> <a href="/account">Hesabım</a></nav><h1>Ürünler</h1><p>{{range .Categories}}<a href="/?category={{.ID}}">{{.Name}}</a> {{end}}</p><ul>{{range .Products}}<li><a href="/products/{{.ID}}">{{.Name}}</a> — {{money .PriceCents}} {{if .Category}}({{.Category.Name}}){{end}}<form method="post" action="/cart/add/{{.ID}}">{{$.CSRFField}}<input type="number" name="quantity" value="1" min="1" max="100" required><button type="submit">Sepete ekle</button></form></li>{{else}}<li>Ürün yok</li>{{end}}</ul></body></html>{{end}}
+{{define "product_list.tmpl"}}
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ürünler | NordShop</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { background: linear-gradient(180deg, #f7f9ff 0%, #eef5ff 100%); }
+    .hero { background: linear-gradient(135deg, rgba(79, 70, 229, 0.12), rgba(59, 130, 246, 0.08)); border-radius: 1.5rem; }
+    .filter-pill { border-radius: 999px; border: 1px solid rgba(79, 70, 229, 0.2); }
+    .product-card { height: 100%; border: 0; border-radius: 1.25rem; box-shadow: 0 15px 35px rgba(15, 23, 42, 0.08); overflow: hidden; }
+    .image-placeholder { height: 200px; background: linear-gradient(135deg, rgba(79, 70, 229, 0.12), rgba(14, 165, 233, 0.08)); display: flex; align-items: center; justify-content: center; font-size: 2.25rem; font-weight: 700; color: #4f46e5; }
+  </style>
+</head>
+<body>
+  <nav class="navbar navbar-expand-lg navbar-dark bg-dark shadow-sm">
+    <div class="container">
+      <a class="navbar-brand fw-bold" href="/">NordShop</a>
+      <div class="d-flex gap-2 ms-auto">
+        <a class="btn btn-outline-light btn-sm" href="/">Ürünler</a>
+        <a class="btn btn-outline-light btn-sm" href="/cart">Sepet</a>
+        <a class="btn btn-outline-light btn-sm" href="/account">Hesabım</a>
+      </div>
+    </div>
+  </nav>
+
+  <main class="container py-5">
+    <div class="hero p-4 p-lg-5 mb-4">
+      <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
+        <div>
+          <span class="badge rounded-pill bg-primary-subtle text-primary px-3 py-2 mb-3">Yeni koleksiyon</span>
+          <h1 class="display-6 fw-bold mb-2">Güncel ürünleri keşfet</h1>
+          <p class="text-muted mb-0">Kaliteli ürünler, uygun fiyatlar ve hızlı teslimat.</p>
+        </div>
+        <a href="/cart" class="btn btn-primary btn-lg">Sepetim</a>
+      </div>
+    </div>
+
+    {{if .Categories}}
+    <div class="d-flex flex-wrap gap-2 mb-4">
+      <a class="btn btn-sm {{if not $.CategoryID}}btn-primary{{else}}btn-outline-primary{{end}} filter-pill" href="/">Tümü</a>
+      {{range .Categories}}
+      <a class="btn btn-sm {{if eq $.CategoryID .ID}}btn-primary{{else}}btn-outline-primary{{end}} filter-pill" href="/?category={{.ID}}">{{.Name}}</a>
+      {{end}}
+    </div>
+    {{end}}
+
+    {{if .Products}}
+    <div class="row g-4">
+      {{range .Products}}
+      <div class="col-md-6 col-xl-4">
+        <div class="card product-card h-100">
+          <div class="image-placeholder">{{if .Category}}{{initials .Category.Name}}{{else}}N{{end}}</div>
+          <div class="card-body d-flex flex-column">
+            <div class="d-flex justify-content-between align-items-start gap-3 mb-2">
+              <div>
+                <h2 class="h5 mb-1"><a class="text-decoration-none text-dark" href="/products/{{.ID}}">{{.Name}}</a></h2>
+                {{if .Category}}<span class="text-muted small">{{.Category.Name}}</span>{{end}}
+              </div>
+              <span class="badge bg-light text-dark rounded-pill fw-semibold">{{money .PriceCents}}</span>
+            </div>
+            <p class="text-muted small mb-3">{{if .Description}}{{.Description}}{{else}}Öne çıkan ürün. Hemen sepete ekleyin.{{end}}</p>
+            <form method="post" action="/cart/add/{{.ID}}" class="mt-auto">
+              {{$.CSRFField}}
+              <div class="d-flex gap-2 align-items-center">
+                <input class="form-control" type="number" name="quantity" value="1" min="1" max="100" required>
+                <button type="submit" class="btn btn-primary">Sepete ekle</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+      {{end}}
+    </div>
+    {{else}}
+    <div class="alert alert-light border text-center py-4">
+      <h2 class="h5 mb-2">Ürün bulunamadı</h2>
+      <p class="mb-0 text-muted">Bu kategoriye ait ürün şu anda mevcut değil.</p>
+    </div>
+    {{end}}
+  </main>
+</body>
+</html>
+{{end}}

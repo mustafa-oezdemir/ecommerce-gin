@@ -1,1 +1,80 @@
-{{define "order_detail.tmpl"}}<!doctype html><html><body><h1>Sipariş #{{.Order.ID}}</h1><p>Durum: {{.Order.Status}}</p><ul>{{range .Order.Items}}<li>{{.ProductName}} — {{money .UnitPriceCents}} × {{.Quantity}} = {{money .SubtotalCents}}</li>{{end}}</ul><p>Toplam: {{money .Order.TotalCents}}</p><a href="/account/orders">Geri</a></body></html>{{end}}
+{{define "order_detail.tmpl"}}
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sipariş Detayı | NordShop</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { background: linear-gradient(180deg, #f8fafc 0%, #eef4ff 100%); }
+    .detail-card { border: 0; border-radius: 1.25rem; box-shadow: 0 12px 30px rgba(15,23,42,0.08); }
+  </style>
+</head>
+<body>
+  <nav class="navbar navbar-expand-lg navbar-dark bg-dark shadow-sm">
+    <div class="container">
+      <a class="navbar-brand fw-bold" href="/">NordShop</a>
+      <div class="d-flex gap-2 ms-auto">
+        <a class="btn btn-outline-light btn-sm" href="/">Ürünler</a>
+        <a class="btn btn-outline-light btn-sm" href="/cart">Sepet</a>
+        <a class="btn btn-outline-light btn-sm" href="/account">Hesabım</a>
+      </div>
+    </div>
+  </nav>
+
+  <main class="container py-5">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <div>
+        <span class="badge bg-primary-subtle text-primary rounded-pill px-3 py-2">Sipariş</span>
+        <h1 class="h2 mt-3 mb-0">Sipariş #{{.Order.ID}}</h1>
+      </div>
+      <a href="/account/orders" class="btn btn-outline-secondary">Geri</a>
+    </div>
+
+    <div class="card detail-card mb-4">
+      <div class="card-body p-4">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+          <div>
+            <div class="text-muted small">Durum</div>
+            <div class="fw-semibold">{{.Order.Status}}</div>
+          </div>
+          <div class="text-end">
+            <div class="text-muted small">Toplam</div>
+            <div class="fw-bold fs-4">{{money .Order.TotalCents}}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card detail-card">
+      <div class="card-body p-4">
+        <h2 class="h5 mb-3">Ürünler</h2>
+        <div class="table-responsive">
+          <table class="table align-middle mb-0">
+            <thead>
+              <tr>
+                <th>Ürün</th>
+                <th>Birim fiyat</th>
+                <th>Adet</th>
+                <th>Alt toplam</th>
+              </tr>
+            </thead>
+            <tbody>
+              {{range .Order.Items}}
+              <tr>
+                <td>{{.ProductName}}</td>
+                <td>{{money .UnitPriceCents}}</td>
+                <td>{{.Quantity}}</td>
+                <td>{{money .SubtotalCents}}</td>
+              </tr>
+              {{end}}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </main>
+</body>
+</html>
+{{end}}}
