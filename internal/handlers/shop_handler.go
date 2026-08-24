@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/db"
+	"github.com/mustafa-oezdemir/ecommerce-gin/internal/metrics"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/middleware"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/models"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/services"
@@ -158,16 +159,33 @@ func (h *ShopHandler) Checkout(c *gin.Context) {
 	if err != nil {
 		switch {
 		case errors.Is(err, services.ErrCartNotFound), errors.Is(err, services.ErrCartEmpty), errors.Is(err, services.ErrInvalidQuantity):
+			h.recordCheckoutFailure("empty_cart")
 			c.String(http.StatusBadRequest, "Cart cannot be checked out")
 		case errors.Is(err, services.ErrProductUnavailable), errors.Is(err, services.ErrInsufficientStock):
+			if errors.Is(err, services.ErrInsufficientStock) {
+				h.recordCheckoutFailure("insufficient_stock")
+			} else {
+				h.recordCheckoutFailure("product_unavailable")
+			}
 			c.String(http.StatusConflict, "A product is unavailable")
 		default:
+			h.recordCheckoutFailure("internal_error")
 			c.String(http.StatusInternalServerError, "Checkout failed")
 		}
 		return
 	}
+	if metric := metrics.Default(); metric != nil {
+		metric.OrdersCreated.WithLabelValues(string(order.Status)).Inc()
+		metric.OrderValueCents.Observe(float64(order.TotalCents))
+	}
 	go h.mailService.SendOrderCreated(*user, *order)
 	c.HTML(http.StatusOK, "order_success.tmpl", viewData(c, gin.H{"Order": order}))
+}
+
+func (h *ShopHandler) recordCheckoutFailure(reason string) {
+	if metric := metrics.Default(); metric != nil {
+		metric.CheckoutFailures.WithLabelValues(reason).Inc()
+	}
 }
 
 func (h *ShopHandler) ListOrders(c *gin.Context) {

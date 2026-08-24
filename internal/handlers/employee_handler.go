@@ -13,10 +13,13 @@ import (
 	"gorm.io/gorm"
 )
 
-type EmployeeHandler struct{ orderService *services.OrderService }
+type EmployeeHandler struct {
+	orderService *services.OrderService
+	mailService  *services.MailService
+}
 
 func NewEmployeeHandler() *EmployeeHandler {
-	return &EmployeeHandler{orderService: services.NewOrderService()}
+	return &EmployeeHandler{orderService: services.NewOrderService(), mailService: services.NewMailServiceFromEnv()}
 }
 
 func (h *EmployeeHandler) Dashboard(c *gin.Context) {
@@ -98,6 +101,66 @@ func (h *EmployeeHandler) UpdateStock(c *gin.Context) {
 	c.Redirect(http.StatusFound, "/employee/products")
 }
 
+func (h *EmployeeHandler) UpdateProduct(c *gin.Context) {
+	var uri validation.ProductIDURI
+	if err := c.ShouldBindUri(&uri); err != nil {
+		c.AbortWithStatus(http.StatusNotFound)
+		return
+	}
+	var req validation.CreateProductRequest
+	if err := c.ShouldBind(&req); err != nil {
+		c.String(http.StatusBadRequest, "Invalid product data")
+		return
+	}
+	priceCents, err := validation.ParseCents(req.Price)
+	if err != nil {
+		c.String(http.StatusBadRequest, "Invalid product data")
+		return
+	}
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		c.String(http.StatusBadRequest, "Invalid product data")
+		return
+	}
+	var categoryID *uint
+	if req.CategoryID != 0 {
+		var category models.Category
+		if err := db.DB.First(&category, req.CategoryID).Error; err != nil {
+			c.String(http.StatusBadRequest, "Invalid product data")
+			return
+		}
+		categoryID = &category.ID
+	}
+	result := db.DB.Model(&models.Product{}).Where("id = ?", uri.ID).Updates(map[string]any{"name": name, "description": strings.TrimSpace(req.Description), "price_cents": priceCents, "stock": req.Stock, "category_id": categoryID})
+	if result.Error != nil {
+		c.String(http.StatusInternalServerError, "Could not update product")
+		return
+	}
+	if result.RowsAffected != 1 {
+		c.AbortWithStatus(http.StatusNotFound)
+		return
+	}
+	c.Redirect(http.StatusFound, "/employee/products")
+}
+
+func (h *EmployeeHandler) DeactivateProduct(c *gin.Context) {
+	var uri validation.ProductIDURI
+	if err := c.ShouldBindUri(&uri); err != nil {
+		c.AbortWithStatus(http.StatusNotFound)
+		return
+	}
+	result := db.DB.Model(&models.Product{}).Where("id = ?", uri.ID).Update("active", false)
+	if result.Error != nil {
+		c.String(http.StatusInternalServerError, "Could not deactivate product")
+		return
+	}
+	if result.RowsAffected != 1 {
+		c.AbortWithStatus(http.StatusNotFound)
+		return
+	}
+	c.Redirect(http.StatusFound, "/employee/products")
+}
+
 func (h *EmployeeHandler) ListOrders(c *gin.Context) {
 	var orders []models.Order
 	if err := db.DB.Preload("Items").Preload("User").Order("created_at DESC").Find(&orders).Error; err != nil {
@@ -130,6 +193,10 @@ func (h *EmployeeHandler) UpdateOrderStatus(c *gin.Context) {
 		}
 		c.String(http.StatusInternalServerError, "Could not update order")
 		return
+	}
+	var order models.Order
+	if err := db.DB.Preload("User").First(&order, uri.ID).Error; err == nil {
+		go h.mailService.SendOrderStatusChanged(order.User, order)
 	}
 	c.Redirect(http.StatusFound, "/employee/orders")
 }

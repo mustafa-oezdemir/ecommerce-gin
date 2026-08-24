@@ -37,6 +37,7 @@ services:
     environment:
       APP_ENV: ${APP_ENV}
       APP_PORT: ${APP_PORT}
+      METRICS_PORT: ${METRICS_PORT}
       GIN_MODE: ${GIN_MODE}
       MYSQL_HOST: mysql
       MYSQL_PORT: 3306
@@ -53,15 +54,19 @@ services:
     ports:
       - "8080:8080"
 
+    expose:
+      - "9091"
+
     depends_on:
       mysql:
         condition: service_healthy
 
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/health/live >/dev/null"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:8080/health/ready"]
       interval: 10s
-      timeout: 5s
+      timeout: 3s
       retries: 5
+      start_period: 10s
 
   mailhog:
     image: mailhog/mailhog
@@ -72,5 +77,33 @@ services:
     expose:
       - "1025"
 
+  prometheus:
+    image: prom/prometheus
+    container_name: ecommerce-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    depends_on:
+      - app
+
+  grafana:
+    image: grafana/grafana
+    container_name: ecommerce-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+
 volumes:
   mysql_data:
+  grafana_data:

@@ -96,3 +96,21 @@ func (h *AdminHandler) CreateCategory(c *gin.Context) {
 	}
 	c.Redirect(http.StatusFound, "/admin/categories")
 }
+
+func (h *AdminHandler) DeleteCategory(c *gin.Context) {
+	var uri validation.ProductIDURI
+	if err := c.ShouldBindUri(&uri); err != nil {
+		c.AbortWithStatus(http.StatusNotFound)
+		return
+	}
+	result := db.DB.Delete(&models.Category{}, uri.ID)
+	if result.Error != nil {
+		c.String(http.StatusInternalServerError, "Could not delete category")
+		return
+	}
+	if result.RowsAffected != 1 {
+		c.AbortWithStatus(http.StatusNotFound)
+		return
+	}
+	c.Redirect(http.StatusFound, "/admin/categories")
+}

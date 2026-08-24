@@ -1,86 +1,81 @@
 # Ecommerce Gin
 
-A small e-commerce backend written in Go with Gin, GORM, MySQL, and HTML templates.
+Secure demo e-commerce application built with Go, Gin, GORM, MySQL and server-rendered HTML.
 
-## Local setup
+## Features
 
-1. Copy the template environment file:
+- Customer product browsing, cart, atomic checkout, account and own-order views.
+- Employee product, inventory and order processing screens.
+- Admin dashboards, user creation and category management.
+- Signed cookie sessions, RBAC, ownership-scoped data access, CSRF protection, request validation and rate-limited login.
+- Integer-cent money values and immutable order-item snapshots.
+- Versioned SQL migration, idempotent development seed and Docker/MailHog development stack.
 
-```bash
-cp .env.example .env
-```
+## Roles
 
-2. Fill in the local values in `.env` before starting services.
-3. Start the database and application:
+| Role | Capabilities |
+| --- | --- |
+| Customer | Browse products, manage own cart, checkout, update own profile/password, see own orders |
+| Employee | Operational dashboard, products, inventory and order status transitions |
+| Admin | Employee capabilities plus dashboards, users and category management |
+
+## Setup
+
+1. Copy `.env.example` to `.env`.
+2. Replace all password and secret placeholders. `SESSION_SECRET` must be at least 32 characters. `CSRF_SECRET` must be base64-encoded 32 random bytes.
+3. Start the local stack:
 
 ```bash
 docker compose up --build -d
-```
-
-4. Optionally seed development users:
-
-```bash
 docker compose run --rm app /app/seed
 ```
 
-The app is served on `http://localhost:8080` by default.
+The application is at `http://localhost:8080`; MailHog is at `http://localhost:8025`; Prometheus is at `http://localhost:9090`; Grafana is at `http://localhost:3000`.
 
-## Required environment variables
+Seed users exist only for development/test:
 
-Use values appropriate for your environment. Do not commit real production secrets.
+| Role | Email | Password |
+| --- | --- | --- |
+| Admin | `admin@example.com` | `AdminPass123!` |
+| Employee | `employee@example.com` | `EmployeePass123!` |
+| Customer | `customer@example.com` | `CustomerPass123!` |
 
-```env
-APP_ENV=development
-APP_PORT=8080
-GIN_MODE=debug
+Never use these seed accounts or their passwords in production. The seed command refuses to run when `APP_ENV=production`.
 
-MYSQL_ROOT_PASSWORD=replace_with_secure_root_password
-MYSQL_HOST=127.0.0.1
-MYSQL_PORT=3307
-MYSQL_DATABASE=ecommerce
-MYSQL_USER=ecommerce_app
-MYSQL_PASSWORD=change_me_local
+## Configuration
 
-SESSION_SECRET=replace-with-a-random-secret
-SESSION_SECURE=false
-```
+Required application variables are documented in `.env.example`. Docker passes only application-required values to the app container; the MySQL root password is not exposed to it. `SMTP_*` targets MailHog only and is disabled by the application in production.
 
-For Docker-based app containers, the application uses:
+Use `MYSQL_HOST=127.0.0.1` and `MYSQL_PORT=3307` for a host process; the Docker application receives `MYSQL_HOST=mysql` and port `3306`.
 
-```env
-MYSQL_HOST=mysql
-MYSQL_PORT=3306
-```
+## Database
 
-The `MYSQL_ROOT_PASSWORD` value is only for the MySQL container initialization and is not exposed to the application container.
+`migrations/000001_initial.sql` is applied once and tracked in `schema_migrations`. It defines indexes, foreign keys, user-email uniqueness, integer-cent money columns and cart/order ownership relationships.
 
-## Database and seed
+## Health checks
 
-The project uses MySQL with GORM. The seed command creates development/test accounts for admin, employee, and customer roles using bcrypt. It is meant for local development and test environments.
+- `GET /health/live` checks whether the process is running.
+- `GET /health/ready` verifies database connectivity.
 
-```bash
-go run ./cmd/seed
-```
+Neither endpoint exposes configuration or secrets.
 
-## Security notes
+## Monitoring
 
-- `.env` files are ignored by Git.
-- `.env.example` contains placeholders only.
-- Do not store production credentials in source control, README files, or Docker config.
-- Do not log database passwords or session secrets.
+The application exposes Prometheus metrics only on its internal Docker port `9091`; it is scraped by Prometheus as `app:9091` and is not published by Compose. Grafana is provisioned automatically with the Prometheus datasource and an **Ecommerce Overview** dashboard. Metric labels use Gin route templates rather than raw URLs and never include customer or secret values.
 
-## Development commands
+## Development
 
 ```bash
 go fmt ./...
 go vet ./...
 go test ./...
+go test -race ./...
+go build ./...
+docker compose config
 ```
 
-## Docker
+CI runs formatting, vet, unit tests, race detection and builds. The security workflow runs `govulncheck` and `gosec`; Dependabot tracks Go, Docker and GitHub Actions updates.
 
-```bash
-docker compose up --build -d
-```
+## Production notes
 
-The Docker stack includes the MySQL service and application service. Health checks help ensure the database is ready before the app starts accepting traffic.
+Run behind an HTTPS reverse proxy and set `APP_ENV=production`, `GIN_MODE=release` and `SESSION_SECURE=true`. Supply unique secrets through a secrets manager, keep MySQL on a private network, configure backups/monitoring, and use a real production mail provider only through a separately reviewed integration. MailHog is intentionally development/test only.

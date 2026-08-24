@@ -37,6 +37,10 @@ func (s *MailService) SendPasswordChanged(user models.User) {
 	s.send(user.Email, "Passwort wurde geändert", fmt.Sprintf("Hallo %s,\n\ndein Passwort wurde erfolgreich geändert.\n", user.Name))
 }
 
+func (s *MailService) SendOrderStatusChanged(user models.User, order models.Order) {
+	s.send(user.Email, fmt.Sprintf("Bestellung #%d: Status aktualisiert", order.ID), fmt.Sprintf("Hallo %s,\n\nder Status deiner Bestellung #%d ist jetzt: %s.\n", user.Name, order.ID, order.Status))
+}
+
 func (s *MailService) send(to, subject, body string) {
 	if !s.enabled || to == "" {
 		return

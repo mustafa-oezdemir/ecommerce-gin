@@ -14,6 +14,7 @@ import (
 type Config struct {
 	AppEnv        string
 	AppPort       string
+	MetricsPort   string
 	GinMode       string
 	MySQLHost     string
 	MySQLPort     string
@@ -33,6 +34,7 @@ func Load() *Config {
 
 	appEnv := strings.TrimSpace(os.Getenv("APP_ENV"))
 	appPort := strings.TrimSpace(os.Getenv("APP_PORT"))
+	metricsPort := strings.TrimSpace(os.Getenv("METRICS_PORT"))
 	ginMode := strings.TrimSpace(os.Getenv("GIN_MODE"))
 	mysqlHost := strings.TrimSpace(os.Getenv("MYSQL_HOST"))
 	mysqlPort := strings.TrimSpace(os.Getenv("MYSQL_PORT"))
@@ -53,6 +55,9 @@ func Load() *Config {
 
 	if appPort == "" {
 		log.Fatal("APP_PORT is required")
+	}
+	if metricsPort == "" {
+		metricsPort = "9091"
 	}
 
 	if ginMode == "" {
@@ -95,6 +100,7 @@ func Load() *Config {
 	return &Config{
 		AppEnv:        appEnv,
 		AppPort:       appPort,
+		MetricsPort:   metricsPort,
 		GinMode:       ginMode,
 		MySQLHost:     mysqlHost,
 		MySQLPort:     mysqlPort,

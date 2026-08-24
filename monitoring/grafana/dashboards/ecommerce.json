@@ -1,0 +1,16 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "panels": [
+    {"id": 1, "title": "HTTP requests / second", "type": "timeseries", "targets": [{"expr": "sum(rate(http_requests_total[5m]))", "refId": "A"}]},
+    {"id": 2, "title": "HTTP p95 latency", "type": "timeseries", "targets": [{"expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))", "refId": "A"}]},
+    {"id": 3, "title": "Requests in flight", "type": "stat", "targets": [{"expr": "http_requests_in_flight", "refId": "A"}]},
+    {"id": 4, "title": "Checkout failures", "type": "timeseries", "targets": [{"expr": "sum(rate(ecommerce_checkouts_failed_total[5m]))", "refId": "A"}]},
+    {"id": 5, "title": "Orders created", "type": "timeseries", "targets": [{"expr": "sum(rate(ecommerce_orders_created_total[5m]))", "refId": "A"}]},
+    {"id": 6, "title": "Login failures", "type": "timeseries", "targets": [{"expr": "rate(ecommerce_login_failures_total[5m])", "refId": "A"}]},
+    {"id": 7, "title": "Application up", "type": "stat", "targets": [{"expr": "up{job=\"ecommerce-app\"}", "refId": "A"}]}
+  ],
+  "schemaVersion": 41,
+  "title": "Ecommerce Overview",
+  "version": 1
+}

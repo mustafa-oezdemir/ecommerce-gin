@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -13,10 +14,13 @@ import (
 	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/csrf"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/config"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/db"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/handlers"
+	"github.com/mustafa-oezdemir/ecommerce-gin/internal/metrics"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/middleware"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/models"
 	"github.com/mustafa-oezdemir/ecommerce-gin/web"
@@ -28,7 +32,9 @@ func main() {
 	db.Init(cfg)
 
 	r := gin.New()
-	r.Use(gin.Logger(), gin.Recovery(), middleware.RequestID(), middleware.SecurityHeaders(cfg.AppEnv == "production"))
+	appMetrics := metrics.New(prometheus.DefaultRegisterer)
+	metrics.SetDefault(appMetrics)
+	r.Use(gin.Recovery(), middleware.RequestID(), middleware.Metrics(appMetrics), middleware.RequestLogger(slog.Default()), middleware.SecurityHeaders(cfg.AppEnv == "production"))
 	store := cookie.NewStore([]byte(cfg.SessionSecret))
 	store.Options(sessions.Options{Path: "/", MaxAge: 60 * 60 * 8, HttpOnly: true, Secure: cfg.SessionSecure, SameSite: http.SameSiteLaxMode})
 	r.Use(sessions.Sessions("ecommerce_session", store))
@@ -40,6 +46,9 @@ func main() {
 
 	r.SetHTMLTemplate(templates)
 	r.Static("/static", "./internal/web/static")
+	health := handlers.NewHealthHandler(db.DB)
+	r.GET("/health/live", health.Live)
+	r.GET("/health/ready", health.Ready)
 	// Shop
 	shop := handlers.NewShopHandler()
 	r.GET("/", shop.Home)
@@ -78,6 +87,7 @@ func main() {
 		adminGroup.GET("/orders", admin.ListOrders)
 		adminGroup.GET("/categories", admin.ListCategories)
 		adminGroup.POST("/categories", admin.CreateCategory)
+		adminGroup.POST("/categories/:id/delete", admin.DeleteCategory)
 	}
 
 	// Employee
@@ -88,26 +98,25 @@ func main() {
 		employeeGroup.GET("/dashboard", employee.Dashboard)
 		employeeGroup.GET("/products", employee.ListProducts)
 		employeeGroup.POST("/products", employee.CreateProduct)
+		employeeGroup.POST("/products/:id", employee.UpdateProduct)
+		employeeGroup.POST("/products/:id/deactivate", employee.DeactivateProduct)
 		employeeGroup.POST("/products/:id/stock", employee.UpdateStock)
 		employeeGroup.GET("/orders", employee.ListOrders)
 		employeeGroup.POST("/orders/:id/status", employee.UpdateOrderStatus)
 	}
 
-	r.GET("/health/live", func(c *gin.Context) { c.Status(http.StatusOK) })
-	r.GET("/health/ready", func(c *gin.Context) {
-		sqlDB, err := db.DB.DB()
-		if err != nil || sqlDB.PingContext(c.Request.Context()) != nil {
-			c.Status(http.StatusServiceUnavailable)
-			return
-		}
-		c.Status(http.StatusOK)
-	})
-
 	csrfMiddleware := csrf.Protect(cfg.CSRFKey, csrf.Secure(cfg.SessionSecure), csrf.HttpOnly(true), csrf.SameSite(csrf.SameSiteLaxMode), csrf.Path("/"), csrf.FieldName("_csrf"), csrf.RequestHeader("X-CSRF-Token"), csrf.ErrorHandler(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { http.Error(w, "Forbidden", http.StatusForbidden) })))
 	server := &http.Server{Addr: ":" + cfg.AppPort, Handler: csrfMiddleware(r), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second}
+	metricsServer := &http.Server{Addr: ":" + cfg.MetricsPort, Handler: promhttp.Handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second}
 	go func() {
 		log.Printf("server listening on %s", server.Addr)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatal(err)
+		}
+	}()
+	go func() {
+		log.Printf("metrics listening on %s", metricsServer.Addr)
+		if err := metricsServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatal(err)
 		}
 	}()
@@ -118,6 +127,9 @@ func main() {
 	defer cancel()
 	if err := server.Shutdown(ctx); err != nil {
 		log.Printf("graceful shutdown failed: %v", err)
+	}
+	if err := metricsServer.Shutdown(ctx); err != nil {
+		log.Printf("metrics shutdown failed: %v", err)
 	}
 	if sqlDB, err := db.DB.DB(); err == nil {
 		_ = sqlDB.Close()
