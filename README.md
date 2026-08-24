@@ -1,102 +1,83 @@
-### Projektübersicht
+# Ecommerce Gin
 
-**Ecommerce Gin** ist eine Entwicklungs‑Version eines kleinen E‑Commerce Backends mit **Go**, **Gin** und **GORM**. Der Code enthält HTTP‑Handler, HTML‑Templates, Docker Compose für MySQL und ein CLI‑Seed‑Tool zum Anlegen von Testbenutzern. Der aktuelle Stand: Datenbank und Seed‑Tool sind vorbereitet, Templates liegen im Projekt, Docker Compose benötigt optional eine `app`‑Service‑Ergänzung für konsistente Docker‑Ausführung.
+A small e-commerce backend written in Go with Gin, GORM, MySQL, and HTML templates.
 
----
+## Local setup
 
-### Schnellstart
-
-**Lokale Entwicklung schnell**
-
-```powershell
-# Projektverzeichnis
-cd D:\Code\Go\ecommerce-gin
-
-# Docker MySQL starten
-docker-compose up -d
-
-# Lokale Umgebungsvariable setzen und Server starten
-$env:MYSQL_DSN="pehlione:delidolu57@tcp(127.0.0.1:3307)/ecommerce?charset=utf8mb4&parseTime=True&loc=Local"
-go run cmd/server/main.go
-```
-
-**Docker Compose komplett**
+1. Copy the template environment file:
 
 ```bash
-docker-compose down -v
-docker-compose up --build
+cp .env.example .env
 ```
 
----
+2. Fill in the local values in `.env` before starting services.
+3. Start the database and application:
 
-### Umgebungsvariablen
+```bash
+docker compose up --build -d
+```
 
-**Empfohlene `.env` Datei**
+4. Optionally seed development users:
+
+```bash
+docker compose run --rm app /app/seed
+```
+
+The app is served on `http://localhost:8080` by default.
+
+## Required environment variables
+
+Use values appropriate for your environment. Do not commit real production secrets.
 
 ```env
-MYSQL_USER=gin_user
-MYSQL_PASSWORD=gin_passw0rd
-MYSQL_DB=ecommerce
+APP_ENV=development
+APP_PORT=8080
+GIN_MODE=debug
+
 MYSQL_HOST=127.0.0.1
+MYSQL_PORT=3307
+MYSQL_DATABASE=ecommerce
+MYSQL_USER=ecommerce_app
+MYSQL_PASSWORD=change_me_local
+
+SESSION_SECRET=replace-with-a-random-secret
+SESSION_SECURE=false
+```
+
+For Docker-based app containers, the application uses:
+
+```env
+MYSQL_HOST=mysql
 MYSQL_PORT=3306
-
-MYSQL_DSN=gin_user:gin_passw0rd@tcp(127.0.0.1:3306)/ecommerce?charset=utf8mb4&parseTime=True&loc=Local
-
-
-GIN_MODE=release
 ```
 
-**Hinweis**: Für lokale Ausführung mit Docker ist `3307:3306` empfohlen, damit Host‑MySQL‑Konflikte vermieden werden. Die Anwendung sollte die DSN aus den Einzelvariablen zusammensetzen oder `MYSQL_DSN` direkt setzen.
+## Database and seed
 
----
-
-### Datenbank Seeding CLI
-
-**Datei** `cmd/seed/main.go` erstellt drei Benutzer mit Rollen **admin**, **employee**, **customer** und hasht Passwörter mit bcrypt.
-**Ausführen lokal**
-
-```powershell
-$env:MYSQL_DSN="pehlione:delidolu57@tcp(127.0.0.1:3307)/ecommerce?charset=utf8mb4&parseTime=True&loc=Local"
-go run cmd/seed/main.go
-```
-
-**Docker Compose Option**: Füge einen `app` Service hinzu und starte das Seed‑Skript im Container:
+The project uses MySQL with GORM. The seed command creates development/test accounts for admin, employee, and customer roles using bcrypt. It is meant for local development and test environments.
 
 ```bash
-docker-compose run --rm app sh -c "go run cmd/seed/main.go"
+go run ./cmd/seed
 ```
 
----
+## Security notes
 
-### Templates und statische Dateien
+- `.env` files are ignored by Git.
+- `.env.example` contains placeholders only.
+- Do not store production credentials in source control, README files, or Docker config.
+- Do not log database passwords or session secrets.
 
-**Pfadabgleich**: Der Server lädt Templates per `LoadHTMLGlob`. Stelle sicher, dass die Template‑Dateien am erwarteten Ort liegen oder passe den Pfad an.
-**Empfohlene Struktur**
+## Development commands
 
-```
-web/templates/
-  layout.tmpl
-  product_list.tmpl
-  login.tmpl
-  cart.tmpl
-```
-
-**Sofortlösung**: Entweder die Dateien nach `internal/web/templates` verschieben oder `main.go` so ändern:
-
-```go
-r.LoadHTMLGlob("web/templates/*.tmpl")
+```bash
+go fmt ./...
+go vet ./...
+go test ./...
 ```
 
-**Robuste Lösung**: Go `embed` verwenden, um Templates in das Binary zu packen und Pfadabhängigkeiten zu eliminieren.
+## Docker
 
----
+```bash
+docker compose up --build -d
+```
 
-### Roadmap und nächste Schritte
-
-**Kurzfristig**
-
-- Templates mit `embed` einbinden und `LoadHTMLGlob` entfernen.
-- `docker-compose.yml` um `app` Service erweitern für reproduzierbare Docker‑Umgebung.**Mittelfristig**
-- RBAC Middleware implementieren (Route‑Schutz für admin/employee/customer).
-- Integrationstests für Migrationen und Seed‑Skript.**Langfristig**
-- Secrets Management für Produktionsumgebungen, TLS, Health Checks und Logging verbessern.
+The Docker stack includes the MySQL service and application service. Health checks help ensure the database is ready before the app starts accepting traffic.

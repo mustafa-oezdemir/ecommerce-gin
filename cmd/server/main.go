@@ -12,6 +12,7 @@ import (
 
 func main() {
 	cfg := config.Load()
+	gin.SetMode(cfg.GinMode)
 	db.Init(cfg)
 
 	r := gin.Default()
@@ -59,5 +60,5 @@ func main() {
 		employeeGroup.POST("/products/:id/stock", employee.UpdateStock)
 	}
 
-	r.Run(":8080")
+	r.Run(":" + cfg.AppPort)
 }

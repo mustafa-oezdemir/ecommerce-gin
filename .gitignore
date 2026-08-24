@@ -1,5 +1,9 @@
 .env
+.env.*
+!.env.example
 
-MYSQL_DSN
-
-main.exe
+*.exe
+bin/
+dist/
+coverage.out
+todo.md
