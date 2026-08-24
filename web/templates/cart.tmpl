@@ -42,9 +42,9 @@
                 <thead>
                   <tr>
                     <th>Ürün</th>
-                    <th>Fiyat</th>
-                    <th>Adet</th>
                     <th>Birim fiyat</th>
+                    <th>Adet</th>
+                    <th>Toplam</th>
                     <th></th>
                   </tr>
                 </thead>
@@ -63,7 +63,7 @@
                         <button type="submit" class="btn btn-sm btn-outline-primary">Güncelle</button>
                       </form>
                     </td>
-                    <td>{{money .Product.PriceCents}}</td>
+                    <td>{{money (mulCents .Product.PriceCents .Quantity)}}</td>
                     <td>
                       <form method="post" action="/cart/items/{{.ID}}/remove">
                         {{$.CSRFField}}

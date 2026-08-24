@@ -75,7 +75,7 @@
       {{range .Products}}
       <div class="col-md-6 col-xl-4">
         <div class="card product-card h-100">
-          <div class="image-placeholder">{{if .Category}}{{printf "%.2s" .Category.Name}}{{else}}N{{end}}</div>
+          <div class="image-placeholder">{{if .Category}}{{initials .Category.Name}}{{else}}N{{end}}</div>
           <div class="card-body d-flex flex-column">
             <div class="d-flex justify-content-between align-items-start gap-3 mb-2">
               <div>

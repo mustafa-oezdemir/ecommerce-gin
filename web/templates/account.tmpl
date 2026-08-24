@@ -37,7 +37,7 @@
         <div class="card profile-card h-100">
           <div class="card-body p-4">
             <div class="d-flex align-items-center mb-3">
-              <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center" style="width: 52px; height: 52px; font-weight: 700;">{{printf "%.1s" .User.Name}}</div>
+              <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center" style="width: 52px; height: 52px; font-weight: 700;">{{initials .User.Name}}</div>
               <div class="ms-3">
                 <h2 class="h5 mb-0">{{.User.Name}}</h2>
                 <small class="text-muted">{{.User.Email}}</small>

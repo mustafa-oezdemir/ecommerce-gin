@@ -28,7 +28,7 @@
     <div class="card detail-card overflow-hidden">
       <div class="row g-0">
         <div class="col-lg-6 p-4 p-lg-5">
-          <div class="image-box">{{if .Product.Category}}{{printf "%.2s" .Product.Category.Name}}{{else}}N{{end}}</div>
+          <div class="image-box">{{if .Product.Category}}{{initials .Product.Category.Name}}{{else}}N{{end}}</div>
         </div>
         <div class="col-lg-6">
           <div class="card-body p-4 p-lg-5">

@@ -29,9 +29,13 @@ func (h *ShopHandler) ListProducts(c *gin.Context) { h.renderProducts(c) }
 
 func (h *ShopHandler) renderProducts(c *gin.Context) {
 	var products []models.Product
-	query := db.DB.Preload("Category").Where("active = ?", true).Order("created_at DESC")
+	selectedCategoryID := uint(0)
 	if categoryID, err := strconv.ParseUint(c.Query("category"), 10, 64); err == nil && categoryID > 0 {
-		query = query.Where("category_id = ?", uint(categoryID))
+		selectedCategoryID = uint(categoryID)
+	}
+	query := db.DB.Preload("Category").Where("active = ?", true).Order("created_at DESC")
+	if selectedCategoryID > 0 {
+		query = query.Where("category_id = ?", selectedCategoryID)
 	}
 	if err := query.Find(&products).Error; err != nil {
 		c.String(http.StatusInternalServerError, "Could not load products")
@@ -42,7 +46,7 @@ func (h *ShopHandler) renderProducts(c *gin.Context) {
 		c.String(http.StatusInternalServerError, "Could not load products")
 		return
 	}
-	c.HTML(http.StatusOK, "product_list.tmpl", viewData(c, gin.H{"Products": products, "Categories": categories}))
+	c.HTML(http.StatusOK, "product_list.tmpl", viewData(c, gin.H{"Products": products, "Categories": categories, "CategoryID": selectedCategoryID}))
 }
 
 func (h *ShopHandler) ProductDetail(c *gin.Context) {
