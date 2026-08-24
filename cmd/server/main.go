@@ -49,12 +49,22 @@ func main() {
 	customer.Use(middleware.RequireAuth(), middleware.RequireRoles(models.RoleCustomer))
 	customer.POST("/cart/add/:id", shop.AddToCart)
 	customer.GET("/cart", shop.ViewCart)
+	customer.POST("/cart/items/:id", shop.UpdateCartItem)
+	customer.POST("/cart/items/:id/remove", shop.RemoveCartItem)
 	customer.POST("/checkout", shop.Checkout)
+	customer.GET("/account/orders", shop.ListOrders)
+	customer.GET("/account/orders/:id", shop.OrderDetail)
+	account := handlers.NewAccountHandler()
+	customer.GET("/account", account.Show)
+	customer.GET("/account/profile", account.Show)
+	customer.POST("/account/profile", account.UpdateProfile)
+	customer.POST("/account/password", account.ChangePassword)
 
 	// Auth
 	auth := handlers.NewAuthHandler()
 	r.GET("/login", auth.ShowLogin)
-	r.POST("/login", auth.Login)
+	loginLimiter := middleware.NewLoginRateLimiter(10, time.Minute)
+	r.POST("/login", loginLimiter.Middleware(), auth.Login)
 	r.POST("/logout", middleware.RequireAuth(), auth.Logout)
 
 	// Admin
@@ -66,6 +76,8 @@ func main() {
 		adminGroup.GET("/users", admin.ListUsers)
 		adminGroup.POST("/users", admin.CreateUser)
 		adminGroup.GET("/orders", admin.ListOrders)
+		adminGroup.GET("/categories", admin.ListCategories)
+		adminGroup.POST("/categories", admin.CreateCategory)
 	}
 
 	// Employee
@@ -77,6 +89,8 @@ func main() {
 		employeeGroup.GET("/products", employee.ListProducts)
 		employeeGroup.POST("/products", employee.CreateProduct)
 		employeeGroup.POST("/products/:id/stock", employee.UpdateStock)
+		employeeGroup.GET("/orders", employee.ListOrders)
+		employeeGroup.POST("/orders/:id/status", employee.UpdateOrderStatus)
 	}
 
 	r.GET("/health/live", func(c *gin.Context) { c.Status(http.StatusOK) })

@@ -3,12 +3,14 @@ package handlers
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/db"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/middleware"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/models"
+	"github.com/mustafa-oezdemir/ecommerce-gin/internal/validation"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -23,8 +25,13 @@ func (h *AuthHandler) ShowLogin(c *gin.Context) {
 }
 
 func (h *AuthHandler) Login(c *gin.Context) {
-	email := c.PostForm("email")
-	password := c.PostForm("password")
+	var req validation.LoginRequest
+	if err := c.ShouldBind(&req); err != nil {
+		c.HTML(http.StatusUnauthorized, "login.tmpl", viewData(c, gin.H{"error": "Invalid email or password"}))
+		return
+	}
+	email := strings.ToLower(strings.TrimSpace(req.Email))
+	password := req.Password
 
 	var user models.User
 	if err := db.DB.Where("email = ?", email).First(&user).Error; err != nil {

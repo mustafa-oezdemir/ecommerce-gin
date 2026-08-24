@@ -14,17 +14,20 @@ const (
 
 type Order struct {
 	gorm.Model
-	UserID uint
+	UserID uint `gorm:"not null;index"`
 	User   User
-	Status OrderStatus `gorm:"size:50;index"`
-	Items  []OrderItem
+	Status     OrderStatus `gorm:"size:50;index;not null"`
+	TotalCents int64       `gorm:"not null"`
+	Items      []OrderItem
 }
 
 type OrderItem struct {
 	gorm.Model
-	OrderID   uint
-	ProductID uint
-	Product   Product
-	Quantity  int
-	Price     float64 `gorm:"type:decimal(10,2)"`
+	OrderID        uint    `gorm:"not null;index"`
+	ProductID      uint    `gorm:"not null"`
+	Product        Product `gorm:"constraint:OnUpdate:RESTRICT,OnDelete:RESTRICT;"`
+	ProductName    string  `gorm:"size:200;not null"`
+	UnitPriceCents int64   `gorm:"not null"`
+	Quantity       int     `gorm:"not null"`
+	SubtotalCents  int64   `gorm:"not null"`
 }
