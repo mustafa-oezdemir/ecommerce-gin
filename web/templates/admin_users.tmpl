@@ -1,10 +1,10 @@
 {{define "admin_users.tmpl"}}
 <!doctype html>
-<html lang="tr">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Kullanıcılar | NordShop</title>
+  <title>Users | NordShop</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
     body { background: linear-gradient(180deg, #f8fafc 0%, #eef4ff 100%); }
@@ -14,11 +14,11 @@
 <body>
   <nav class="navbar navbar-expand-lg navbar-dark bg-dark shadow-sm">
     <div class="container">
-      <a class="navbar-brand fw-bold" href="/admin">Yönetici</a>
+      <a class="navbar-brand fw-bold" href="/admin">Admin</a>
       <div class="d-flex gap-2 ms-auto">
-        <a class="btn btn-outline-light btn-sm" href="/admin/users">Kullanıcılar</a>
-        <a class="btn btn-outline-light btn-sm" href="/admin/orders">Siparişler</a>
-        <a class="btn btn-outline-light btn-sm" href="/admin/categories">Kategoriler</a>
+        <a class="btn btn-outline-light btn-sm" href="/admin/users">Users</a>
+        <a class="btn btn-outline-light btn-sm" href="/admin/orders">Orders</a>
+        <a class="btn btn-outline-light btn-sm" href="/admin/categories">Categories</a>
       </div>
     </div>
   </nav>
@@ -28,29 +28,29 @@
       <div class="col-lg-4">
         <div class="card panel-card h-100">
           <div class="card-body p-4">
-            <h1 class="h4 mb-3">Yeni kullanıcı</h1>
+            <h1 class="h4 mb-3">New User</h1>
             <form method="post" action="/admin/users">
               {{.CSRFField}}
               <div class="mb-3">
-                <label class="form-label">Ad</label>
-                <input class="form-control" name="name" placeholder="Ad" required>
+                <label class="form-label">Name</label>
+                <input class="form-control" name="name" placeholder="Name" required>
               </div>
               <div class="mb-3">
-                <label class="form-label">E-posta</label>
-                <input class="form-control" type="email" name="email" placeholder="E-posta" required>
+                <label class="form-label">Email</label>
+                <input class="form-control" type="email" name="email" placeholder="Email" required>
               </div>
               <div class="mb-3">
-                <label class="form-label">Şifre</label>
-                <input class="form-control" type="password" name="password" minlength="12" placeholder="Şifre" required>
+                <label class="form-label">Password</label>
+                <input class="form-control" type="password" name="password" minlength="12" placeholder="Password" required>
               </div>
               <div class="mb-3">
-                <label class="form-label">Rol</label>
+                <label class="form-label">Role</label>
                 <select class="form-select" name="role">
                   <option value="customer">customer</option>
                   <option value="employee">employee</option>
                 </select>
               </div>
-              <button type="submit" class="btn btn-primary">Kullanıcı oluştur</button>
+              <button type="submit" class="btn btn-primary">Create User</button>
             </form>
           </div>
         </div>
@@ -59,11 +59,11 @@
       <div class="col-lg-8">
         <div class="card panel-card">
           <div class="card-body p-4">
-            <h2 class="h4 mb-3">Kullanıcılar</h2>
+            <h2 class="h4 mb-3">Users</h2>
             <div class="table-responsive">
               <table class="table align-middle mb-0">
                 <thead>
-                  <tr><th>Ad</th><th>E-posta</th><th>Rol</th></tr>
+                  <tr><th>Name</th><th>Email</th><th>Role</th></tr>
                 </thead>
                 <tbody>
                   {{range .Users}}
@@ -73,7 +73,7 @@
                     <td><span class="badge bg-light text-dark text-capitalize">{{.Role}}</span></td>
                   </tr>
                   {{else}}
-                  <tr><td colspan="3" class="text-muted">Kullanıcı bulunamadı.</td></tr>
+                  <tr><td colspan="3" class="text-muted">No users found.</td></tr>
                   {{end}}
                 </tbody>
               </table>

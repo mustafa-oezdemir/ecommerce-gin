@@ -122,16 +122,7 @@ func (s *OrderService) GetUserOrder(userID, orderID uint) (*models.Order, error)
 }
 
 func CanTransitionOrderStatus(from, to models.OrderStatus) bool {
-	switch from {
-	case models.OrderStatusPending:
-		return to == models.OrderStatusProcessing || to == models.OrderStatusCancelled
-	case models.OrderStatusProcessing:
-		return to == models.OrderStatusShipped || to == models.OrderStatusCancelled
-	case models.OrderStatusShipped:
-		return to == models.OrderStatusCompleted
-	default:
-		return false
-	}
+	return models.CanTransitionOrderStatus(from, to)
 }
 
 func (s *OrderService) UpdateStatus(orderID uint, status models.OrderStatus) error {

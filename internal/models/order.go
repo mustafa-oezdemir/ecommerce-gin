@@ -12,6 +12,28 @@ const (
 	OrderStatusCancelled  OrderStatus = "cancelled"
 )
 
+func AllowedOrderStatusTransitions(from OrderStatus) []OrderStatus {
+	switch from {
+	case OrderStatusPending:
+		return []OrderStatus{OrderStatusProcessing, OrderStatusCancelled}
+	case OrderStatusProcessing:
+		return []OrderStatus{OrderStatusShipped, OrderStatusCancelled}
+	case OrderStatusShipped:
+		return []OrderStatus{OrderStatusCompleted}
+	default:
+		return nil
+	}
+}
+
+func CanTransitionOrderStatus(from, to OrderStatus) bool {
+	for _, allowed := range AllowedOrderStatusTransitions(from) {
+		if allowed == to {
+			return true
+		}
+	}
+	return false
+}
+
 type Order struct {
 	gorm.Model
 	UserID     uint `gorm:"not null;index"`

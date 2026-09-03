@@ -1,6 +1,6 @@
 {{define "product_detail.tmpl"}}
 <!doctype html>
-<html lang="tr">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -17,9 +17,9 @@
     <div class="container">
       <a class="navbar-brand fw-bold" href="/">NordShop</a>
       <div class="d-flex gap-2 ms-auto">
-        <a class="btn btn-outline-light btn-sm" href="/">Ürünler</a>
-        <a class="btn btn-outline-light btn-sm" href="/cart">Sepet</a>
-        <a class="btn btn-outline-light btn-sm" href="/account">Hesabım</a>
+        <a class="btn btn-outline-light btn-sm" href="/">Products</a>
+        <a class="btn btn-outline-light btn-sm" href="/cart">Cart</a>
+        <a class="btn btn-outline-light btn-sm" href="/account">My Account</a>
       </div>
     </div>
   </nav>
@@ -34,20 +34,21 @@
           <div class="card-body p-4 p-lg-5">
             <div class="d-flex align-items-center justify-content-between mb-3">
               {{if .Product.Category}}<span class="badge bg-primary-subtle text-primary rounded-pill px-3 py-2">{{.Product.Category.Name}}</span>{{end}}
-              <a href="/" class="btn btn-outline-secondary btn-sm">Geri</a>
+              <a href="/" class="btn btn-outline-secondary btn-sm">Back to Products</a>
             </div>
             <h1 class="display-6 fw-bold mb-3">{{.Product.Name}}</h1>
             <p class="text-primary h3 fw-bold mb-3">{{money .Product.PriceCents}}</p>
-            <p class="text-muted">{{if .Product.Description}}{{.Product.Description}}{{else}}Kullanıcı yorumlarıyla beğenilen, günlük kullanım için tasarlanmış premium ürün.{{end}}</p>
+            <p class="text-muted">{{if .Product.Description}}{{.Product.Description}}{{else}}
+            A premium product designed for everyday use, loved by user reviews.{{end}}</p>
             <div class="d-flex align-items-center gap-3 mb-4">
-              <span class="badge bg-success-subtle text-success rounded-pill px-3 py-2">Stok: {{.Product.Stock}}</span>
+              <span class="badge bg-success-subtle text-success rounded-pill px-3 py-2">Stock: {{.Product.Stock}}</span>
             </div>
 
             <form method="post" action="/cart/add/{{.Product.ID}}">
               {{.CSRFField}}
               <div class="d-flex gap-3 align-items-center">
                 <input class="form-control w-auto" type="number" name="quantity" value="1" min="1" max="100">
-                <button type="submit" class="btn btn-primary btn-lg">Sepete ekle</button>
+                <button type="submit" class="btn btn-primary btn-lg">Add to Cart</button>
               </div>
             </form>
           </div>

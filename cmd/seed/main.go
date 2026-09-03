@@ -25,7 +25,14 @@ func main() {
 		log.Fatal("seed is disabled in production")
 	}
 
-	appdb.Init(cfg)
+	if err := appdb.Init(cfg); err != nil {
+		log.Fatalf("database initialization failed: %v", err)
+	}
+	defer func() {
+		if err := appdb.Close(); err != nil {
+			log.Printf("database close failed: %v", err)
+		}
+	}()
 
 	users := []seedUser{
 		{
@@ -53,14 +60,17 @@ func main() {
 			log.Fatalf("seed user %s failed: %v", user.Email, err)
 		}
 	}
+	if err := translateLegacyDemoData(appdb.DB); err != nil {
+		log.Fatalf("translate legacy demo data failed: %v", err)
+	}
 
-	category := models.Category{Name: "Elektronik", Description: "Demo elektronik ürünleri"}
+	category := models.Category{Name: "Electronics", Description: "Demo electronics products"}
 	if err := appdb.DB.Where("name = ?", category.Name).FirstOrCreate(&category).Error; err != nil {
 		log.Fatalf("seed category failed: %v", err)
 	}
 	products := []models.Product{
-		{Name: "Demo Laptop", Description: "Geliştirme için demo ürün", PriceCents: 99999, Stock: 10, Active: true, CategoryID: &category.ID},
-		{Name: "Demo Kulaklık", Description: "Geliştirme için demo ürün", PriceCents: 4999, Stock: 25, Active: true, CategoryID: &category.ID},
+		{Name: "Demo Laptop", Description: "Demo product for development", PriceCents: 99999, Stock: 10, Active: true, CategoryID: &category.ID},
+		{Name: "Demo Headphones", Description: "Demo product for development", PriceCents: 4999, Stock: 25, Active: true, CategoryID: &category.ID},
 	}
 	for _, product := range products {
 		var existing models.Product
@@ -74,6 +84,22 @@ func main() {
 	}
 
 	log.Println("seed completed successfully")
+}
+
+func translateLegacyDemoData(database *gorm.DB) error {
+	if err := database.Model(&models.Category{}).
+		Where("name = ?", "Elektronik").
+		Updates(map[string]any{"name": "Electronics", "description": "Demo electronics products"}).Error; err != nil {
+		return err
+	}
+	if err := database.Model(&models.Product{}).
+		Where("name = ?", "Demo Laptop").
+		Update("description", "Demo product for development").Error; err != nil {
+		return err
+	}
+	return database.Model(&models.Product{}).
+		Where("name = ?", "Demo Kulakl\u0131k").
+		Updates(map[string]any{"name": "Demo Headphones", "description": "Demo product for development"}).Error
 }
 
 func createUserIfNotExists(database *gorm.DB, seed seedUser) error {

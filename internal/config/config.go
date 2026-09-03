@@ -2,29 +2,39 @@ package config
 
 import (
 	"encoding/base64"
-	"fmt"
 	"log"
+	"net"
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
+	mysqldriver "github.com/go-sql-driver/mysql"
 	"github.com/joho/godotenv"
 )
 
 type Config struct {
-	AppEnv        string
-	AppPort       string
-	MetricsPort   string
-	GinMode       string
-	MySQLHost     string
-	MySQLPort     string
-	MySQLDatabase string
-	MySQLUser     string
-	MySQLPassword string
-	SessionSecret string
-	SessionSecure bool
-	CSRFKey       []byte
-	DSN           string
+	AppEnv            string
+	AppPort           string
+	MetricsPort       string
+	GinMode           string
+	MySQLHost         string
+	MySQLPort         string
+	MySQLDatabase     string
+	MySQLUser         string
+	MySQLPassword     string
+	DBMaxOpenConns    int
+	DBMaxIdleConns    int
+	DBConnMaxLifetime time.Duration
+	DBConnMaxIdleTime time.Duration
+	DBConnectTimeout  time.Duration
+	DBReadTimeout     time.Duration
+	DBWriteTimeout    time.Duration
+	DBPingTimeout     time.Duration
+	SessionSecret     string
+	SessionSecure     bool
+	CSRFKey           []byte
+	DSN               string
 }
 
 func Load() *Config {
@@ -41,6 +51,14 @@ func Load() *Config {
 	mysqlDB := strings.TrimSpace(os.Getenv("MYSQL_DATABASE"))
 	mysqlUser := strings.TrimSpace(os.Getenv("MYSQL_USER"))
 	mysqlPassword := strings.TrimSpace(os.Getenv("MYSQL_PASSWORD"))
+	dbMaxOpenConns := envInt("DB_MAX_OPEN_CONNS", 25)
+	dbMaxIdleConns := envInt("DB_MAX_IDLE_CONNS", 10)
+	dbConnMaxLifetime := envDuration("DB_CONN_MAX_LIFETIME", 5*time.Minute)
+	dbConnMaxIdleTime := envDuration("DB_CONN_MAX_IDLE_TIME", time.Minute)
+	dbConnectTimeout := envDuration("DB_CONNECT_TIMEOUT", 5*time.Second)
+	dbReadTimeout := envDuration("DB_READ_TIMEOUT", 10*time.Second)
+	dbWriteTimeout := envDuration("DB_WRITE_TIMEOUT", 10*time.Second)
+	dbPingTimeout := envDuration("DB_PING_TIMEOUT", 5*time.Second)
 	sessionSecret := strings.TrimSpace(os.Getenv("SESSION_SECRET"))
 	sessionSecureValue := strings.TrimSpace(os.Getenv("SESSION_SECURE"))
 	csrfSecret := strings.TrimSpace(os.Getenv("CSRF_SECRET"))
@@ -74,6 +92,12 @@ func Load() *Config {
 	if mysqlHost == "" || mysqlPort == "" || mysqlDB == "" || mysqlUser == "" || mysqlPassword == "" {
 		log.Fatal("Required MySQL environment variables are missing: MYSQL_HOST, MYSQL_PORT, MYSQL_DATABASE, MYSQL_USER, MYSQL_PASSWORD")
 	}
+	if dbMaxOpenConns < 1 {
+		log.Fatal("DB_MAX_OPEN_CONNS must be at least 1")
+	}
+	if dbMaxIdleConns < 0 || dbMaxIdleConns > dbMaxOpenConns {
+		log.Fatal("DB_MAX_IDLE_CONNS must be between 0 and DB_MAX_OPEN_CONNS")
+	}
 
 	if len(sessionSecret) < 32 {
 		log.Fatal("SESSION_SECRET must be at least 32 characters")
@@ -95,21 +119,67 @@ func Load() *Config {
 		log.Fatal("SESSION_SECURE must be true in production")
 	}
 
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=Local", mysqlUser, mysqlPassword, mysqlHost, mysqlPort, mysqlDB)
+	mysqlConfig := mysqldriver.Config{
+		User:                 mysqlUser,
+		Passwd:               mysqlPassword,
+		Net:                  "tcp",
+		Addr:                 net.JoinHostPort(mysqlHost, mysqlPort),
+		DBName:               mysqlDB,
+		Params:               map[string]string{"charset": "utf8mb4", "collation": "utf8mb4_unicode_ci"},
+		ParseTime:            true,
+		Loc:                  time.Local,
+		Timeout:              dbConnectTimeout,
+		ReadTimeout:          dbReadTimeout,
+		WriteTimeout:         dbWriteTimeout,
+		AllowNativePasswords: true,
+	}
+	dsn := mysqlConfig.FormatDSN()
 
 	return &Config{
-		AppEnv:        appEnv,
-		AppPort:       appPort,
-		MetricsPort:   metricsPort,
-		GinMode:       ginMode,
-		MySQLHost:     mysqlHost,
-		MySQLPort:     mysqlPort,
-		MySQLDatabase: mysqlDB,
-		MySQLUser:     mysqlUser,
-		MySQLPassword: mysqlPassword,
-		SessionSecret: sessionSecret,
-		SessionSecure: sessionSecure,
-		CSRFKey:       csrfKey,
-		DSN:           dsn,
+		AppEnv:            appEnv,
+		AppPort:           appPort,
+		MetricsPort:       metricsPort,
+		GinMode:           ginMode,
+		MySQLHost:         mysqlHost,
+		MySQLPort:         mysqlPort,
+		MySQLDatabase:     mysqlDB,
+		MySQLUser:         mysqlUser,
+		MySQLPassword:     mysqlPassword,
+		DBMaxOpenConns:    dbMaxOpenConns,
+		DBMaxIdleConns:    dbMaxIdleConns,
+		DBConnMaxLifetime: dbConnMaxLifetime,
+		DBConnMaxIdleTime: dbConnMaxIdleTime,
+		DBConnectTimeout:  dbConnectTimeout,
+		DBReadTimeout:     dbReadTimeout,
+		DBWriteTimeout:    dbWriteTimeout,
+		DBPingTimeout:     dbPingTimeout,
+		SessionSecret:     sessionSecret,
+		SessionSecure:     sessionSecure,
+		CSRFKey:           csrfKey,
+		DSN:               dsn,
 	}
+}
+
+func envInt(name string, fallback int) int {
+	value := strings.TrimSpace(os.Getenv(name))
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		log.Fatalf("%s must be an integer", name)
+	}
+	return parsed
+}
+
+func envDuration(name string, fallback time.Duration) time.Duration {
+	value := strings.TrimSpace(os.Getenv(name))
+	if value == "" {
+		return fallback
+	}
+	parsed, err := time.ParseDuration(value)
+	if err != nil || parsed <= 0 {
+		log.Fatalf("%s must be a positive duration (for example 5s or 1m)", name)
+	}
+	return parsed
 }

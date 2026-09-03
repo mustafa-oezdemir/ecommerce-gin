@@ -1,6 +1,6 @@
 {{define "product_list_detail.tmpl"}}
 <!doctype html>
-<html lang="tr">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -16,9 +16,9 @@
     <div class="container">
       <a class="navbar-brand fw-bold" href="/">NordShop</a>
       <div class="d-flex gap-2 ms-auto">
-        <a class="btn btn-outline-light btn-sm" href="/account">Hesabım</a>
-        <a class="btn btn-outline-light btn-sm" href="/account/lists">Listelerim</a>
-        <a class="btn btn-outline-light btn-sm" href="/cart">Sepet</a>
+        <a class="btn btn-outline-light btn-sm" href="/account">My Account</a>
+        <a class="btn btn-outline-light btn-sm" href="/account/lists">My Lists</a>
+        <a class="btn btn-outline-light btn-sm" href="/cart">Cart</a>
       </div>
     </div>
   </nav>
@@ -26,41 +26,41 @@
   <main class="container py-5">
     <div class="d-flex justify-content-between align-items-center mb-4">
       <div>
-        <span class="badge bg-primary-subtle text-primary rounded-pill px-3 py-2">Ürün listesi</span>
+        <span class="badge bg-primary-subtle text-primary rounded-pill px-3 py-2">Product List</span>
         <h1 class="h2 mt-3 mb-0">{{.List.Name}}</h1>
       </div>
       <div class="d-flex gap-2">
-        <a href="/account/lists" class="btn btn-outline-secondary">Tüm listeler</a>
+        <a href="/account/lists" class="btn btn-outline-secondary">All Lists</a>
         <form method="post" action="/account/lists/{{.List.ID}}/delete">
           {{.CSRFField}}
-          <button class="btn btn-outline-danger" type="submit">Listeyi sil</button>
+          <button class="btn btn-outline-danger" type="submit">Delete List</button>
         </form>
       </div>
     </div>
 
     <div class="card list-card mb-4">
       <div class="card-body p-4">
-        <h2 class="h5 mb-3">Ürün ekle</h2>
+        <h2 class="h5 mb-3">Add Product</h2>
         {{if .Products}}
         <form method="post" action="/account/lists/{{.List.ID}}/products" class="row g-2">
           {{.CSRFField}}
           <div class="col-md-8">
             <select class="form-select" name="product_id" required>
-              <option value="" selected disabled>Bir ürün seçin</option>
+              <option value="" selected disabled>Select a product</option>
               {{range .Products}}<option value="{{.ID}}">{{.Name}} — {{money .PriceCents}}</option>{{end}}
             </select>
           </div>
-          <div class="col-md-4 d-grid"><button class="btn btn-primary" type="submit">Listeye ekle</button></div>
+          <div class="col-md-4 d-grid"><button class="btn btn-primary" type="submit">Add to List</button></div>
         </form>
         {{else}}
-        <p class="text-muted mb-0">Eklenebilecek aktif ürün bulunmuyor.</p>
+        <p class="text-muted mb-0">No active products available to add.</p>
         {{end}}
       </div>
     </div>
 
     <div class="card list-card">
       <div class="card-body p-4">
-        <h2 class="h5 mb-3">Listedeki ürünler</h2>
+        <h2 class="h5 mb-3">Products in the List</h2>
         {{if .List.Items}}
         <div class="list-group list-group-flush">
           {{range .List.Items}}
@@ -71,13 +71,13 @@
             </div>
             <form method="post" action="/account/lists/{{$.List.ID}}/products/{{.ProductID}}/remove">
               {{$.CSRFField}}
-              <button class="btn btn-sm btn-outline-danger" type="submit">Çıkar</button>
+              <button class="btn btn-sm btn-outline-danger" type="submit">Remove</button>
             </form>
           </div>
           {{end}}
         </div>
         {{else}}
-        <p class="text-muted mb-0">Bu liste henüz boş.</p>
+        <p class="text-muted mb-0">This list is currently empty.</p>
         {{end}}
       </div>
     </div>

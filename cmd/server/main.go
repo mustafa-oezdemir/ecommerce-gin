@@ -15,6 +15,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/csrf"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/config"
@@ -29,10 +30,16 @@ import (
 func main() {
 	cfg := config.Load()
 	gin.SetMode(cfg.GinMode)
-	db.Init(cfg)
+	if err := db.Init(cfg); err != nil {
+		log.Fatalf("database initialization failed: %v", err)
+	}
 
 	r := gin.New()
 	appMetrics := metrics.New(prometheus.DefaultRegisterer)
+	if sqlDB, err := db.SQL(); err == nil {
+		prometheus.MustRegister(collectors.NewDBStatsCollector(sqlDB, "ecommerce"))
+	}
+	appMetrics.HealthLive.Set(1)
 	metrics.SetDefault(appMetrics)
 	r.Use(gin.Recovery(), middleware.RequestID(), middleware.Metrics(appMetrics), middleware.RequestLogger(slog.Default()), middleware.SecurityHeaders(cfg.AppEnv == "production"))
 	store := cookie.NewStore([]byte(cfg.SessionSecret))
@@ -46,9 +53,11 @@ func main() {
 
 	r.SetHTMLTemplate(templates)
 	r.Static("/static", "./internal/web/static")
-	health := handlers.NewHealthHandler(db.DB)
+	health := handlers.NewHealthHandler(db.DB, appMetrics)
 	r.GET("/health/live", health.Live)
 	r.GET("/health/ready", health.Ready)
+	r.GET("/healthz", health.Live)
+	r.GET("/readyz", health.Ready)
 	// Shop
 	shop := handlers.NewShopHandler()
 	r.GET("/", shop.Home)
@@ -148,7 +157,7 @@ func main() {
 	if err := metricsServer.Shutdown(ctx); err != nil {
 		log.Printf("metrics shutdown failed: %v", err)
 	}
-	if sqlDB, err := db.DB.DB(); err == nil {
-		_ = sqlDB.Close()
+	if err := db.Close(); err != nil {
+		log.Printf("database close failed: %v", err)
 	}
 }

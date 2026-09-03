@@ -1,7 +1,10 @@
 package db
 
 import (
-	"log"
+	"context"
+	"database/sql"
+	"errors"
+	"fmt"
 
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
@@ -12,13 +15,45 @@ import (
 
 var DB *gorm.DB
 
-func Init(cfg *config.Config) {
-	var err error
-	DB, err = gorm.Open(mysql.Open(cfg.DSN), &gorm.Config{})
+func Init(cfg *config.Config) error {
+	database, err := gorm.Open(mysql.Open(cfg.DSN), &gorm.Config{TranslateError: true})
 	if err != nil {
-		log.Fatal("database connection failed")
+		return fmt.Errorf("open database: %w", err)
 	}
-	if err := migrations.Apply(DB); err != nil {
-		log.Fatal("database migration failed")
+	sqlDB, err := database.DB()
+	if err != nil {
+		return fmt.Errorf("get connection pool: %w", err)
 	}
+	sqlDB.SetMaxOpenConns(cfg.DBMaxOpenConns)
+	sqlDB.SetMaxIdleConns(cfg.DBMaxIdleConns)
+	sqlDB.SetConnMaxLifetime(cfg.DBConnMaxLifetime)
+	sqlDB.SetConnMaxIdleTime(cfg.DBConnMaxIdleTime)
+
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.DBPingTimeout)
+	defer cancel()
+	if err := sqlDB.PingContext(ctx); err != nil {
+		_ = sqlDB.Close()
+		return fmt.Errorf("ping database: %w", err)
+	}
+	if err := migrations.Apply(database); err != nil {
+		_ = sqlDB.Close()
+		return fmt.Errorf("apply migrations: %w", err)
+	}
+	DB = database
+	return nil
+}
+
+func SQL() (*sql.DB, error) {
+	if DB == nil {
+		return nil, errors.New("database is not initialized")
+	}
+	return DB.DB()
+}
+
+func Close() error {
+	sqlDB, err := SQL()
+	if err != nil {
+		return err
+	}
+	return sqlDB.Close()
 }

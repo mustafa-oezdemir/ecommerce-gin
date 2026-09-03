@@ -73,7 +73,7 @@ Never use these seed accounts or their passwords in production. The seed command
 | Account | `/account`, `/account/orders` | Signed-in customer |
 | Employee | `/employee/*` | Employee or admin |
 | Admin | `/admin/*` | Admin only |
-| Health | `/health/live`, `/health/ready` | Public |
+| Health | `/health/live`, `/health/ready` (`/healthz`, `/readyz` aliases) | Public |
 
 ## Configuration
 
@@ -85,6 +85,9 @@ Copy `.env.example` and keep `.env` private. Docker passes only application-requ
 | `APP_PORT` | Application HTTP port |
 | `METRICS_PORT` | Internal Prometheus metrics port |
 | `MYSQL_*` | MySQL connection settings |
+| `DB_MAX_OPEN_CONNS`, `DB_MAX_IDLE_CONNS` | Database connection pool limits |
+| `DB_CONN_MAX_LIFETIME`, `DB_CONN_MAX_IDLE_TIME` | Connection rotation and idle limits |
+| `DB_CONNECT_TIMEOUT`, `DB_READ_TIMEOUT`, `DB_WRITE_TIMEOUT`, `DB_PING_TIMEOUT` | Database network and startup health timeouts |
 | `SESSION_SECRET` | Cookie-session signing secret |
 | `SESSION_SECURE` | Set to `true` in production |
 | `CSRF_SECRET` | Base64-encoded 32-byte CSRF key |
@@ -99,6 +102,7 @@ Use `MYSQL_HOST=127.0.0.1` and `MYSQL_PORT=3307` for a host process; the Docker 
 
 - `GET /health/live` checks whether the process is running.
 - `GET /health/ready` verifies database connectivity.
+- Prometheus exports both results as `ecommerce_health_live` and `ecommerce_health_ready`; Grafana displays them on the overview dashboard.
 
 Neither endpoint exposes configuration or secrets.
 

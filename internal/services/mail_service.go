@@ -30,15 +30,15 @@ func NewMailServiceFromEnv() *MailService {
 }
 
 func (s *MailService) SendOrderCreated(user models.User, order models.Order) {
-	s.send(user.Email, fmt.Sprintf("Bestellung #%d wurde erstellt", order.ID), fmt.Sprintf("Hallo %s,\n\ndeine Bestellung #%d wurde erfolgreich erstellt.\nStatus: %s\nGesamtbetrag: %d,%02d EUR\n\nVielen Dank.\n", user.Name, order.ID, order.Status, order.TotalCents/100, order.TotalCents%100))
+	s.send(user.Email, fmt.Sprintf("Order #%d has been created", order.ID), fmt.Sprintf("Hello %s,\n\nyour order #%d has been created successfully.\nStatus: %s\nTotal: %d.%02d EUR\n\nThank you.\n", user.Name, order.ID, order.Status, order.TotalCents/100, order.TotalCents%100))
 }
 
 func (s *MailService) SendPasswordChanged(user models.User) {
-	s.send(user.Email, "Passwort wurde geändert", fmt.Sprintf("Hallo %s,\n\ndein Passwort wurde erfolgreich geändert.\n", user.Name))
+	s.send(user.Email, "Your password has been changed", fmt.Sprintf("Hello %s,\n\nyour password has been changed successfully.\n", user.Name))
 }
 
 func (s *MailService) SendOrderStatusChanged(user models.User, order models.Order) {
-	s.send(user.Email, fmt.Sprintf("Bestellung #%d: Status aktualisiert", order.ID), fmt.Sprintf("Hallo %s,\n\nder Status deiner Bestellung #%d ist jetzt: %s.\n", user.Name, order.ID, order.Status))
+	s.send(user.Email, fmt.Sprintf("Order #%d: status updated", order.ID), fmt.Sprintf("Hello %s,\n\nthe status of your order #%d is now: %s.\n", user.Name, order.ID, order.Status))
 }
 
 func (s *MailService) send(to, subject, body string) {

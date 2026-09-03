@@ -6,6 +6,8 @@ import (
 	"html/template"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/mustafa-oezdemir/ecommerce-gin/internal/models"
 )
 
 //go:embed templates/*.tmpl
@@ -13,10 +15,29 @@ var templateFS embed.FS
 
 func ParseTemplates() (*template.Template, error) {
 	return template.New("root").Funcs(template.FuncMap{
-		"money":    formatCents,
-		"mulCents": mulCents,
-		"initials": initials,
+		"money":             formatCents,
+		"mulCents":          mulCents,
+		"initials":          initials,
+		"nextOrderStatuses": models.AllowedOrderStatusTransitions,
+		"orderStatusLabel":  orderStatusLabel,
 	}).ParseFS(templateFS, "templates/*.tmpl")
+}
+
+func orderStatusLabel(status models.OrderStatus) string {
+	switch status {
+	case models.OrderStatusPending:
+		return "Pending"
+	case models.OrderStatusProcessing:
+		return "Processing"
+	case models.OrderStatusShipped:
+		return "Shipped"
+	case models.OrderStatusCompleted:
+		return "Completed"
+	case models.OrderStatusCancelled:
+		return "Cancelled"
+	default:
+		return string(status)
+	}
 }
 
 func formatCents(cents int64) string {

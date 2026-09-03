@@ -1,10 +1,10 @@
 {{ define "users.tmpl" }}
 <!doctype html>
-<html lang="tr">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Kullanıcılar | NordShop</title>
+  <title>Users | NordShop</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
     body { background: linear-gradient(180deg, #f8fafc 0%, #eef4ff 100%); }
@@ -15,18 +15,18 @@
   <main class="container py-5">
     <div class="card panel-card">
       <div class="card-body p-4">
-        <h1 class="h3 mb-4">Kullanıcılar</h1>
+        <h1 class="h3 mb-4">Users</h1>
         {{ if .Users }}
         <div class="list-group">
           {{ range .Users }}
           <div class="list-group-item d-flex align-items-center justify-content-between">
             <span>{{ if .Name }}{{ .Name }}{{ else if .Username }}{{ .Username }}{{ else }}{{ . }}{{ end }}</span>
-            <span class="badge bg-primary-subtle text-primary rounded-pill">Aktif</span>
+            <span class="badge bg-primary-subtle text-primary rounded-pill">Active</span>
           </div>
           {{ end }}
         </div>
         {{ else }}
-        <div class="alert alert-light border text-center mb-0">Kullanıcı bulunamadı.</div>
+        <div class="alert alert-light border text-center mb-0">No users found.</div>
         {{ end }}
       </div>
     </div>

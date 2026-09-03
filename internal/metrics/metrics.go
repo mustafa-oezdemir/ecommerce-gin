@@ -15,6 +15,8 @@ type Metrics struct {
 	CheckoutFailures     *prometheus.CounterVec
 	OrderValueCents      prometheus.Histogram
 	LoginFailures        prometheus.Counter
+	HealthLive           prometheus.Gauge
+	HealthReady          prometheus.Gauge
 }
 
 func New(registerer prometheus.Registerer) *Metrics {
@@ -27,8 +29,10 @@ func New(registerer prometheus.Registerer) *Metrics {
 		CheckoutFailures:     prometheus.NewCounterVec(prometheus.CounterOpts{Name: "ecommerce_checkouts_failed_total", Help: "Failed checkout attempts."}, []string{"failure_reason"}),
 		OrderValueCents:      prometheus.NewHistogram(prometheus.HistogramOpts{Name: "ecommerce_order_value_cents", Help: "Successful order values in cents.", Buckets: []float64{1000, 5000, 10000, 25000, 50000, 100000, 250000}}),
 		LoginFailures:        prometheus.NewCounter(prometheus.CounterOpts{Name: "ecommerce_login_failures_total", Help: "Failed login attempts."}),
+		HealthLive:           prometheus.NewGauge(prometheus.GaugeOpts{Name: "ecommerce_health_live", Help: "Whether the application process is live (1) or not (0)."}),
+		HealthReady:          prometheus.NewGauge(prometheus.GaugeOpts{Name: "ecommerce_health_ready", Help: "Whether the application is ready to serve traffic (1) or not (0)."}),
 	}
-	registerer.MustRegister(m.HTTPRequestsTotal, m.HTTPRequestDuration, m.HTTPRequestsInFlight, m.HTTPResponseSize, m.OrdersCreated, m.CheckoutFailures, m.OrderValueCents, m.LoginFailures)
+	registerer.MustRegister(m.HTTPRequestsTotal, m.HTTPRequestDuration, m.HTTPRequestsInFlight, m.HTTPResponseSize, m.OrdersCreated, m.CheckoutFailures, m.OrderValueCents, m.LoginFailures, m.HealthLive, m.HealthReady)
 	return m
 }
 

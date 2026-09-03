@@ -11,9 +11,10 @@ import (
 func Metrics(m *metrics.Metrics) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		m.HTTPRequestsInFlight.Inc()
+		defer m.HTTPRequestsInFlight.Dec()
+
 		started := time.Now()
 		c.Next()
-		m.HTTPRequestsInFlight.Dec()
 		route := c.FullPath()
 		if route == "" {
 			route = "unmatched"
