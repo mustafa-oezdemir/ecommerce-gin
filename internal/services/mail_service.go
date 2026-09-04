@@ -48,9 +48,9 @@ func (s *MailService) SendOrderStatusChanged(user models.User, order models.Orde
 }
 
 func (s *MailService) SendSecurityCode(to, displayName, code string, expiresIn time.Duration) error {
-	body := fmt.Sprintf("Hello %s,\n\nYour NordShop email verification code is: %s\n\nIt expires in %d minutes. If you did not request this change, ignore this message.\n", displayName, code, int(expiresIn.Minutes()))
-	htmlBody := fmt.Sprintf("<!doctype html><html><body style=\"font-family:Arial,sans-serif;color:#172033\"><div style=\"max-width:560px;margin:auto;padding:32px\"><h1 style=\"font-size:24px\">Confirm your email address</h1><p>Hello %s,</p><p>Use this security code to confirm your new NordShop email address:</p><p style=\"font:700 30px monospace;letter-spacing:4px;background:#eef2ff;padding:18px;border-radius:12px;text-align:center\">%s</p><p>This code expires in %d minutes. If you did not request this change, you can safely ignore this message.</p></div></body></html>", html.EscapeString(displayName), html.EscapeString(code), int(expiresIn.Minutes()))
-	return s.sendAlternative(to, "Confirm your NordShop email address", body, htmlBody)
+	body := fmt.Sprintf("Hello %s,\n\nYour PehliOne email verification code is: %s\n\nIt expires in %d minutes. If you did not request this change, ignore this message.\n", displayName, code, int(expiresIn.Minutes()))
+	htmlBody := fmt.Sprintf("<!doctype html><html><body style=\"font-family:Arial,sans-serif;color:#172033\"><div style=\"max-width:560px;margin:auto;padding:32px\"><h1 style=\"font-size:24px\">Confirm your email address</h1><p>Hello %s,</p><p>Use this security code to confirm your new PehliOne email address:</p><p style=\"font:700 30px monospace;letter-spacing:4px;background:#eef2ff;padding:18px;border-radius:12px;text-align:center\">%s</p><p>This code expires in %d minutes. If you did not request this change, you can safely ignore this message.</p></div></body></html>", html.EscapeString(displayName), html.EscapeString(code), int(expiresIn.Minutes()))
+	return s.sendAlternative(to, "Confirm your PehliOne email address", body, htmlBody)
 }
 
 func (s *MailService) sendAlternative(to, subject, textBody, htmlBody string) error {
@@ -60,7 +60,7 @@ func (s *MailService) sendAlternative(to, subject, textBody, htmlBody string) er
 	if strings.ContainsAny(to, "\r\n") {
 		return errors.New("invalid email recipient")
 	}
-	const boundary = "nordshop-security-message"
+	const boundary = "PehliOne-security-message"
 	message := "To: " + to + "\r\nFrom: " + s.from + "\r\nSubject: " + subject + "\r\nMIME-Version: 1.0\r\nContent-Type: multipart/alternative; boundary=\"" + boundary + "\"\r\n\r\n" +
 		"--" + boundary + "\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n" + textBody + "\r\n" +
 		"--" + boundary + "\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n" + htmlBody + "\r\n--" + boundary + "--\r\n"

@@ -14,7 +14,7 @@ import (
 //go:embed templates/*.tmpl
 var templateFS embed.FS
 
-//go:embed static/*.js
+//go:embed static/*
 var staticFS embed.FS
 
 func StaticFS() (fs.FS, error) {

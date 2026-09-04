@@ -106,7 +106,7 @@ func (s *AccountSecurityService) BeginTwoFactor(ctx context.Context, user models
 	if user.ID == 0 || user.TwoFactorEnabled {
 		return nil, ErrSecurityInput
 	}
-	key, err := totp.Generate(totp.GenerateOpts{Issuer: "NordShop", AccountName: user.Email, Period: 30, SecretSize: 20, Secret: nil, Digits: otp.DigitsSix, Algorithm: otp.AlgorithmSHA1})
+	key, err := totp.Generate(totp.GenerateOpts{Issuer: "PehliOne", AccountName: user.Email, Period: 30, SecretSize: 20, Secret: nil, Digits: otp.DigitsSix, Algorithm: otp.AlgorithmSHA1})
 	if err != nil {
 		return nil, fmt.Errorf("generate TOTP: %w", err)
 	}
@@ -129,7 +129,7 @@ func (s *AccountSecurityService) PendingTwoFactor(ctx context.Context, userID ui
 	if err != nil {
 		return nil, err
 	}
-	key, err := totp.Generate(totp.GenerateOpts{Issuer: "NordShop", AccountName: user.Email, Period: 30, SecretSize: 20, Secret: secret, Digits: otp.DigitsSix, Algorithm: otp.AlgorithmSHA1})
+	key, err := totp.Generate(totp.GenerateOpts{Issuer: "PehliOne", AccountName: user.Email, Period: 30, SecretSize: 20, Secret: secret, Digits: otp.DigitsSix, Algorithm: otp.AlgorithmSHA1})
 	if err != nil {
 		return nil, fmt.Errorf("restore TOTP key: %w", err)
 	}

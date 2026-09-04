@@ -193,7 +193,7 @@ func Load() *Config {
 		if appEnv == "production" {
 			log.Fatal("SECURITY_ENCRYPTION_KEY must be valid base64 and decode to exactly 32 bytes")
 		}
-		fallback := sha256.Sum256(append([]byte("nordshop-account-security:"), csrfKey...))
+		fallback := sha256.Sum256(append([]byte("pehlione-account-security:"), csrfKey...))
 		securityKey = fallback[:]
 	}
 
