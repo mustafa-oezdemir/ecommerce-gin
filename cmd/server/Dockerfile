@@ -19,7 +19,8 @@ WORKDIR /app
 
 RUN apk add --no-cache ca-certificates \
     && addgroup -S app && adduser -S app -G app \
-    && mkdir -p /app/logs && chown app:app /app/logs
+    && mkdir -p /app/logs /app/uploads/products \
+    && chown -R app:app /app/logs /app/uploads
 
 COPY --from=builder /out/server /app/server
 COPY --from=builder /out/seed /app/seed

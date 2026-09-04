@@ -9,6 +9,7 @@
   <style>
     body { background: linear-gradient(180deg, #f8fafc 0%, #eef4ff 100%); }
     .list-card { border: 0; border-radius: 1.25rem; box-shadow: 0 12px 30px rgba(15,23,42,0.08); }
+    .product-thumbnail { width: 52px; height: 52px; border-radius: .8rem; object-fit: cover; background: #eef2ff; }
   </style>
 </head>
 <body>
@@ -65,9 +66,12 @@
         <div class="list-group list-group-flush">
           {{range .List.Items}}
           <div class="list-group-item px-0 d-flex justify-content-between align-items-center gap-3">
-            <div>
+            <div class="d-flex align-items-center gap-3">
+              {{if .Product.ImageFilename}}<img class="product-thumbnail" src="/media/products/{{.Product.ImageFilename}}" alt="" loading="lazy">{{end}}
+              <div>
               <a class="fw-semibold text-decoration-none" href="/products/{{.ProductID}}">{{.Product.Name}}</a>
               <div class="small text-muted">{{money .Product.PriceCents}}{{if .Product.Category}} · {{.Product.Category.Name}}{{end}}</div>
+              </div>
             </div>
             <form method="post" action="/account/lists/{{$.List.ID}}/products/{{.ProductID}}/remove">
               {{$.CSRFField}}

@@ -15,6 +15,7 @@ import (
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/metrics"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/middleware"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/models"
+	"github.com/mustafa-oezdemir/ecommerce-gin/internal/uploads"
 	"github.com/mustafa-oezdemir/ecommerce-gin/web"
 	"gorm.io/gorm"
 )
@@ -28,6 +29,7 @@ type RouterConfig struct {
 	Database       *gorm.DB
 	Metrics        *metrics.Metrics
 	Logger         *slog.Logger
+	ImageStore     *uploads.ImageStore
 }
 
 func NewRouter(config RouterConfig) (http.Handler, error) {
@@ -46,11 +48,15 @@ func NewRouter(config RouterConfig) (http.Handler, error) {
 	if config.Metrics == nil {
 		return nil, errors.New("server: metrics registry is required")
 	}
+	if config.ImageStore == nil {
+		return nil, errors.New("server: product image store is required")
+	}
 	if config.Logger == nil {
 		config.Logger = slog.Default()
 	}
 
 	router := gin.New()
+	router.MaxMultipartMemory = config.ImageStore.MaxBytes()
 	if err := router.SetTrustedProxies(config.TrustedProxies); err != nil {
 		return nil, fmt.Errorf("configure trusted proxies: %w", err)
 	}
@@ -71,7 +77,8 @@ func NewRouter(config RouterConfig) (http.Handler, error) {
 	}
 	router.SetHTMLTemplate(templates)
 	router.Static("/static", "./internal/web/static")
-	registerRoutes(router, config.Database, config.Metrics)
+	router.GET("/media/products/:filename", serveProductImage(config.ImageStore, config.Logger))
+	registerRoutes(router, config.Database, config.Metrics, config.ImageStore)
 
 	csrfMiddleware := csrf.Protect(
 		config.CSRFKey,
@@ -95,7 +102,7 @@ func NewRouter(config RouterConfig) (http.Handler, error) {
 	return handler, nil
 }
 
-func registerRoutes(router *gin.Engine, database *gorm.DB, appMetrics *metrics.Metrics) {
+func registerRoutes(router *gin.Engine, database *gorm.DB, appMetrics *metrics.Metrics, imageStore *uploads.ImageStore) {
 	health := handlers.NewHealthHandler(database, appMetrics)
 	router.GET("/health/live", health.Live)
 	router.GET("/health/ready", health.Ready)
@@ -146,15 +153,37 @@ func registerRoutes(router *gin.Engine, database *gorm.DB, appMetrics *metrics.M
 	adminGroup.POST("/categories", admin.CreateCategory)
 	adminGroup.POST("/categories/:id/delete", admin.DeleteCategory)
 
-	employee := handlers.NewEmployeeHandler()
+	employee := handlers.NewEmployeeHandler(imageStore)
 	employeeGroup := router.Group("/employee")
 	employeeGroup.Use(requireAuth, middleware.RequireRoles(models.RoleAdmin, models.RoleEmployee))
 	employeeGroup.GET("/dashboard", employee.Dashboard)
 	employeeGroup.GET("/products", employee.ListProducts)
 	employeeGroup.POST("/products", employee.CreateProduct)
 	employeeGroup.POST("/products/:id", employee.UpdateProduct)
+	employeeGroup.POST("/products/:id/image", employee.UpdateProductImage)
 	employeeGroup.POST("/products/:id/deactivate", employee.DeactivateProduct)
 	employeeGroup.POST("/products/:id/stock", employee.UpdateStock)
 	employeeGroup.GET("/orders", employee.ListOrders)
 	employeeGroup.POST("/orders/:id/status", employee.UpdateOrderStatus)
+}
+
+func serveProductImage(imageStore *uploads.ImageStore, logger *slog.Logger) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		filename := c.Param("filename")
+		file, err := imageStore.Open(filename)
+		if err != nil {
+			c.AbortWithStatus(http.StatusNotFound)
+			return
+		}
+		defer file.Close()
+		info, err := file.Stat()
+		if err != nil || !info.Mode().IsRegular() {
+			logger.Warn("product image unavailable", "image_id", filename)
+			c.AbortWithStatus(http.StatusNotFound)
+			return
+		}
+		c.Header("Cache-Control", "public, max-age=31536000, immutable")
+		c.Header("Content-Type", uploads.ContentType(filename))
+		http.ServeContent(c.Writer, c.Request, filename, info.ModTime(), file)
+	}
 }

@@ -9,6 +9,7 @@ import (
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/db"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/models"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/services"
+	"github.com/mustafa-oezdemir/ecommerce-gin/internal/uploads"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/validation"
 	"gorm.io/gorm"
 )
@@ -16,10 +17,14 @@ import (
 type EmployeeHandler struct {
 	orderService *services.OrderService
 	mailService  *services.MailService
+	imageStore   *uploads.ImageStore
 }
 
-func NewEmployeeHandler() *EmployeeHandler {
-	return &EmployeeHandler{orderService: services.NewOrderService(), mailService: services.NewMailServiceFromEnv()}
+func NewEmployeeHandler(imageStore *uploads.ImageStore) *EmployeeHandler {
+	if imageStore == nil {
+		panic("handlers: product image store is required")
+	}
+	return &EmployeeHandler{orderService: services.NewOrderService(), mailService: services.NewMailServiceFromEnv(), imageStore: imageStore}
 }
 
 func (h *EmployeeHandler) Dashboard(c *gin.Context) {
@@ -42,12 +47,17 @@ func (h *EmployeeHandler) ListProducts(c *gin.Context) {
 		c.String(http.StatusInternalServerError, "Could not load products")
 		return
 	}
-	c.HTML(http.StatusOK, "employee_products.tmpl", viewData(c, gin.H{"Products": products, "Categories": categories}))
+	c.HTML(http.StatusOK, "employee_products.tmpl", viewData(c, gin.H{"Products": products, "Categories": categories, "ImageMaxMB": (h.imageStore.MaxBytes() + (1 << 20) - 1) / (1 << 20)}))
 }
 
 func (h *EmployeeHandler) CreateProduct(c *gin.Context) {
+	h.limitImageUpload(c)
 	var req validation.CreateProductRequest
 	if err := c.ShouldBind(&req); err != nil {
+		if isUploadTooLarge(err) {
+			c.String(http.StatusRequestEntityTooLarge, "Product image is too large")
+			return
+		}
 		c.String(http.StatusBadRequest, "Invalid product data")
 		return
 	}
@@ -64,14 +74,20 @@ func (h *EmployeeHandler) CreateProduct(c *gin.Context) {
 	var categoryID *uint
 	if req.CategoryID != 0 {
 		var category models.Category
-		if err := db.DB.First(&category, req.CategoryID).Error; err != nil {
+		if err := db.DB.WithContext(c.Request.Context()).First(&category, req.CategoryID).Error; err != nil {
 			c.String(http.StatusBadRequest, "Invalid product data")
 			return
 		}
 		categoryID = &category.ID
 	}
-	product := models.Product{Name: name, Description: strings.TrimSpace(req.Description), PriceCents: priceCents, Stock: req.Stock, Active: true, CategoryID: categoryID}
-	if err := db.DB.Create(&product).Error; err != nil {
+	imageFilename, err := h.saveProductImage(c, false)
+	if err != nil {
+		h.respondToImageError(c, err)
+		return
+	}
+	product := models.Product{Name: name, Description: strings.TrimSpace(req.Description), ImageFilename: imageFilename, PriceCents: priceCents, Stock: req.Stock, Active: true, CategoryID: categoryID}
+	if err := db.DB.WithContext(c.Request.Context()).Create(&product).Error; err != nil {
+		h.cleanupProductImage(imageFilename)
 		c.String(http.StatusInternalServerError, "Could not create product")
 		return
 	}

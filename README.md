@@ -8,6 +8,7 @@ A secure, server-rendered e-commerce demo built with Go, Gin, GORM, and MySQL. I
 - **Operations** — manage products, inventory, and order status as an employee.
 - **Administration** — review dashboards, users, categories, and orders.
 - **Security by default** — signed sessions, RBAC, ownership checks, CSRF protection, secure headers, validated requests, and rate-limited sign-in.
+- **Safe product media** — employee image uploads are size-limited, virus-scanned, decoded, sanitized, and stored under generated names.
 - **Reliable commerce data** — integer-cent pricing, transactional checkout, immutable order item snapshots, foreign keys, and indexed migrations.
 - **Observability** — liveness/readiness probes, structured request logs, Prometheus metrics, and a provisioned Grafana dashboard.
 
@@ -20,6 +21,7 @@ A secure, server-rendered e-commerce demo built with Go, Gin, GORM, and MySQL. I
 | UI | Server-rendered HTML templates |
 | Local platform | Docker Compose, MailHog |
 | Monitoring | Prometheus, Grafana |
+| Upload security | ClamAV (`clamd`) and image re-encoding |
 
 ## Roles
 
@@ -93,6 +95,10 @@ Copy `.env.example` and keep `.env` private. Docker passes only application-requ
 | `HTTP_READ_HEADER_TIMEOUT`, `HTTP_READ_TIMEOUT`, `HTTP_WRITE_TIMEOUT`, `HTTP_IDLE_TIMEOUT` | Public and metrics server connection timeouts |
 | `HTTP_SHUTDOWN_TIMEOUT` | Maximum graceful-shutdown duration before connections are forced closed |
 | `HTTP_MAX_HEADER_BYTES` | Maximum accepted HTTP request-header size |
+| `PRODUCT_IMAGE_DIRECTORY` | Private storage directory for sanitized product images |
+| `PRODUCT_IMAGE_MAX_BYTES` | Maximum uploaded and sanitized image size in bytes |
+| `PRODUCT_IMAGE_MAX_WIDTH`, `PRODUCT_IMAGE_MAX_HEIGHT`, `PRODUCT_IMAGE_MAX_PIXELS` | Decoded-image limits that prevent image bombs |
+| `CLAMAV_ADDRESS`, `CLAMAV_SCAN_TIMEOUT` | Internal `clamd` endpoint and fail-closed scan timeout |
 | `MYSQL_*` | MySQL connection settings |
 | `DB_MAX_OPEN_CONNS`, `DB_MAX_IDLE_CONNS` | Database connection pool limits |
 | `DB_CONN_MAX_LIFETIME`, `DB_CONN_MAX_IDLE_TIME` | Connection rotation and idle limits |
@@ -147,6 +153,14 @@ For a host process, the default file is `logs/ecommerce.log`. Rotation defaults 
 Router composition and HTTP process management live in `internal/server`, leaving `cmd/server` as the application composition root. The application and metrics listeners start as one supervised group: if either listener fails, both shut down. `SIGINT` and `SIGTERM` stop accepting new connections, allow active requests to finish within the configured shutdown timeout, and then force-close remaining connections.
 
 Both listeners enforce explicit read-header, read, write, idle, and maximum-header limits. Request contexts propagate to database operations, and database/log resources close after the listeners have stopped.
+
+## Product images
+
+Employees can add an optional image while creating a product or replace an image from Product Management. Only JPEG (`.jpg`, `.jpeg`) and PNG (`.png`) files are accepted. The server enforces the request and file size before processing, compares the extension with detected content and the decoder format, checks dimensions and total pixels, streams the original bytes to ClamAV, and fails closed when the scanner cannot be reached.
+
+Accepted images are decoded and re-encoded before storage. This removes original metadata, trailing payloads, and the client filename. A random server-generated filename is stored in MySQL, while the sanitized file is held in the persistent `app_uploads` Docker volume with non-executable permissions. Replaced files and failed database writes are cleaned up automatically. Public image responses allow only generated filenames and use immutable caching.
+
+ClamAV is reachable only on the Compose network; port `3310` is not published to the host. Its signature database is retained in the `clamav_data` volume and updated by the official container.
 
 ## Development
 

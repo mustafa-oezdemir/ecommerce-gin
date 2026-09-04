@@ -26,6 +26,17 @@ services:
       timeout: 5s
       retries: 20
 
+  clamav:
+    image: clamav/clamav:1.4
+    container_name: ecommerce-clamav
+    restart: unless-stopped
+
+    expose:
+      - "3310"
+
+    volumes:
+      - clamav_data:/var/lib/clamav
+
   app:
     build:
       context: .
@@ -54,6 +65,13 @@ services:
       HTTP_IDLE_TIMEOUT: ${HTTP_IDLE_TIMEOUT:-60s}
       HTTP_SHUTDOWN_TIMEOUT: ${HTTP_SHUTDOWN_TIMEOUT:-10s}
       HTTP_MAX_HEADER_BYTES: ${HTTP_MAX_HEADER_BYTES:-1048576}
+      PRODUCT_IMAGE_DIRECTORY: /app/uploads/products
+      PRODUCT_IMAGE_MAX_BYTES: ${PRODUCT_IMAGE_MAX_BYTES:-5242880}
+      PRODUCT_IMAGE_MAX_WIDTH: ${PRODUCT_IMAGE_MAX_WIDTH:-6000}
+      PRODUCT_IMAGE_MAX_HEIGHT: ${PRODUCT_IMAGE_MAX_HEIGHT:-6000}
+      PRODUCT_IMAGE_MAX_PIXELS: ${PRODUCT_IMAGE_MAX_PIXELS:-25000000}
+      CLAMAV_ADDRESS: clamav:3310
+      CLAMAV_SCAN_TIMEOUT: ${CLAMAV_SCAN_TIMEOUT:-15s}
       MYSQL_HOST: mysql
       MYSQL_PORT: 3306
       MYSQL_DATABASE: ${MYSQL_DATABASE}
@@ -82,9 +100,12 @@ services:
 
     volumes:
       - app_logs:/app/logs
+      - app_uploads:/app/uploads
 
     depends_on:
       mysql:
+        condition: service_healthy
+      clamav:
         condition: service_healthy
 
     healthcheck:
@@ -134,3 +155,5 @@ volumes:
   mysql_data:
   grafana_data:
   app_logs:
+  app_uploads:
+  clamav_data:

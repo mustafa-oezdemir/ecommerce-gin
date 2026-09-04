@@ -33,6 +33,13 @@ type Config struct {
 	HTTPIdleTimeout       time.Duration
 	HTTPShutdownTimeout   time.Duration
 	HTTPMaxHeaderBytes    int
+	ProductImageDirectory string
+	ProductImageMaxBytes  int64
+	ProductImageMaxWidth  int
+	ProductImageMaxHeight int
+	ProductImageMaxPixels int64
+	ClamAVAddress         string
+	ClamAVScanTimeout     time.Duration
 	MySQLHost             string
 	MySQLPort             string
 	MySQLDatabase         string
@@ -76,6 +83,13 @@ func Load() *Config {
 	httpIdleTimeout := envDuration("HTTP_IDLE_TIMEOUT", 60*time.Second)
 	httpShutdownTimeout := envDuration("HTTP_SHUTDOWN_TIMEOUT", 10*time.Second)
 	httpMaxHeaderBytes := envInt("HTTP_MAX_HEADER_BYTES", 1<<20)
+	productImageDirectory := strings.TrimSpace(os.Getenv("PRODUCT_IMAGE_DIRECTORY"))
+	productImageMaxBytes := envInt64("PRODUCT_IMAGE_MAX_BYTES", 5<<20)
+	productImageMaxWidth := envInt("PRODUCT_IMAGE_MAX_WIDTH", 6000)
+	productImageMaxHeight := envInt("PRODUCT_IMAGE_MAX_HEIGHT", 6000)
+	productImageMaxPixels := envInt64("PRODUCT_IMAGE_MAX_PIXELS", 25_000_000)
+	clamAVAddress := strings.TrimSpace(os.Getenv("CLAMAV_ADDRESS"))
+	clamAVScanTimeout := envDuration("CLAMAV_SCAN_TIMEOUT", 15*time.Second)
 	mysqlHost := strings.TrimSpace(os.Getenv("MYSQL_HOST"))
 	mysqlPort := strings.TrimSpace(os.Getenv("MYSQL_PORT"))
 	mysqlDB := strings.TrimSpace(os.Getenv("MYSQL_DATABASE"))
@@ -142,6 +156,15 @@ func Load() *Config {
 	}
 	if httpMaxHeaderBytes < 8192 {
 		log.Fatal("HTTP_MAX_HEADER_BYTES must be at least 8192")
+	}
+	if productImageDirectory == "" {
+		productImageDirectory = "uploads/products"
+	}
+	if productImageMaxBytes < 1024 || productImageMaxWidth < 1 || productImageMaxHeight < 1 || productImageMaxPixels < 1 {
+		log.Fatal("product image size and dimension limits must be positive")
+	}
+	if clamAVAddress == "" {
+		clamAVAddress = "127.0.0.1:3310"
 	}
 
 	if mysqlHost == "" || mysqlPort == "" || mysqlDB == "" || mysqlUser == "" || mysqlPassword == "" {
@@ -210,6 +233,13 @@ func Load() *Config {
 		HTTPIdleTimeout:       httpIdleTimeout,
 		HTTPShutdownTimeout:   httpShutdownTimeout,
 		HTTPMaxHeaderBytes:    httpMaxHeaderBytes,
+		ProductImageDirectory: productImageDirectory,
+		ProductImageMaxBytes:  productImageMaxBytes,
+		ProductImageMaxWidth:  productImageMaxWidth,
+		ProductImageMaxHeight: productImageMaxHeight,
+		ProductImageMaxPixels: productImageMaxPixels,
+		ClamAVAddress:         clamAVAddress,
+		ClamAVScanTimeout:     clamAVScanTimeout,
 		MySQLHost:             mysqlHost,
 		MySQLPort:             mysqlPort,
 		MySQLDatabase:         mysqlDB,
@@ -252,6 +282,18 @@ func envInt(name string, fallback int) int {
 		return fallback
 	}
 	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		log.Fatalf("%s must be an integer", name)
+	}
+	return parsed
+}
+
+func envInt64(name string, fallback int64) int64 {
+	value := strings.TrimSpace(os.Getenv(name))
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.ParseInt(value, 10, 64)
 	if err != nil {
 		log.Fatalf("%s must be an integer", name)
 	}

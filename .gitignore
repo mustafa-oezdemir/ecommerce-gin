@@ -12,6 +12,7 @@ dist/
 coverage.out
 .gotmp/
 /logs/
+/uploads/
 
 # IDE / OS
 .idea/

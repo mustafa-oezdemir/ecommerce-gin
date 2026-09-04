@@ -19,6 +19,7 @@ import (
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/logging"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/metrics"
 	appserver "github.com/mustafa-oezdemir/ecommerce-gin/internal/server"
+	"github.com/mustafa-oezdemir/ecommerce-gin/internal/uploads"
 )
 
 func main() {
@@ -80,6 +81,21 @@ func run() (runErr error) {
 	}
 	appMetrics.HealthLive.Set(1)
 	metrics.SetDefault(appMetrics)
+	malwareScanner, err := uploads.NewClamAVScanner(cfg.ClamAVAddress, cfg.ClamAVScanTimeout)
+	if err != nil {
+		return fmt.Errorf("configure malware scanner: %w", err)
+	}
+	imageStore, err := uploads.NewImageStore(uploads.ImageConfig{
+		Directory: cfg.ProductImageDirectory,
+		MaxBytes:  cfg.ProductImageMaxBytes,
+		MaxWidth:  cfg.ProductImageMaxWidth,
+		MaxHeight: cfg.ProductImageMaxHeight,
+		MaxPixels: cfg.ProductImageMaxPixels,
+		Scanner:   malwareScanner,
+	})
+	if err != nil {
+		return fmt.Errorf("configure product image storage: %w", err)
+	}
 	applicationHandler, err := appserver.NewRouter(appserver.RouterConfig{
 		Environment:    cfg.AppEnv,
 		TrustedProxies: cfg.TrustedProxies,
@@ -89,6 +105,7 @@ func run() (runErr error) {
 		Database:       db.DB,
 		Metrics:        appMetrics,
 		Logger:         slog.Default(),
+		ImageStore:     imageStore,
 	})
 	if err != nil {
 		return fmt.Errorf("build application router: %w", err)
