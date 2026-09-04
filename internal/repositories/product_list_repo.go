@@ -44,6 +44,6 @@ func (r *ProductListRepository) RemoveProduct(ctx context.Context, listID, userI
 }
 
 func (r *ProductListRepository) Delete(ctx context.Context, listID, userID uint) (bool, error) {
-	result := r.database.WithContext(ctx).Where("id = ? AND user_id = ?", listID, userID).Delete(&models.ProductList{})
+	result := r.database.WithContext(ctx).Where("id = ? AND user_id = ? AND system_key IS NULL", listID, userID).Delete(&models.ProductList{})
 	return result.RowsAffected == 1, result.Error
 }

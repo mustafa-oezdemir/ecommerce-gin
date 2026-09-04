@@ -1,62 +1,1003 @@
-{{define "product_detail.tmpl"}}
+{{ define "product_detail.tmpl" }}
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{.Product.Name}} | NordShop</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-  <style>
-    body { background: linear-gradient(180deg, #f8fafc 0%, #eef3ff 100%); }
-    .detail-card { border: 0; border-radius: 1.5rem; box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08); }
-    .image-box { height: 420px; border-radius: 1.5rem; background: linear-gradient(135deg, rgba(79,70,229,0.12), rgba(56,189,248,0.12)); display: flex; align-items: center; justify-content: center; font-size: 5rem; font-weight: 700; color: #4f46e5; }
-    .product-image { width: 100%; height: 420px; border-radius: 1.5rem; object-fit: cover; background: #eef2ff; }
-  </style>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="csrf-token" content="{{ .CSRFToken }}">
+
+    <title>{{ .Product.Name }} | NordShop</title>
+
+    <link
+        href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+        rel="stylesheet"
+    >
+
+    <style>
+        body {
+            background: #f4f7fb;
+        }
+
+        .card {
+            border: 0;
+            border-radius: 1.35rem;
+            box-shadow: 0 12px 35px rgba(15, 23, 42, 0.07);
+        }
+
+        .product-image,
+        .placeholder {
+            width: 100%;
+            height: 430px;
+            object-fit: cover;
+            border-radius: 1.2rem;
+        }
+
+        .placeholder {
+            display: grid;
+            place-items: center;
+            background: linear-gradient(135deg, #e0e7ff, #e0f2fe);
+            font-size: 5rem;
+            color: #4f46e5;
+        }
+
+        .score {
+            font-size: 3rem;
+            font-weight: 800;
+        }
+
+        .review {
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .review:last-child {
+            border-bottom: 0;
+        }
+
+        .heart.active {
+            background: #dc3545;
+            color: #fff;
+            border-color: #dc3545;
+        }
+
+        .stars {
+            color: #f59e0b;
+        }
+    </style>
 </head>
+
 <body>
-  <nav class="navbar navbar-expand-lg navbar-dark bg-dark shadow-sm">
+
+<nav class="navbar navbar-dark bg-dark">
     <div class="container">
-      <a class="navbar-brand fw-bold" href="/">NordShop</a>
-      <div class="d-flex gap-2 ms-auto">
-        <a class="btn btn-outline-light btn-sm" href="/">Products</a>
-        <a class="btn btn-outline-light btn-sm" href="/cart">Cart</a>
-        <a class="btn btn-outline-light btn-sm" href="/account">My Account</a>
-      </div>
-    </div>
-  </nav>
+        <a class="navbar-brand fw-bold" href="/">
+            NordShop
+        </a>
 
-  <main class="container py-5">
-    <div class="card detail-card overflow-hidden">
-      <div class="row g-0">
-        <div class="col-lg-6 p-4 p-lg-5">
-          {{if .Product.ImageFilename}}<img class="product-image" src="/media/products/{{.Product.ImageFilename}}" alt="{{.Product.Name}}">{{else}}<div class="image-box">{{if .Product.Category}}{{initials .Product.Category.Name}}{{else}}N{{end}}</div>{{end}}
-        </div>
-        <div class="col-lg-6">
-          <div class="card-body p-4 p-lg-5">
-            <div class="d-flex align-items-center justify-content-between mb-3">
-              {{if .Product.Category}}<span class="badge bg-primary-subtle text-primary rounded-pill px-3 py-2">{{.Product.Category.Name}}</span>{{end}}
-              <a href="/" class="btn btn-outline-secondary btn-sm">Back to Products</a>
-            </div>
-            <h1 class="display-6 fw-bold mb-3">{{.Product.Name}}</h1>
-            <p class="text-primary h3 fw-bold mb-3">{{money .Product.PriceCents}}</p>
-            <p class="text-muted">{{if .Product.Description}}{{.Product.Description}}{{else}}
-            A premium product designed for everyday use, loved by user reviews.{{end}}</p>
-            <div class="d-flex align-items-center gap-3 mb-4">
-              <span class="badge bg-success-subtle text-success rounded-pill px-3 py-2">Stock: {{.Product.Stock}}</span>
-            </div>
+        <div class="d-flex gap-2">
+            <a class="btn btn-outline-light btn-sm" href="/cart">
+                Cart
+            </a>
 
-            <form method="post" action="/cart/add/{{.Product.ID}}">
-              {{.CSRFField}}
-              <div class="d-flex gap-3 align-items-center">
-                <input class="form-control w-auto" type="number" name="quantity" value="1" min="1" max="100">
-                <button type="submit" class="btn btn-primary btn-lg">Add to Cart</button>
-              </div>
-            </form>
-          </div>
+            <a class="btn btn-outline-light btn-sm" href="/account">
+                My Account
+            </a>
         </div>
-      </div>
     </div>
-  </main>
+</nav>
+
+<main class="container py-5">
+
+    <!-- Product -->
+    <section class="card mb-5">
+        <div class="card-body p-4 p-lg-5">
+            <div class="row g-5 align-items-center">
+
+                <div class="col-lg-6">
+                    {{ if .Product.ImageFilename }}
+                    <img
+                        class="product-image"
+                        src="/media/products/{{ .Product.ImageFilename }}"
+                        alt="{{ .Product.Name }}"
+                    >
+                    {{ else }}
+                    <div
+                        class="placeholder"
+                        role="img"
+                        aria-label="{{ .Product.Name }}"
+                    >
+                        {{ initials .Product.Name }}
+                    </div>
+                    {{ end }}
+                </div>
+
+                <div class="col-lg-6">
+
+                    {{ if .Product.Category }}
+                    <span class="badge text-bg-primary rounded-pill">
+                        {{ .Product.Category.Name }}
+                    </span>
+                    {{ end }}
+
+                    <h1 class="display-5 fw-bold mt-3">
+                        {{ .Product.Name }}
+                    </h1>
+
+                    <div class="stars mb-2">
+                        ★
+                        <strong id="score-main">
+                            {{ printf "%.1f" .ReviewSummary.Average }}
+                        </strong>
+
+                        <span class="text-muted">
+                            (<span id="review-count-main">{{ .ReviewSummary.Count }}</span>
+                            reviews)
+                        </span>
+                    </div>
+
+                    <p class="h2 text-primary fw-bold">
+                        {{ money .Product.PriceCents }}
+                    </p>
+
+                    <p class="text-muted">
+                        {{ .Product.Description }}
+                    </p>
+
+                    <span class="badge text-bg-success mb-4">
+                        {{ .Product.Stock }} in stock
+                    </span>
+
+                    <form
+                        method="post"
+                        action="/cart/add/{{ .Product.ID }}"
+                        class="d-flex gap-2 mb-3"
+                    >
+                        {{ .CSRFField }}
+
+                        <div>
+                            <label for="quantity" class="visually-hidden">
+                                Quantity
+                            </label>
+
+                            <input
+                                id="quantity"
+                                class="form-control"
+                                style="max-width: 95px;"
+                                type="number"
+                                name="quantity"
+                                value="1"
+                                min="1"
+                                max="100"
+                                required
+                            >
+                        </div>
+
+                        <button
+                            type="submit"
+                            class="btn btn-primary btn-lg"
+                        >
+                            Add to cart
+                        </button>
+                    </form>
+
+                    {{ if .CurrentUser }}
+
+                    <div class="d-flex gap-2 flex-wrap">
+
+                        <button
+                            id="favorite"
+                            type="button"
+                            class="heart btn btn-outline-danger {{ if .IsFavorite }}active{{ end }}"
+                            data-active="{{ .IsFavorite }}"
+                            aria-pressed="{{ .IsFavorite }}"
+                        >
+                            ♥
+                            <span>
+                                {{ if .IsFavorite }}
+                                    Favorited
+                                {{ else }}
+                                    Add to favorites
+                                {{ end }}
+                            </span>
+                        </button>
+
+                        {{ if .Lists }}
+                        <form
+                            id="list-form"
+                            class="d-flex gap-2"
+                        >
+                            <label for="list-id" class="visually-hidden">
+                                Product list
+                            </label>
+
+                            <select
+                                id="list-id"
+                                class="form-select"
+                                name="list_id"
+                                required
+                            >
+                                {{ range .Lists }}
+                                    {{ if not .SystemKey }}
+                                    <option value="{{ .ID }}">
+                                        {{ .Name }}
+                                    </option>
+                                    {{ end }}
+                                {{ end }}
+                            </select>
+
+                            <button
+                                type="submit"
+                                class="btn btn-outline-primary"
+                            >
+                                Add to list
+                            </button>
+                        </form>
+                        {{ end }}
+
+                    </div>
+
+                    {{ else }}
+
+                    <a
+                        class="btn btn-outline-primary"
+                        href="/login"
+                    >
+                        Sign in to save or review
+                    </a>
+
+                    {{ end }}
+
+                </div>
+            </div>
+        </div>
+    </section>
+
+
+    <!-- Reviews -->
+    <section class="row g-4">
+
+        <!-- Rating summary -->
+        <div class="col-lg-4">
+            <div class="card">
+                <div class="card-body p-4">
+
+                    <h2 class="h5">
+                        Customer rating
+                    </h2>
+
+                    <div class="score">
+                        <span id="score-side">
+                            {{ printf "%.1f" .ReviewSummary.Average }}
+                        </span>
+
+                        <span class="fs-5 text-muted">
+                            /10
+                        </span>
+                    </div>
+
+                    <p class="text-muted">
+                        Based on
+                        <span id="review-count">
+                            {{ .ReviewSummary.Count }}
+                        </span>
+                        verified reviews
+                    </p>
+
+                    {{ range $rating := listRatings }}
+                    <div class="d-flex justify-content-between small">
+                        <span>
+                            {{ $rating }}/10
+                        </span>
+
+                        <span>
+                            {{ index $.ReviewSummary.Distribution $rating }}
+                        </span>
+                    </div>
+                    {{ end }}
+
+                </div>
+            </div>
+        </div>
+
+
+        <!-- Review list -->
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-body p-4">
+
+                    <div
+                        class="d-flex justify-content-between align-items-center gap-3"
+                    >
+                        <h2 class="h4 mb-0">
+                            Reviews
+                        </h2>
+
+                        <form method="get">
+                            <label for="review-sort" class="visually-hidden">
+                                Sort reviews
+                            </label>
+
+                            <select
+                                id="review-sort"
+                                class="form-select form-select-sm"
+                                name="sort"
+                                onchange="this.form.submit()"
+                            >
+                                <option
+                                    value="newest"
+                                    {{ if or (eq .Sort "") (eq .Sort "newest") }}selected{{ end }}
+                                >
+                                    Newest
+                                </option>
+
+                                <option
+                                    value="oldest"
+                                    {{ if eq .Sort "oldest" }}selected{{ end }}
+                                >
+                                    Oldest
+                                </option>
+
+                                <option
+                                    value="highest"
+                                    {{ if eq .Sort "highest" }}selected{{ end }}
+                                >
+                                    Highest rated
+                                </option>
+
+                                <option
+                                    value="lowest"
+                                    {{ if eq .Sort "lowest" }}selected{{ end }}
+                                >
+                                    Lowest rated
+                                </option>
+                            </select>
+                        </form>
+                    </div>
+
+
+                    {{ if and .CurrentUser .CanReview }}
+
+                        {{ if .UserReview }}
+
+                        <div
+                            class="alert alert-info my-3"
+                            role="status"
+                        >
+                            You already reviewed this product.
+                        </div>
+
+                        {{ else }}
+
+                        <form
+                            id="review-form"
+                            class="bg-light rounded-3 p-3 my-3"
+                        >
+                            <h3 class="h6">
+                                Write a verified purchase review
+                            </h3>
+
+                            <div class="row g-2">
+
+                                <div class="col-sm-3">
+                                    <label
+                                        for="review-rating"
+                                        class="form-label"
+                                    >
+                                        Rating
+                                    </label>
+
+                                    <input
+                                        id="review-rating"
+                                        class="form-control"
+                                        name="rating"
+                                        type="number"
+                                        min="1"
+                                        max="10"
+                                        placeholder="1–10"
+                                        required
+                                    >
+                                </div>
+
+                                <div class="col-sm-9">
+                                    <label
+                                        for="review-title"
+                                        class="form-label"
+                                    >
+                                        Review title
+                                    </label>
+
+                                    <input
+                                        id="review-title"
+                                        class="form-control"
+                                        name="title"
+                                        type="text"
+                                        minlength="3"
+                                        maxlength="150"
+                                        placeholder="Review title"
+                                        required
+                                    >
+                                </div>
+
+                                <div class="col-12">
+                                    <label
+                                        for="review-body"
+                                        class="form-label"
+                                    >
+                                        Review
+                                    </label>
+
+                                    <textarea
+                                        id="review-body"
+                                        class="form-control"
+                                        name="body"
+                                        rows="4"
+                                        minlength="10"
+                                        maxlength="5000"
+                                        placeholder="Share your experience"
+                                        required
+                                    ></textarea>
+                                </div>
+
+                            </div>
+
+                            <button
+                                type="submit"
+                                class="btn btn-primary mt-3"
+                            >
+                                Publish review
+                            </button>
+                        </form>
+
+                        {{ end }}
+
+                    {{ else if .CurrentUser }}
+
+                    <div
+                        class="alert alert-light border my-3"
+                        role="status"
+                    >
+                        Only customers who purchased this product can review it.
+                    </div>
+
+                    {{ end }}
+
+
+                    <div
+                        id="message"
+                        class="alert d-none"
+                        role="status"
+                        aria-live="polite"
+                    ></div>
+
+
+                    <div id="reviews">
+
+                        {{ range .Reviews }}
+
+                        <article
+                            class="review py-3"
+                            data-review="{{ .ID }}"
+                            data-rating="{{ .Rating }}"
+                            data-title="{{ .Title }}"
+                            data-body="{{ .Body }}"
+                        >
+                            <div class="d-flex justify-content-between gap-3">
+
+                                <div>
+                                    <strong class="review-title">
+                                        {{ .Title }}
+                                    </strong>
+
+                                    <span class="badge text-bg-success">
+                                        Verified Purchase
+                                    </span>
+
+                                    <div class="stars">
+                                        ★
+                                        <span class="review-rating">
+                                            {{ .Rating }}
+                                        </span>/10
+                                    </div>
+                                </div>
+
+                                <small class="text-muted">
+                                    {{ .User.Name }}
+                                </small>
+
+                            </div>
+
+                            <p class="review-body mt-2 mb-1">
+                                {{ .Body }}
+                            </p>
+
+                            {{ if and $.CurrentUser (eq .UserID $.CurrentUser.ID) }}
+
+                            <button
+                                type="button"
+                                class="btn btn-sm btn-outline-primary edit-review"
+                                data-id="{{ .ID }}"
+                            >
+                                Edit
+                            </button>
+
+                            <button
+                                type="button"
+                                class="btn btn-sm btn-outline-danger delete-review"
+                                data-id="{{ .ID }}"
+                            >
+                                Delete
+                            </button>
+
+                            {{ end }}
+
+                        </article>
+
+                        {{ else }}
+
+                        <p
+                            id="no-reviews"
+                            class="text-muted py-4"
+                        >
+                            No reviews yet.
+                        </p>
+
+                        {{ end }}
+
+                    </div>
+
+
+                    {{ if gt .ReviewPage.TotalPages 1 }}
+
+                    <nav
+                        class="mt-3 d-flex justify-content-between"
+                        aria-label="Review pagination"
+                    >
+                        {{ if gt .ReviewPage.Page 1 }}
+
+                        <a
+                            class="btn btn-sm btn-outline-primary"
+                            href="?page={{ sub .ReviewPage.Page 1 }}&sort={{ .Sort }}"
+                        >
+                            Previous
+                        </a>
+
+                        {{ else }}
+
+                        <span></span>
+
+                        {{ end }}
+
+                        {{ if lt .ReviewPage.Page .ReviewPage.TotalPages }}
+
+                        <a
+                            class="btn btn-sm btn-outline-primary"
+                            href="?page={{ add .ReviewPage.Page 1 }}&sort={{ .Sort }}"
+                        >
+                            Next
+                        </a>
+
+                        {{ end }}
+                    </nav>
+
+                    {{ end }}
+
+                </div>
+            </div>
+        </div>
+    </section>
+
+</main>
+
+
+<script>
+(() => {
+    const csrfMeta = document.querySelector('meta[name="csrf-token"]');
+    const token = csrfMeta ? csrfMeta.content : "";
+    const pid = {{ .Product.ID }};
+
+    const request = async (url, method, body = null) => {
+        const response = await fetch(url, {
+            method,
+            headers: {
+                "X-CSRF-Token": token,
+                "X-Requested-With": "XMLHttpRequest",
+                "Accept": "application/json"
+            },
+            body
+        });
+
+        const text = await response.text();
+
+        let data = {};
+
+        if (text) {
+            try {
+                data = JSON.parse(text);
+            } catch {
+                data = {};
+            }
+        }
+
+        if (!response.ok) {
+            throw new Error(
+                data?.error?.message ||
+                data?.message ||
+                "Request failed"
+            );
+        }
+
+        return data;
+    };
+
+
+    const message = (text, bad = false) => {
+        const el = document.querySelector("#message");
+
+        if (!el) {
+            return;
+        }
+
+        el.textContent = text;
+        el.className =
+            "alert " + (bad ? "alert-danger" : "alert-success");
+    };
+
+
+    const updateSummary = summary => {
+        if (!summary) {
+            return;
+        }
+
+        const average = Number(summary.Average).toFixed(1);
+
+        const scoreSide = document.querySelector("#score-side");
+        const scoreMain = document.querySelector("#score-main");
+        const reviewCount = document.querySelector("#review-count");
+        const reviewCountMain =
+            document.querySelector("#review-count-main");
+
+        if (scoreSide) {
+            scoreSide.textContent = average;
+        }
+
+        if (scoreMain) {
+            scoreMain.textContent = average;
+        }
+
+        if (reviewCount) {
+            reviewCount.textContent = summary.Count;
+        }
+
+        if (reviewCountMain) {
+            reviewCountMain.textContent = summary.Count;
+        }
+    };
+
+
+    const wireReview = article => {
+        const deleteButton =
+            article.querySelector(".delete-review");
+
+        const editButton =
+            article.querySelector(".edit-review");
+
+
+        deleteButton?.addEventListener("click", async () => {
+            if (!confirm("Delete this review?")) {
+                return;
+            }
+
+            deleteButton.disabled = true;
+
+            try {
+                const result = await request(
+                    "/reviews/" + article.dataset.review,
+                    "DELETE"
+                );
+
+                article.remove();
+
+                updateSummary(result?.data?.summary);
+
+                message("Review deleted.");
+            } catch (error) {
+                deleteButton.disabled = false;
+                message(error.message, true);
+            }
+        });
+
+
+        editButton?.addEventListener("click", async () => {
+            const rating = prompt(
+                "Rating (1–10)",
+                article.dataset.rating
+            );
+
+            if (rating === null) {
+                return;
+            }
+
+            const title = prompt(
+                "Review title",
+                article.dataset.title
+            );
+
+            if (title === null) {
+                return;
+            }
+
+            const body = prompt(
+                "Review",
+                article.dataset.body
+            );
+
+            if (body === null) {
+                return;
+            }
+
+            const form = new FormData();
+
+            form.set("rating", rating);
+            form.set("title", title);
+            form.set("body", body);
+
+            editButton.disabled = true;
+
+            try {
+                const result = await request(
+                    "/reviews/" + article.dataset.review,
+                    "PUT",
+                    form
+                );
+
+                const data = result.data;
+
+                article.dataset.rating = data.rating;
+                article.dataset.title = data.title;
+                article.dataset.body = data.body;
+
+                article.querySelector(
+                    ".review-rating"
+                ).textContent = data.rating;
+
+                article.querySelector(
+                    ".review-title"
+                ).textContent = data.title;
+
+                article.querySelector(
+                    ".review-body"
+                ).textContent = data.body;
+
+                updateSummary(data.summary);
+
+                message("Review updated.");
+            } catch (error) {
+                message(error.message, true);
+            } finally {
+                editButton.disabled = false;
+            }
+        });
+    };
+
+
+    const createReview = data => {
+        document.querySelector("#no-reviews")?.remove();
+
+        const article = document.createElement("article");
+
+        article.className = "review py-3";
+        article.dataset.review = data.id;
+        article.dataset.rating = data.rating;
+        article.dataset.title = data.title;
+        article.dataset.body = data.body;
+
+
+        const top = document.createElement("div");
+        top.className =
+            "d-flex justify-content-between gap-3";
+
+
+        const info = document.createElement("div");
+
+        const title = document.createElement("strong");
+        title.className = "review-title";
+        title.textContent = data.title;
+
+
+        const badge = document.createElement("span");
+        badge.className =
+            "badge text-bg-success ms-1";
+        badge.textContent = "Verified Purchase";
+
+
+        const stars = document.createElement("div");
+        stars.className = "stars";
+        stars.append("★ ");
+
+
+        const rating = document.createElement("span");
+        rating.className = "review-rating";
+        rating.textContent = data.rating;
+
+        stars.append(rating, "/10");
+
+        info.append(title, badge, stars);
+
+
+        const author = document.createElement("small");
+        author.className = "text-muted";
+        author.textContent = data.author;
+
+
+        top.append(info, author);
+
+
+        const body = document.createElement("p");
+        body.className = "review-body mt-2 mb-1";
+        body.textContent = data.body;
+
+
+        const edit = document.createElement("button");
+        edit.type = "button";
+        edit.className =
+            "btn btn-sm btn-outline-primary edit-review";
+        edit.dataset.id = data.id;
+        edit.textContent = "Edit";
+
+
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.className =
+            "btn btn-sm btn-outline-danger delete-review ms-1";
+        remove.dataset.id = data.id;
+        remove.textContent = "Delete";
+
+
+        article.append(
+            top,
+            body,
+            edit,
+            remove
+        );
+
+        document.querySelector("#reviews")?.prepend(article);
+
+        wireReview(article);
+    };
+
+
+    const favorite = document.querySelector("#favorite");
+
+    favorite?.addEventListener("click", async () => {
+        const active =
+            favorite.dataset.active === "true";
+
+        favorite.disabled = true;
+
+        favorite.dataset.active = String(!active);
+        favorite.setAttribute(
+            "aria-pressed",
+            String(!active)
+        );
+
+        favorite.classList.toggle(
+            "active",
+            !active
+        );
+
+        favorite.querySelector("span").textContent =
+            !active
+                ? "Favorited"
+                : "Add to favorites";
+
+        try {
+            await request(
+                "/products/" + pid + "/favorite",
+                active ? "DELETE" : "POST"
+            );
+        } catch (error) {
+            favorite.dataset.active = String(active);
+
+            favorite.setAttribute(
+                "aria-pressed",
+                String(active)
+            );
+
+            favorite.classList.toggle(
+                "active",
+                active
+            );
+
+            favorite.querySelector("span").textContent =
+                active
+                    ? "Favorited"
+                    : "Add to favorites";
+
+            message(error.message, true);
+        } finally {
+            favorite.disabled = false;
+        }
+    });
+
+
+    document
+        .querySelector("#list-form")
+        ?.addEventListener("submit", async event => {
+            event.preventDefault();
+
+            const button =
+                event.currentTarget.querySelector(
+                    'button[type="submit"]'
+                );
+
+            if (button) {
+                button.disabled = true;
+            }
+
+            try {
+                await request(
+                    "/products/" + pid + "/lists",
+                    "POST",
+                    new FormData(event.currentTarget)
+                );
+
+                message(
+                    "Product added to your list."
+                );
+            } catch (error) {
+                message(error.message, true);
+            } finally {
+                if (button) {
+                    button.disabled = false;
+                }
+            }
+        });
+
+
+    document
+        .querySelector("#review-form")
+        ?.addEventListener("submit", async event => {
+            event.preventDefault();
+
+            const form = event.currentTarget;
+
+            const button =
+                form.querySelector(
+                    'button[type="submit"]'
+                );
+
+            if (button) {
+                button.disabled = true;
+            }
+
+            try {
+                const result = await request(
+                    "/products/" + pid + "/reviews",
+                    "POST",
+                    new FormData(form)
+                );
+
+                createReview(result.data);
+                updateSummary(result.data.summary);
+
+                form.remove();
+
+                message("Review published.");
+            } catch (error) {
+                message(error.message, true);
+
+                if (button) {
+                    button.disabled = false;
+                }
+            }
+        });
+
+
+    document
+        .querySelectorAll("[data-review]")
+        .forEach(wireReview);
+})();
+</script>
+
 </body>
 </html>
-{{end}}
+{{ end }}

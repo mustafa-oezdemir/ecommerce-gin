@@ -1,6 +1,7 @@
 package config
 
 import (
+	"crypto/sha256"
 	"encoding/base64"
 	"log"
 	"net"
@@ -56,6 +57,7 @@ type Config struct {
 	SessionSecret         string
 	SessionSecure         bool
 	CSRFKey               []byte
+	SecurityEncryptionKey []byte
 	DSN                   string
 }
 
@@ -106,6 +108,7 @@ func Load() *Config {
 	sessionSecret := strings.TrimSpace(os.Getenv("SESSION_SECRET"))
 	sessionSecureValue := strings.TrimSpace(os.Getenv("SESSION_SECURE"))
 	csrfSecret := strings.TrimSpace(os.Getenv("CSRF_SECRET"))
+	securitySecret := strings.TrimSpace(os.Getenv("SECURITY_ENCRYPTION_KEY"))
 
 	if appEnv == "" {
 		log.Fatal("APP_ENV is required (development, test, or production)")
@@ -185,6 +188,14 @@ func Load() *Config {
 	if err != nil || len(csrfKey) != 32 {
 		log.Fatal("CSRF_SECRET must be valid base64 and decode to exactly 32 bytes")
 	}
+	securityKey, err := base64.StdEncoding.DecodeString(securitySecret)
+	if err != nil || len(securityKey) != 32 {
+		if appEnv == "production" {
+			log.Fatal("SECURITY_ENCRYPTION_KEY must be valid base64 and decode to exactly 32 bytes")
+		}
+		fallback := sha256.Sum256(append([]byte("nordshop-account-security:"), csrfKey...))
+		securityKey = fallback[:]
+	}
 
 	sessionSecure, err := strconv.ParseBool(sessionSecureValue)
 	if err != nil {
@@ -256,6 +267,7 @@ func Load() *Config {
 		SessionSecret:         sessionSecret,
 		SessionSecure:         sessionSecure,
 		CSRFKey:               csrfKey,
+		SecurityEncryptionKey: securityKey,
 		DSN:                   dsn,
 	}
 }

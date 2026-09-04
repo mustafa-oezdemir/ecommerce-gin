@@ -4,24 +4,37 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/metrics"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/middleware"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/models"
+	"github.com/mustafa-oezdemir/ecommerce-gin/internal/services"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/validation"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
 
-type AuthHandler struct{ database *gorm.DB }
+const (
+	sessionTwoFactorUserID = "two_factor_user_id"
+	sessionTwoFactorExpiry = "two_factor_expires"
+)
 
-func NewAuthHandler(database *gorm.DB) *AuthHandler {
+type AuthHandler struct {
+	database *gorm.DB
+	security *services.AccountSecurityService
+}
+
+func NewAuthHandler(database *gorm.DB, security *services.AccountSecurityService) *AuthHandler {
 	if database == nil {
 		panic("handlers: database is required")
 	}
-	return &AuthHandler{database: database}
+	if security == nil {
+		panic("handlers: account security service is required")
+	}
+	return &AuthHandler{database: database, security: security}
 }
 
 func (h *AuthHandler) ShowLogin(c *gin.Context) {
@@ -56,7 +69,48 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	session := sessions.Default(c)
 	session.Clear()
+	if user.TwoFactorEnabled {
+		session.Set(sessionTwoFactorUserID, strconv.FormatUint(uint64(user.ID), 10))
+		session.Set(sessionTwoFactorExpiry, strconv.FormatInt(time.Now().Add(5*time.Minute).Unix(), 10))
+		if err := session.Save(); err != nil {
+			c.String(http.StatusInternalServerError, "Could not create two-factor challenge")
+			return
+		}
+		c.Redirect(http.StatusFound, "/auth/two-factor-challenge")
+		return
+	}
+	h.completeLogin(c, session, &user)
+}
+
+func (h *AuthHandler) ShowTwoFactorChallenge(c *gin.Context) {
+	if _, ok := challengeUserID(sessions.Default(c)); !ok {
+		c.Redirect(http.StatusFound, "/login")
+		return
+	}
+	c.HTML(http.StatusOK, "two_factor_challenge.tmpl", viewData(c, nil))
+}
+
+func (h *AuthHandler) VerifyTwoFactorChallenge(c *gin.Context) {
+	session := sessions.Default(c)
+	userID, ok := challengeUserID(session)
+	if !ok {
+		c.Redirect(http.StatusFound, "/login")
+		return
+	}
+	code := strings.TrimSpace(c.PostForm("code"))
+	recovery := c.PostForm("method") == "recovery"
+	user, err := h.security.VerifySecondFactor(c.Request.Context(), userID, code, recovery)
+	if err != nil {
+		c.HTML(http.StatusUnauthorized, "two_factor_challenge.tmpl", viewData(c, gin.H{"error": "Invalid or expired authentication code"}))
+		return
+	}
+	session.Clear()
+	h.completeLogin(c, session, user)
+}
+
+func (h *AuthHandler) completeLogin(c *gin.Context, session sessions.Session, user *models.User) {
 	session.Set(middleware.SessionUserIDKey, strconv.FormatUint(uint64(user.ID), 10))
+	session.Set(middleware.SessionSecurityVersionKey, strconv.FormatUint(user.SecurityVersion, 10))
 	if err := session.Save(); err != nil {
 		c.String(http.StatusInternalServerError, "Could not create session")
 		return
@@ -69,6 +123,17 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	default:
 		c.Redirect(http.StatusFound, "/")
 	}
+}
+
+func challengeUserID(session sessions.Session) (uint, bool) {
+	userValue, userOK := session.Get(sessionTwoFactorUserID).(string)
+	expiresValue, expiresOK := session.Get(sessionTwoFactorExpiry).(string)
+	userID, userErr := strconv.ParseUint(userValue, 10, 64)
+	expires, expiresErr := strconv.ParseInt(expiresValue, 10, 64)
+	if !userOK || !expiresOK || userErr != nil || expiresErr != nil || userID == 0 || time.Now().Unix() >= expires {
+		return 0, false
+	}
+	return uint(userID), true
 }
 
 func (h *AuthHandler) Logout(c *gin.Context) {

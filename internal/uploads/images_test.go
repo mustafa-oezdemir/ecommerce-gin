@@ -100,6 +100,18 @@ func TestImageStoreRejectsScannerThreat(t *testing.T) {
 	}
 }
 
+func TestImageStoreRejectsPathsOutsideRoot(t *testing.T) {
+	store, err := NewImageStore(ImageConfig{Directory: t.TempDir(), MaxBytes: 1024, MaxWidth: 10, MaxHeight: 10, MaxPixels: 100, Scanner: scannerFunc(func(context.Context, []byte) error { return nil })})
+	if err != nil {
+		t.Fatalf("create image store: %v", err)
+	}
+	for _, filename := range []string{"../secret.png", `..\\secret.png`, "/secret.png", "product.png/secret"} {
+		if _, err := store.Open(filename); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("expected unsafe path %q to be rejected, got %v", filename, err)
+		}
+	}
+}
+
 func TestImageStoreScansBeforeParsingUntrustedContent(t *testing.T) {
 	store, err := NewImageStore(ImageConfig{Directory: t.TempDir(), MaxBytes: 1024, MaxWidth: 10, MaxHeight: 10, MaxPixels: 100, Scanner: scannerFunc(func(context.Context, []byte) error { return ErrThreatDetected })})
 	if err != nil {

@@ -25,6 +25,7 @@ func TestNewRouterBuildsApplicationRoutes(t *testing.T) {
 		Environment:   "test",
 		SessionSecret: "a-session-secret-that-is-long-enough",
 		CSRFKey:       []byte("12345678901234567890123456789012"),
+		SecurityKey:   []byte("abcdefghijklmnopqrstuvwx12345678"),
 		Database:      &gorm.DB{},
 		Metrics:       metrics.New(prometheus.NewRegistry()),
 		Logger:        slog.New(slog.NewTextHandler(io.Discard, nil)),
@@ -42,6 +43,30 @@ func TestNewRouterBuildsApplicationRoutes(t *testing.T) {
 	}
 	if response.Header().Get(middleware.RequestIDHeader) == "" {
 		t.Fatal("server router did not install the middleware stack")
+	}
+}
+
+func TestNewRouterRegistersVersionedProductAPI(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	handler, err := NewRouter(RouterConfig{
+		Environment:   "test",
+		SessionSecret: "a-session-secret-that-is-long-enough",
+		CSRFKey:       []byte("12345678901234567890123456789012"),
+		SecurityKey:   []byte("abcdefghijklmnopqrstuvwx12345678"),
+		Database:      &gorm.DB{},
+		Metrics:       metrics.New(prometheus.NewRegistry()),
+		Logger:        slog.New(slog.NewTextHandler(io.Discard, nil)),
+		ImageStore:    testImageStore(t),
+		LogReader:     testLogReader(t),
+	})
+	if err != nil {
+		t.Fatalf("build router: %v", err)
+	}
+
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/products?limit=0", nil))
+	if response.Code != http.StatusBadRequest || response.Body.String() != `{"success":false,"error":{"code":"INVALID_QUERY","message":"Query parameters are invalid"}}` {
+		t.Fatalf("unexpected API response: %d %s", response.Code, response.Body.String())
 	}
 }
 
@@ -72,7 +97,7 @@ func testLogReader(t *testing.T) *logging.Reader {
 }
 
 func TestNewRouterRequiresDependencies(t *testing.T) {
-	_, err := NewRouter(RouterConfig{Environment: "test", SessionSecret: "a-session-secret-that-is-long-enough", CSRFKey: []byte("12345678901234567890123456789012")})
+	_, err := NewRouter(RouterConfig{Environment: "test", SessionSecret: "a-session-secret-that-is-long-enough", CSRFKey: []byte("12345678901234567890123456789012"), SecurityKey: []byte("abcdefghijklmnopqrstuvwx12345678")})
 	if err == nil {
 		t.Fatal("expected missing database to fail")
 	}

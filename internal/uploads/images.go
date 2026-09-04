@@ -161,7 +161,12 @@ func (store *ImageStore) Open(filename string) (*os.File, error) {
 	if !store.ValidFilename(filename) {
 		return nil, os.ErrNotExist
 	}
-	return os.Open(filepath.Join(store.directory, filename))
+	root, err := os.OpenRoot(store.directory)
+	if err != nil {
+		return nil, fmt.Errorf("open image directory: %w", err)
+	}
+	defer root.Close()
+	return root.Open(filename)
 }
 
 func (store *ImageStore) ValidFilename(filename string) bool {

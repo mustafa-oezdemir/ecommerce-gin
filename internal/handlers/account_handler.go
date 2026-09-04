@@ -1,29 +1,37 @@
 package handlers
 
 import (
+	"bytes"
+	"encoding/base64"
 	"errors"
+	"image/png"
 	"net/http"
-	"strings"
+	"strconv"
 
+	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/middleware"
+	"github.com/mustafa-oezdemir/ecommerce-gin/internal/models"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/services"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/validation"
-	"golang.org/x/crypto/bcrypt"
+	"github.com/pquerna/otp"
 	"gorm.io/gorm"
 )
 
 type AccountHandler struct {
 	database           *gorm.DB
 	productListService *services.ProductListService
-	mailService        *services.MailService
+	securityService    *services.AccountSecurityService
 }
 
-func NewAccountHandler(database *gorm.DB) *AccountHandler {
+func NewAccountHandler(database *gorm.DB, securityService *services.AccountSecurityService) *AccountHandler {
 	if database == nil {
 		panic("handlers: database is required")
 	}
-	return &AccountHandler{database: database, productListService: services.NewProductListService(database), mailService: services.NewMailServiceFromEnv()}
+	if securityService == nil {
+		panic("handlers: account security service is required")
+	}
+	return &AccountHandler{database: database, productListService: services.NewProductListService(database), securityService: securityService}
 }
 
 func (h *AccountHandler) Show(c *gin.Context) {
@@ -32,7 +40,7 @@ func (h *AccountHandler) Show(c *gin.Context) {
 		c.AbortWithStatus(http.StatusUnauthorized)
 		return
 	}
-	c.HTML(http.StatusOK, "account.tmpl", viewData(c, gin.H{"User": user}))
+	h.renderAccount(c, http.StatusOK, gin.H{"User": user})
 }
 
 func (h *AccountHandler) UpdateProfile(c *gin.Context) {
@@ -46,13 +54,8 @@ func (h *AccountHandler) UpdateProfile(c *gin.Context) {
 		c.String(http.StatusBadRequest, "Invalid profile data")
 		return
 	}
-	name, email := strings.TrimSpace(req.Name), strings.ToLower(strings.TrimSpace(req.Email))
-	if name == "" || email == "" {
-		c.String(http.StatusBadRequest, "Invalid profile data")
-		return
-	}
-	if err := h.database.WithContext(c.Request.Context()).Model(user).Updates(map[string]any{"name": name, "email": email}).Error; err != nil {
-		c.String(http.StatusConflict, "Could not update profile")
+	if _, err := h.securityService.UpdateProfile(c.Request.Context(), user.ID, req.FirstName, req.LastName); err != nil {
+		h.renderAccount(c, http.StatusBadRequest, gin.H{"User": user, "error": "Could not update profile"})
 		return
 	}
 	c.Redirect(http.StatusFound, "/account")
@@ -69,21 +72,198 @@ func (h *AccountHandler) ChangePassword(c *gin.Context) {
 		c.String(http.StatusBadRequest, "Invalid password data")
 		return
 	}
-	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.CurrentPassword)); err != nil {
-		c.String(http.StatusBadRequest, "Could not change password")
-		return
-	}
-	hash, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
+	version, err := h.securityService.ChangePassword(c.Request.Context(), user.ID, req.CurrentPassword, req.NewPassword, req.Confirmation)
 	if err != nil {
-		c.String(http.StatusInternalServerError, "Could not change password")
+		h.renderAccount(c, http.StatusBadRequest, gin.H{"User": user, "error": "The password could not be changed. Check the current password and confirmation."})
 		return
 	}
-	if err := h.database.WithContext(c.Request.Context()).Model(user).Update("password", string(hash)).Error; err != nil {
-		c.String(http.StatusInternalServerError, "Could not change password")
-		return
-	}
-	go h.mailService.SendPasswordChanged(*user)
+	setSessionSecurityVersion(c, version)
 	c.Redirect(http.StatusFound, "/account")
+}
+
+func (h *AccountHandler) RequestEmailChange(c *gin.Context) {
+	user, ok := middleware.CurrentUser(c)
+	if !ok {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+	var req validation.EmailChangeRequest
+	if c.ShouldBind(&req) != nil {
+		h.renderAccount(c, http.StatusBadRequest, gin.H{"User": user, "error": "Invalid email change request"})
+		return
+	}
+	if err := h.securityService.RequestEmailChange(c.Request.Context(), user.ID, req.CurrentPassword, req.Email); err != nil {
+		h.renderAccount(c, http.StatusBadRequest, gin.H{"User": user, "error": "The email change could not be started. Check your password or try again later."})
+		return
+	}
+	h.renderAccount(c, http.StatusOK, gin.H{"User": user, "success": "A verification code was sent to the new email address."})
+}
+
+func (h *AccountHandler) ConfirmEmailChange(c *gin.Context) {
+	user, ok := middleware.CurrentUser(c)
+	if !ok {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+	var req validation.SecurityCodeRequest
+	if c.ShouldBind(&req) != nil {
+		h.renderAccount(c, http.StatusBadRequest, gin.H{"User": user, "error": "Invalid verification code"})
+		return
+	}
+	version, err := h.securityService.ConfirmEmailChange(c.Request.Context(), user.ID, req.Code)
+	if err != nil {
+		h.renderAccount(c, http.StatusBadRequest, gin.H{"User": user, "error": "The verification code is invalid or expired."})
+		return
+	}
+	setSessionSecurityVersion(c, version)
+	c.Redirect(http.StatusFound, "/account")
+}
+
+func (h *AccountHandler) BeginTwoFactor(c *gin.Context) {
+	user, ok := middleware.CurrentUser(c)
+	if !ok {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+	setup, err := h.securityService.BeginTwoFactor(c.Request.Context(), *user)
+	if err != nil {
+		h.renderAccount(c, http.StatusInternalServerError, gin.H{"User": user, "error": "Could not start two-factor setup"})
+		return
+	}
+	h.renderTwoFactorSetup(c, user, setup, nil)
+}
+
+func (h *AccountHandler) ShowTwoFactorSetup(c *gin.Context) {
+	user, ok := middleware.CurrentUser(c)
+	if !ok {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+	setup, err := h.securityService.PendingTwoFactor(c.Request.Context(), user.ID)
+	if err != nil {
+		c.Redirect(http.StatusFound, "/account")
+		return
+	}
+	h.renderTwoFactorSetup(c, user, setup, nil)
+}
+
+func (h *AccountHandler) ConfirmTwoFactor(c *gin.Context) {
+	user, ok := middleware.CurrentUser(c)
+	if !ok {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+	var req validation.SecurityCodeRequest
+	if c.ShouldBind(&req) != nil {
+		c.String(http.StatusBadRequest, "Invalid authentication code")
+		return
+	}
+	codes, version, err := h.securityService.ConfirmTwoFactor(c.Request.Context(), user.ID, req.Code)
+	if err != nil {
+		setup, _ := h.securityService.PendingTwoFactor(c.Request.Context(), user.ID)
+		h.renderTwoFactorSetup(c, user, setup, gin.H{"error": "Invalid authentication code"})
+		return
+	}
+	setSessionSecurityVersion(c, version)
+	user.TwoFactorEnabled = true
+	h.renderAccount(c, http.StatusOK, gin.H{"User": user, "RecoveryCodes": codes, "success": "Two-factor authentication is enabled. Save these recovery codes now; they will not be shown again."})
+}
+
+func (h *AccountHandler) RegenerateRecoveryCodes(c *gin.Context) {
+	user, ok := middleware.CurrentUser(c)
+	if !ok {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+	var req validation.PasswordConfirmationRequest
+	if c.ShouldBind(&req) != nil {
+		c.String(http.StatusBadRequest, "Invalid password")
+		return
+	}
+	codes, version, err := h.securityService.RegenerateRecoveryCodes(c.Request.Context(), user.ID, req.CurrentPassword)
+	if err != nil {
+		h.renderAccount(c, http.StatusBadRequest, gin.H{"User": user, "error": "Recovery codes could not be regenerated."})
+		return
+	}
+	setSessionSecurityVersion(c, version)
+	h.renderAccount(c, http.StatusOK, gin.H{"User": user, "RecoveryCodes": codes, "success": "New recovery codes were generated. Previous codes are no longer valid."})
+}
+
+func (h *AccountHandler) DisableTwoFactor(c *gin.Context) {
+	user, ok := middleware.CurrentUser(c)
+	if !ok {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+	var req validation.DisableTwoFactorRequest
+	if c.ShouldBind(&req) != nil {
+		c.String(http.StatusBadRequest, "Invalid request")
+		return
+	}
+	version, err := h.securityService.DisableTwoFactor(c.Request.Context(), user.ID, req.CurrentPassword, req.Code)
+	if err != nil {
+		h.renderAccount(c, http.StatusBadRequest, gin.H{"User": user, "error": "Two-factor authentication could not be disabled."})
+		return
+	}
+	setSessionSecurityVersion(c, version)
+	c.Redirect(http.StatusFound, "/account")
+}
+
+func (h *AccountHandler) DeleteAccount(c *gin.Context) {
+	user, ok := middleware.CurrentUser(c)
+	if !ok {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+	var req validation.PasswordConfirmationRequest
+	if c.ShouldBind(&req) != nil || h.securityService.DeleteAccount(c.Request.Context(), user.ID, req.CurrentPassword) != nil {
+		h.renderAccount(c, http.StatusBadRequest, gin.H{"User": user, "error": "The account could not be deleted."})
+		return
+	}
+	session := sessions.Default(c)
+	session.Clear()
+	session.Options(sessions.Options{Path: "/", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteLaxMode})
+	_ = session.Save()
+	c.Redirect(http.StatusFound, "/login")
+}
+
+func (h *AccountHandler) renderAccount(c *gin.Context, status int, extra gin.H) {
+	c.HTML(status, "account.tmpl", viewData(c, extra))
+}
+
+func (h *AccountHandler) renderTwoFactorSetup(c *gin.Context, user *models.User, setup *services.TwoFactorSetup, extra gin.H) {
+	if setup == nil {
+		c.Redirect(http.StatusFound, "/account")
+		return
+	}
+	key, err := otp.NewKeyFromURL(setup.URI)
+	if err != nil {
+		c.String(http.StatusInternalServerError, "Could not create QR code")
+		return
+	}
+	image, err := key.Image(240, 240)
+	if err != nil {
+		c.String(http.StatusInternalServerError, "Could not create QR code")
+		return
+	}
+	var buffer bytes.Buffer
+	if png.Encode(&buffer, image) != nil {
+		c.String(http.StatusInternalServerError, "Could not create QR code")
+		return
+	}
+	data := gin.H{"User": user, "TwoFactorSecret": setup.Secret, "TwoFactorQR": "data:image/png;base64," + base64.StdEncoding.EncodeToString(buffer.Bytes())}
+	for key, value := range extra {
+		data[key] = value
+	}
+	c.Header("Cache-Control", "no-store")
+	c.Header("Pragma", "no-cache")
+	c.HTML(http.StatusOK, "two_factor_setup.tmpl", viewData(c, data))
+}
+
+func setSessionSecurityVersion(c *gin.Context, version uint64) {
+	session := sessions.Default(c)
+	session.Set(middleware.SessionSecurityVersionKey, strconv.FormatUint(version, 10))
+	_ = session.Save()
 }
 
 func (h *AccountHandler) ListProductLists(c *gin.Context) {

@@ -107,6 +107,7 @@ func run() (runErr error) {
 		SessionSecret:  cfg.SessionSecret,
 		SessionSecure:  cfg.SessionSecure,
 		CSRFKey:        cfg.CSRFKey,
+		SecurityKey:    cfg.SecurityEncryptionKey,
 		Database:       database,
 		Metrics:        appMetrics,
 		Logger:         slog.Default(),

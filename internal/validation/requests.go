@@ -20,13 +20,32 @@ type CreateUserRequest struct {
 }
 
 type UpdateProfileRequest struct {
-	Name  string `form:"name" binding:"required,min=2,max=100"`
-	Email string `form:"email" binding:"required,email,max=254"`
+	FirstName string `form:"first_name" binding:"required,min=1,max=100"`
+	LastName  string `form:"last_name" binding:"required,min=1,max=100"`
 }
 
 type ChangePasswordRequest struct {
 	CurrentPassword string `form:"current_password" binding:"required,max=72"`
 	NewPassword     string `form:"new_password" binding:"required,min=12,max=72"`
+	Confirmation    string `form:"password_confirmation" binding:"required,min=12,max=72"`
+}
+
+type EmailChangeRequest struct {
+	Email           string `form:"email" binding:"required,email,max=254"`
+	CurrentPassword string `form:"current_password" binding:"required,max=72"`
+}
+
+type SecurityCodeRequest struct {
+	Code string `form:"code" binding:"required,min=6,max=32"`
+}
+
+type DisableTwoFactorRequest struct {
+	CurrentPassword string `form:"current_password" binding:"required,max=72"`
+	Code            string `form:"code" binding:"required,min=6,max=16"`
+}
+
+type PasswordConfirmationRequest struct {
+	CurrentPassword string `form:"current_password" binding:"required,max=72"`
 }
 
 type CreateProductRequest struct {

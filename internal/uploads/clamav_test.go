@@ -5,10 +5,36 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
+	"math"
 	"net"
+	"strconv"
 	"testing"
 	"time"
 )
+
+func TestCheckedUint32RejectsOverflow(t *testing.T) {
+	value, err := checkedUint32(32 * 1024)
+	if err != nil || value != 32*1024 {
+		t.Fatalf("expected valid ClamAV chunk size, value=%d err=%v", value, err)
+	}
+	if _, err := checkedUint32(-1); err == nil {
+		t.Fatal("expected negative value to fail")
+	}
+	if strconv.IntSize == 64 {
+		if _, err := checkedUint32(int64ToInt(t, int64(math.MaxUint32)+1)); err == nil {
+			t.Fatal("expected uint32 overflow to fail")
+		}
+	}
+}
+
+func int64ToInt(t *testing.T, value int64) int {
+	t.Helper()
+	converted := int(value)
+	if int64(converted) != value {
+		t.Fatalf("test value %d does not fit in int", value)
+	}
+	return converted
+}
 
 func TestClamAVScannerStreamsContent(t *testing.T) {
 	address, received, stop := fakeClamAV(t, "stream: OK\x00")

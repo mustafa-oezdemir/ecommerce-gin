@@ -8,6 +8,7 @@ type ProductList struct {
 	UpdatedAt time.Time
 	UserID    uint              `gorm:"not null;uniqueIndex:idx_product_lists_user_name"`
 	Name      string            `gorm:"size:100;not null;uniqueIndex:idx_product_lists_user_name"`
+	SystemKey *string           `gorm:"size:32;uniqueIndex:idx_product_lists_user_system"`
 	Items     []ProductListItem `gorm:"foreignKey:ProductListID"`
 }
 

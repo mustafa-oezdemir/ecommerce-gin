@@ -19,13 +19,15 @@ type ShopHandler struct {
 	cartService  *services.CartService
 	orderService *services.OrderService
 	mailService  *services.MailService
+	engagement   *services.ProductEngagementService
+	listService  *services.ProductListService
 }
 
 func NewShopHandler(database *gorm.DB) *ShopHandler {
 	if database == nil {
 		panic("handlers: database is required")
 	}
-	return &ShopHandler{database: database, cartService: services.NewCartService(database), orderService: services.NewOrderService(database), mailService: services.NewMailServiceFromEnv()}
+	return &ShopHandler{database: database, cartService: services.NewCartService(database), orderService: services.NewOrderService(database), mailService: services.NewMailServiceFromEnv(), engagement: services.NewProductEngagementService(database), listService: services.NewProductListService(database)}
 }
 
 func (h *ShopHandler) Home(c *gin.Context)         { h.renderProducts(c) }
@@ -45,12 +47,25 @@ func (h *ShopHandler) renderProducts(c *gin.Context) {
 		c.String(http.StatusInternalServerError, "Could not load products")
 		return
 	}
+	productIDs := make([]uint, len(products))
+	for i := range products {
+		productIDs[i] = products[i].ID
+	}
+	ratings, err := h.engagement.ReviewSummaries(c.Request.Context(), productIDs)
+	if err != nil {
+		c.String(http.StatusInternalServerError, "Could not load product ratings")
+		return
+	}
+	favorites := map[uint]bool{}
+	if user, ok := middleware.CurrentUser(c); ok {
+		favorites, _ = h.engagement.FavoriteProductIDs(c.Request.Context(), user.ID)
+	}
 	var categories []models.Category
 	if err := h.database.WithContext(c.Request.Context()).Order("name ASC").Find(&categories).Error; err != nil {
 		c.String(http.StatusInternalServerError, "Could not load products")
 		return
 	}
-	c.HTML(http.StatusOK, "product_list.tmpl", viewData(c, gin.H{"Products": products, "Categories": categories, "CategoryID": selectedCategoryID}))
+	c.HTML(http.StatusOK, "product_list.tmpl", viewData(c, gin.H{"Products": products, "Categories": categories, "CategoryID": selectedCategoryID, "Ratings": ratings, "Favorites": favorites}))
 }
 
 func (h *ShopHandler) ProductDetail(c *gin.Context) {
@@ -64,7 +79,30 @@ func (h *ShopHandler) ProductDetail(c *gin.Context) {
 		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}
-	c.HTML(http.StatusOK, "product_detail.tmpl", viewData(c, gin.H{"Product": product}))
+	page, err := strconv.Atoi(c.DefaultQuery("page", "1"))
+	if err != nil {
+		page = 1
+	}
+	reviews, err := h.engagement.Reviews(c.Request.Context(), product.ID, page, c.Query("sort"))
+	if err != nil {
+		c.String(http.StatusInternalServerError, "Could not load reviews")
+		return
+	}
+	data := gin.H{"Product": product, "Reviews": reviews.Reviews, "ReviewSummary": reviews.Summary, "ReviewPage": reviews, "Sort": c.Query("sort")}
+	if user, ok := middleware.CurrentUser(c); ok {
+		data["IsFavorite"], _ = h.engagement.IsFavorite(c.Request.Context(), user.ID, product.ID)
+		data["CanReview"], _ = h.engagement.HasPurchased(c.Request.Context(), user.ID, product.ID)
+		data["UserReview"], _ = h.engagement.UserReview(c.Request.Context(), user.ID, product.ID)
+		lists, _ := h.listService.List(c.Request.Context(), user.ID)
+		customLists := make([]models.ProductList, 0, len(lists))
+		for _, list := range lists {
+			if list.SystemKey == nil {
+				customLists = append(customLists, list)
+			}
+		}
+		data["Lists"] = customLists
+	}
+	c.HTML(http.StatusOK, "product_detail.tmpl", viewData(c, data))
 }
 
 func (h *ShopHandler) AddToCart(c *gin.Context) {

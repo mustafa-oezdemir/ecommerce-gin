@@ -5,6 +5,8 @@ A secure, server-rendered e-commerce demo built with Go, Gin, GORM, and MySQL. I
 ## Highlights
 
 - **Customer experience** — browse products, manage a cart, complete checkout, and view orders.
+- **Product engagement** — reusable favorites, personal product lists, 1–10 ratings, and verified-purchase reviews.
+- **Account security** — email verification, TOTP two-factor authentication, single-use recovery codes, and security-versioned sessions.
 - **Operations** — manage products, inventory, and order status as an employee.
 - **Administration** — review dashboards, users, categories, and orders.
 - **Security by default** — signed sessions, RBAC, ownership checks, CSRF protection, secure headers, validated requests, and rate-limited sign-in.
@@ -27,7 +29,7 @@ A secure, server-rendered e-commerce demo built with Go, Gin, GORM, and MySQL. I
 
 | Role | Capabilities |
 | --- | --- |
-| Customer | Browse products, manage own cart, checkout, update own profile/password, see own orders |
+| Customer | Browse products, manage own cart, favorites and lists, checkout, review verified purchases, manage account security, see own orders |
 | Employee | Operational dashboard, products, inventory and order status transitions |
 | Admin | Employee capabilities plus dashboards, users and category management |
 
@@ -39,7 +41,7 @@ A secure, server-rendered e-commerce demo built with Go, Gin, GORM, and MySQL. I
 cp .env.example .env
 ```
 
-Set unique local values for `MYSQL_*`, `SESSION_SECRET`, `CSRF_SECRET`, and Grafana credentials. `SESSION_SECRET` must contain at least 32 characters; `CSRF_SECRET` must be a base64-encoded 32-byte value.
+Set unique local values for `MYSQL_*`, `SESSION_SECRET`, `CSRF_SECRET`, `SECURITY_ENCRYPTION_KEY`, and Grafana credentials. `SESSION_SECRET` must contain at least 32 characters; both cryptographic keys must be independent base64-encoded 32-byte values. Development can derive a compatibility key from `CSRF_SECRET`, but production refuses to start without the dedicated key.
 
 ### 2. Start the stack
 
@@ -73,6 +75,8 @@ Never use these seed accounts or their passwords in production. The seed command
 | --- | --- | --- |
 | Shop | `/`, `/products`, `/cart`, `/checkout` | Customer actions require sign-in |
 | Account | `/account`, `/account/orders` | Signed-in customer |
+| Product engagement | `/products/:id/favorite`, `/products/:id/lists`, `/products/:id/reviews`, `/reviews/:id` | Signed-in customer; JSON/AJAX |
+| Two-factor challenge | `/auth/two-factor-challenge` | Password-verified session awaiting TOTP/recovery code |
 | Employee | `/employee/*` | Employee or admin |
 | Admin | `/admin/*` | Admin only |
 | Health | `/health/live`, `/health/ready` (`/healthz`, `/readyz` aliases) | Public |
@@ -106,12 +110,15 @@ Copy `.env.example` and keep `.env` private. Docker passes only application-requ
 | `SESSION_SECRET` | Cookie-session signing secret |
 | `SESSION_SECURE` | Set to `true` in production |
 | `CSRF_SECRET` | Base64-encoded 32-byte CSRF key |
+| `SECURITY_ENCRYPTION_KEY` | Independent base64-encoded 32-byte AES/HMAC key for TOTP secrets and one-time code hashes; mandatory in production |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM` | Outbound email endpoint and sender; Compose points these to MailHog |
+| `SMTP_USERNAME`, `SMTP_PASSWORD` | Production SMTP credentials; required before production email delivery is enabled |
 
 Use `MYSQL_HOST=127.0.0.1` and `MYSQL_PORT=3307` for a host process; the Docker application receives `MYSQL_HOST=mysql` and port `3306`.
 
 ## Database
 
-`migrations/000001_initial.sql` is applied once and tracked in `schema_migrations`. It defines indexes, foreign keys, user-email uniqueness, integer-cent money columns and cart/order ownership relationships.
+SQL migrations are applied once and tracked in `schema_migrations`. `000004_account_security.sql` adds normalized recovery-code and pending-email-verification records plus encrypted TOTP/session-security fields. `000005_favorites_reviews.sql` adds a protected system-list key for Favorites and product reviews with database-enforced one-review-per-user/product and 1–10 rating constraints. `000006_account_email_length.sql` aligns the email column with the validated 254-character limit.
 
 The database is opened once in `cmd/server` and passed explicitly through the router to handlers, services, and repositories. There is no package-level database singleton or runtime type assertion. Every request-path query uses the request context, while checkout and order-status changes keep their row locks and writes inside GORM transactions. The underlying `database/sql` pool is configured with bounded open/idle connections, connection lifetime, idle timeout, startup ping timeout, and graceful shutdown.
 
@@ -165,6 +172,26 @@ Employees can add an optional image while creating a product or replace an image
 Accepted images are decoded and re-encoded before storage. This removes original metadata, trailing payloads, and the client filename. A random server-generated filename is stored in MySQL, while the sanitized file is held in the persistent `app_uploads` Docker volume with non-executable permissions. Replaced files and failed database writes are cleaned up automatically. Public image responses allow only generated filenames and use immutable caching.
 
 ClamAV is reachable only on the Compose network; port `3310` is not published to the host. Its signature database is retained in the `clamav_data` volume and updated by the official container.
+
+## Product API
+
+The public read API is versioned under `/api/v1/products`. Collection and detail resources support `GET`, `HEAD`, and `OPTIONS`, use a consistent JSON success/error envelope, and never expose database model internals.
+
+The collection endpoint supports bounded limit/offset pagination plus `category`, `min_price`, `max_price`, `q`, `sort`, and `order` query parameters. Sort fields and directions are allow-listed before reaching the repository, and every query uses the request context and parameterized GORM conditions.
+
+Example:
+
+```text
+GET /api/v1/products?limit=20&offset=0&category=2&min_price=10&max_price=250&q=phone&sort=price&order=asc
+```
+
+## Account and product security flows
+
+Account profile changes keep email updates separate. An email change requires the current password, sends a cryptographically random eight-digit code to the new address, stores only its keyed hash, expires after ten minutes, limits attempts, and applies a resend cooldown. Password, email, 2FA, and recovery-code changes increment the account security version so other signed sessions stop working.
+
+TOTP setup uses a standards-based authenticator QR code. The secret is encrypted with AES-256-GCM at rest. Enabling 2FA creates eight readable, single-use recovery codes; only their HMAC-SHA-256 hashes are stored. Setup responses are marked `no-store`, login challenges expire after five minutes, and sensitive endpoints are CSRF protected and rate limited. Security logs contain event types and internal user IDs, never codes, secrets, passwords, or email addresses.
+
+Favorites are an idempotent system-backed Product List and cannot be deleted through normal list operations. Favorite, list, and review actions return one JSON envelope and use the existing CSRF header. Reviews are limited to one per customer/product and can be edited or deleted only by their owner. The server derives review eligibility from an order item whose order is `shipped` or `completed`; it never accepts a “verified” flag from the browser. Templates escape review content before rendering.
 
 ## Development
 

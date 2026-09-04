@@ -11,11 +11,13 @@ import (
 	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/csrf"
+	"github.com/mustafa-oezdemir/ecommerce-gin/internal/api"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/handlers"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/logging"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/metrics"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/middleware"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/models"
+	"github.com/mustafa-oezdemir/ecommerce-gin/internal/services"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/uploads"
 	"github.com/mustafa-oezdemir/ecommerce-gin/web"
 	"gorm.io/gorm"
@@ -27,6 +29,7 @@ type RouterConfig struct {
 	SessionSecret  string
 	SessionSecure  bool
 	CSRFKey        []byte
+	SecurityKey    []byte
 	Database       *gorm.DB
 	Metrics        *metrics.Metrics
 	Logger         *slog.Logger
@@ -43,6 +46,9 @@ func NewRouter(config RouterConfig) (http.Handler, error) {
 	}
 	if len(config.CSRFKey) != 32 {
 		return nil, errors.New("server: CSRF key must contain exactly 32 bytes")
+	}
+	if len(config.SecurityKey) != 32 {
+		return nil, errors.New("server: security encryption key must contain exactly 32 bytes")
 	}
 	if config.Database == nil {
 		return nil, errors.New("server: database is required")
@@ -83,7 +89,8 @@ func NewRouter(config RouterConfig) (http.Handler, error) {
 	router.SetHTMLTemplate(templates)
 	router.Static("/static", "./internal/web/static")
 	router.GET("/media/products/:filename", serveProductImage(config.ImageStore, config.Logger))
-	registerRoutes(router, config.Database, config.Metrics, config.ImageStore, config.LogReader)
+	registerRoutes(router, config.Database, config.Metrics, config.ImageStore, config.LogReader, config.SecurityKey)
+	api.RegisterRoutes(router, config.Database)
 
 	csrfMiddleware := csrf.Protect(
 		config.CSRFKey,
@@ -107,7 +114,7 @@ func NewRouter(config RouterConfig) (http.Handler, error) {
 	return handler, nil
 }
 
-func registerRoutes(router *gin.Engine, database *gorm.DB, appMetrics *metrics.Metrics, imageStore *uploads.ImageStore, logReader *logging.Reader) {
+func registerRoutes(router *gin.Engine, database *gorm.DB, appMetrics *metrics.Metrics, imageStore *uploads.ImageStore, logReader *logging.Reader, securityKey []byte) {
 	health := handlers.NewHealthHandler(database, appMetrics)
 	router.GET("/health/live", health.Live)
 	router.GET("/health/ready", health.Ready)
@@ -116,9 +123,15 @@ func registerRoutes(router *gin.Engine, database *gorm.DB, appMetrics *metrics.M
 
 	shop := handlers.NewShopHandler(database)
 	requireAuth := middleware.RequireAuth(database)
-	router.GET("/", shop.Home)
-	router.GET("/products", shop.ListProducts)
-	router.GET("/products/:id", shop.ProductDetail)
+	optionalAuth := middleware.OptionalAuth(database)
+	router.GET("/", optionalAuth, shop.Home)
+	router.GET("/products", optionalAuth, shop.ListProducts)
+	router.GET("/products/:id", optionalAuth, shop.ProductDetail)
+	mailService := services.NewMailServiceFromEnv()
+	securityService := services.NewAccountSecurityService(database, securityKey, mailService)
+	listService := services.NewProductListService(database)
+	engagementService := services.NewProductEngagementService(database)
+	engagement := handlers.NewProductEngagementHandler(engagementService, listService)
 	customer := router.Group("")
 	customer.Use(requireAuth, middleware.RequireRoles(models.RoleCustomer))
 	customer.POST("/cart/add/:id", shop.AddToCart)
@@ -129,22 +142,41 @@ func registerRoutes(router *gin.Engine, database *gorm.DB, appMetrics *metrics.M
 	customer.GET("/account/orders", shop.ListOrders)
 	customer.GET("/account/orders/:id", shop.OrderDetail)
 	customer.GET("/account/purchases", shop.ListOrders)
-	account := handlers.NewAccountHandler(database)
+	account := handlers.NewAccountHandler(database, securityService)
+	securityLimiter := middleware.NewLoginRateLimiter(20, time.Minute)
 	customer.GET("/account", account.Show)
 	customer.GET("/account/profile", account.Show)
 	customer.POST("/account/profile", account.UpdateProfile)
-	customer.POST("/account/password", account.ChangePassword)
+	customer.POST("/account/password", securityLimiter.Middleware(), account.ChangePassword)
+	customer.POST("/account/email", securityLimiter.Middleware(), account.RequestEmailChange)
+	customer.POST("/account/email/confirm", securityLimiter.Middleware(), account.ConfirmEmailChange)
+	customer.GET("/account/two-factor/setup", account.ShowTwoFactorSetup)
+	customer.POST("/account/two-factor", securityLimiter.Middleware(), account.BeginTwoFactor)
+	customer.POST("/account/two-factor/confirm", securityLimiter.Middleware(), account.ConfirmTwoFactor)
+	customer.POST("/account/two-factor/disable", securityLimiter.Middleware(), account.DisableTwoFactor)
+	customer.POST("/account/recovery-codes", securityLimiter.Middleware(), account.RegenerateRecoveryCodes)
+	customer.POST("/account/delete", securityLimiter.Middleware(), account.DeleteAccount)
 	customer.GET("/account/lists", account.ListProductLists)
 	customer.POST("/account/lists", account.CreateProductList)
 	customer.GET("/account/lists/:id", account.ShowProductList)
 	customer.POST("/account/lists/:id/products", account.AddProductToList)
 	customer.POST("/account/lists/:id/products/:productID/remove", account.RemoveProductFromList)
 	customer.POST("/account/lists/:id/delete", account.DeleteProductList)
+	customer.POST("/products/:id/favorite", engagement.AddFavorite)
+	customer.DELETE("/products/:id/favorite", engagement.RemoveFavorite)
+	customer.POST("/products/:id/lists", engagement.AddToList)
+	customer.POST("/products/:id/reviews", engagement.CreateReview)
+	customer.PUT("/reviews/:id", engagement.UpdateReview)
+	customer.DELETE("/reviews/:id", engagement.DeleteReview)
 
-	auth := handlers.NewAuthHandler(database)
+	auth := handlers.NewAuthHandler(database, securityService)
 	router.GET("/login", auth.ShowLogin)
 	loginLimiter := middleware.NewLoginRateLimiter(10, time.Minute)
 	router.POST("/login", loginLimiter.Middleware(), auth.Login)
+	twoFactorLimiter := middleware.NewLoginRateLimiter(8, time.Minute)
+	router.GET("/two-factor-challenge", func(c *gin.Context) { c.Redirect(http.StatusPermanentRedirect, "/auth/two-factor-challenge") })
+	router.GET("/auth/two-factor-challenge", auth.ShowTwoFactorChallenge)
+	router.POST("/auth/two-factor-challenge", twoFactorLimiter.Middleware(), auth.VerifyTwoFactorChallenge)
 	router.POST("/logout", requireAuth, auth.Logout)
 
 	admin := handlers.NewAdminHandler(database, logReader)

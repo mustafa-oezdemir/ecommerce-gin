@@ -88,9 +88,12 @@ services:
       SESSION_SECRET: ${SESSION_SECRET}
       SESSION_SECURE: ${SESSION_SECURE}
       CSRF_SECRET: ${CSRF_SECRET}
+      SECURITY_ENCRYPTION_KEY: ${SECURITY_ENCRYPTION_KEY:-}
       SMTP_HOST: mailhog
       SMTP_PORT: 1025
       SMTP_FROM: no-reply@ecommerce.local
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
 
     ports:
       - "8080:8080"

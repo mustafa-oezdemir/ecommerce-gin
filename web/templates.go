@@ -20,6 +20,9 @@ func ParseTemplates() (*template.Template, error) {
 		"initials":          initials,
 		"nextOrderStatuses": models.AllowedOrderStatusTransitions,
 		"orderStatusLabel":  orderStatusLabel,
+		"add":               func(a, b int) int { return a + b },
+		"sub":               func(a, b int) int { return a - b },
+		"listRatings":       func() []int { return []int{10, 9, 8, 7, 6, 5, 4, 3, 2, 1} },
 	}).ParseFS(templateFS, "templates/*.tmpl")
 }
 

@@ -54,15 +54,21 @@ func New(config Config) (*Runtime, error) {
 	if err != nil {
 		return nil, fmt.Errorf("resolve log file path: %w", err)
 	}
-	if err := os.MkdirAll(filepath.Dir(filePath), 0o750); err != nil {
+	fileDirectory := filepath.Dir(filePath)
+	if err := os.MkdirAll(fileDirectory, 0o750); err != nil {
 		return nil, fmt.Errorf("create log directory: %w", err)
 	}
-	logFile, err := os.OpenFile(filePath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	logRoot, err := os.OpenRoot(fileDirectory)
 	if err != nil {
+		return nil, fmt.Errorf("open log directory: %w", err)
+	}
+	logFile, err := logRoot.OpenFile(filepath.Base(filePath), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		_ = logRoot.Close()
 		return nil, fmt.Errorf("open log file: %w", err)
 	}
-	if err := logFile.Close(); err != nil {
-		return nil, fmt.Errorf("close log file probe: %w", err)
+	if closeErr := errors.Join(logFile.Close(), logRoot.Close()); closeErr != nil {
+		return nil, fmt.Errorf("close log file probe: %w", closeErr)
 	}
 
 	fileSink := &lumberjack.Logger{

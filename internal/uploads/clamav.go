@@ -53,8 +53,12 @@ func (scanner *ClamAVScanner) Scan(ctx context.Context, data []byte) error {
 	}
 	for offset := 0; offset < len(data); {
 		end := min(offset+32*1024, len(data))
+		chunkLength, err := checkedUint32(end - offset)
+		if err != nil {
+			return fmt.Errorf("%w: invalid chunk length: %v", ErrScannerUnavailable, err)
+		}
 		var chunkSize [4]byte
-		binary.BigEndian.PutUint32(chunkSize[:], uint32(end-offset))
+		binary.BigEndian.PutUint32(chunkSize[:], chunkLength)
 		if err := writeAll(connection, chunkSize[:]); err != nil {
 			return fmt.Errorf("%w: send chunk size: %v", ErrScannerUnavailable, err)
 		}
@@ -79,6 +83,13 @@ func (scanner *ClamAVScanner) Scan(ctx context.Context, data []byte) error {
 		return ErrThreatDetected
 	}
 	return fmt.Errorf("%w: unexpected response", ErrScannerUnavailable)
+}
+
+func checkedUint32(value int) (uint32, error) {
+	if value < 0 || uint64(value) > uint64(^uint32(0)) {
+		return 0, errors.New("value does not fit in uint32")
+	}
+	return uint32(value), nil
 }
 
 func writeAll(writer io.Writer, data []byte) error {

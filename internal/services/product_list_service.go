@@ -59,7 +59,7 @@ func (s *ProductListService) Get(ctx context.Context, userID, listID uint) (*mod
 
 func (s *ProductListService) Create(ctx context.Context, userID uint, name string) error {
 	name = strings.TrimSpace(name)
-	if userID == 0 || utf8.RuneCountInString(name) < 2 || utf8.RuneCountInString(name) > 100 {
+	if userID == 0 || strings.EqualFold(name, "Favorites") || utf8.RuneCountInString(name) < 2 || utf8.RuneCountInString(name) > 100 {
 		return ErrInvalidProductListInput
 	}
 	return s.repo.Create(ctx, &models.ProductList{UserID: userID, Name: name})
