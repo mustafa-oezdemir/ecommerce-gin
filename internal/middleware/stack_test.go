@@ -68,4 +68,8 @@ func TestStackAppliesSecurityHeaders(t *testing.T) {
 	if got := response.Header().Get("Cross-Origin-Opener-Policy"); got != "same-origin" {
 		t.Fatalf("expected COOP same-origin, got %q", got)
 	}
+	csp := response.Header().Get("Content-Security-Policy")
+	if !strings.Contains(csp, "script-src 'self'") || !strings.Contains(csp, "script-src-attr 'none'") {
+		t.Fatalf("expected CSP to allow self-hosted scripts and reject inline handlers, got %q", csp)
+	}
 }

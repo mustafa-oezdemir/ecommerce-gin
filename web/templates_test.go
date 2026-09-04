@@ -3,6 +3,7 @@ package web
 import (
 	"bytes"
 	"html/template"
+	"io/fs"
 	"strings"
 	"testing"
 
@@ -10,6 +11,44 @@ import (
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/models"
 	"gorm.io/gorm"
 )
+
+func TestStaticFSContainsCSPCompatibleScripts(t *testing.T) {
+	assets, err := StaticFS()
+	if err != nil {
+		t.Fatalf("open static filesystem: %v", err)
+	}
+	for _, name := range []string{"account.js", "product-list.js", "product-detail.js"} {
+		contents, err := fs.ReadFile(assets, name)
+		if err != nil {
+			t.Errorf("read %s: %v", name, err)
+			continue
+		}
+		if len(contents) == 0 {
+			t.Errorf("%s is empty", name)
+		}
+	}
+}
+
+func TestAccountTemplateUsesExternalScriptWithoutInlineHandlers(t *testing.T) {
+	templates, err := ParseTemplates()
+	if err != nil {
+		t.Fatalf("parse templates: %v", err)
+	}
+	var output bytes.Buffer
+	if err := templates.ExecuteTemplate(&output, "account.tmpl", map[string]any{
+		"User":      models.User{Email: "customer@example.com"},
+		"CSRFField": template.HTML(`<input type="hidden" name="_csrf">`),
+	}); err != nil {
+		t.Fatalf("execute account template: %v", err)
+	}
+	body := output.String()
+	if !strings.Contains(body, `src="/static/account.js"`) {
+		t.Fatal("account template is missing its external script")
+	}
+	if strings.Contains(body, "onsubmit=") || strings.Contains(body, "<script>") {
+		t.Fatal("account template contains CSP-incompatible inline JavaScript")
+	}
+}
 
 func TestEmployeeOrdersShowsOnlyAllowedTransitions(t *testing.T) {
 	templates, err := ParseTemplates()

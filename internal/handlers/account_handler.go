@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"image/png"
+	"log/slog"
 	"net/http"
 	"strconv"
 
@@ -93,10 +94,31 @@ func (h *AccountHandler) RequestEmailChange(c *gin.Context) {
 		return
 	}
 	if err := h.securityService.RequestEmailChange(c.Request.Context(), user.ID, req.CurrentPassword, req.Email); err != nil {
-		h.renderAccount(c, http.StatusBadRequest, gin.H{"User": user, "error": "The email change could not be started. Check your password or try again later."})
+		status, message, reason := emailChangeFailure(err)
+		level := slog.LevelWarn
+		if status >= http.StatusInternalServerError {
+			level = slog.LevelError
+		}
+		slog.Log(c.Request.Context(), level, "account security event", "event", "email_change_request_failed", "user_id", user.ID, "reason", reason)
+		h.renderAccount(c, status, gin.H{"User": user, "error": message})
 		return
 	}
 	h.renderAccount(c, http.StatusOK, gin.H{"User": user, "success": "A verification code was sent to the new email address."})
+}
+
+func emailChangeFailure(err error) (int, string, string) {
+	switch {
+	case errors.Is(err, services.ErrInvalidCredentials):
+		return http.StatusBadRequest, "The current password is incorrect.", "invalid_credentials"
+	case errors.Is(err, services.ErrSecurityInput):
+		return http.StatusBadRequest, "Enter a valid email address that is different from your current address.", "invalid_input"
+	case errors.Is(err, services.ErrEmailUnavailable):
+		return http.StatusConflict, "That email address cannot be used.", "email_unavailable"
+	case errors.Is(err, services.ErrSecurityCooldown):
+		return http.StatusTooManyRequests, "Please wait before requesting another verification code.", "cooldown"
+	default:
+		return http.StatusServiceUnavailable, "The verification email could not be sent. Please try again later.", "internal_error"
+	}
 }
 
 func (h *AccountHandler) ConfirmEmailChange(c *gin.Context) {

@@ -4,6 +4,7 @@ import (
 	"embed"
 	"fmt"
 	"html/template"
+	"io/fs"
 	"strings"
 	"unicode/utf8"
 
@@ -12,6 +13,13 @@ import (
 
 //go:embed templates/*.tmpl
 var templateFS embed.FS
+
+//go:embed static/*.js
+var staticFS embed.FS
+
+func StaticFS() (fs.FS, error) {
+	return fs.Sub(staticFS, "static")
+}
 
 func ParseTemplates() (*template.Template, error) {
 	return template.New("root").Funcs(template.FuncMap{

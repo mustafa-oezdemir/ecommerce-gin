@@ -253,7 +253,10 @@ func (s *AccountSecurityService) RequestEmailChange(ctx context.Context, userID 
 		return ErrSecurityInput
 	}
 	var count int64
-	if err := s.database.WithContext(ctx).Model(&models.User{}).Where("LOWER(email) = ? AND id <> ?", pendingEmail, userID).Count(&count).Error; err != nil || count != 0 {
+	if err := s.database.WithContext(ctx).Model(&models.User{}).Where("LOWER(email) = ? AND id <> ?", pendingEmail, userID).Count(&count).Error; err != nil {
+		return fmt.Errorf("check email availability: %w", err)
+	}
+	if count != 0 {
 		return ErrEmailUnavailable
 	}
 	var previous models.EmailChangeRequest
@@ -264,7 +267,7 @@ func (s *AccountSecurityService) RequestEmailChange(ctx context.Context, userID 
 	if err != nil {
 		return err
 	}
-	request := models.EmailChangeRequest{UserID: userID, PendingEmail: pendingEmail, CodeHash: s.hashCode(code), ExpiresAt: s.now().Add(emailCodeLifetime)}
+	request := models.EmailChangeRequest{UserID: userID, PendingEmail: pendingEmail, CodeHash: s.hashCode(normalizeCode(code)), ExpiresAt: s.now().Add(emailCodeLifetime)}
 	if err := s.database.WithContext(ctx).Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "user_id"}}, DoUpdates: clause.AssignmentColumns([]string{"pending_email", "code_hash", "expires_at", "attempts", "created_at", "updated_at"})}).Create(&request).Error; err != nil {
 		return fmt.Errorf("store email verification: %w", err)
 	}
@@ -289,7 +292,10 @@ func (s *AccountSecurityService) ConfirmEmailChange(ctx context.Context, userID 
 	}
 	err := s.database.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var count int64
-		if err := tx.Model(&models.User{}).Where("LOWER(email) = ? AND id <> ?", request.PendingEmail, userID).Count(&count).Error; err != nil || count != 0 {
+		if err := tx.Model(&models.User{}).Where("LOWER(email) = ? AND id <> ?", request.PendingEmail, userID).Count(&count).Error; err != nil {
+			return fmt.Errorf("check email availability: %w", err)
+		}
+		if count != 0 {
 			return ErrEmailUnavailable
 		}
 		if err := tx.Model(&models.User{}).Where("id = ?", userID).Updates(map[string]any{"email": request.PendingEmail, "security_version": gorm.Expr("security_version + 1")}).Error; err != nil {

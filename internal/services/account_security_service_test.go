@@ -66,6 +66,15 @@ func TestReadableEmailCodeFormat(t *testing.T) {
 	}
 }
 
+func TestEmailCodeHashUsesNormalizedReadableCode(t *testing.T) {
+	service := NewAccountSecurityService(&gorm.DB{}, bytes.Repeat([]byte{0x55}, 32), nil)
+	stored := service.hashCode(normalizeCode("K7M-42P"))
+	entered := service.hashCode(normalizeCode("k7m 42p"))
+	if !bytes.Equal(stored, entered) {
+		t.Fatal("formatted security code did not normalize to the stored hash")
+	}
+}
+
 func TestAccountSecurityRejectsWeakOrMismatchedPasswordBeforeDatabase(t *testing.T) {
 	service := NewAccountSecurityService(&gorm.DB{}, bytes.Repeat([]byte{0x33}, 32), nil)
 	if _, err := service.ChangePassword(t.Context(), 1, "old", "short", "short"); err != ErrSecurityInput {

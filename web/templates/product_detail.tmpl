@@ -85,7 +85,7 @@
     </div>
 </nav>
 
-<main class="container py-5">
+<main id="product-detail" class="container py-5" data-product-id="{{ .Product.ID }}">
 
     <!-- Product -->
     <section class="card mb-5">
@@ -320,7 +320,6 @@
                                 id="review-sort"
                                 class="form-select form-select-sm"
                                 name="sort"
-                                onchange="this.form.submit()"
                             >
                                 <option
                                     value="newest"
@@ -588,7 +587,8 @@
 </main>
 
 
-<script>
+<script src="/static/product-detail.js" defer></script>
+{{/*
 (() => {
     const csrfMeta = document.querySelector('meta[name="csrf-token"]');
     const token = csrfMeta ? csrfMeta.content : "";
@@ -996,7 +996,7 @@
         .querySelectorAll("[data-review]")
         .forEach(wireReview);
 })();
-</script>
+*/}}
 
 </body>
 </html>

@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -43,6 +44,12 @@ func TestNewRouterBuildsApplicationRoutes(t *testing.T) {
 	}
 	if response.Header().Get(middleware.RequestIDHeader) == "" {
 		t.Fatal("server router did not install the middleware stack")
+	}
+
+	staticResponse := httptest.NewRecorder()
+	handler.ServeHTTP(staticResponse, httptest.NewRequest(http.MethodGet, "/static/account.js", nil))
+	if staticResponse.Code != http.StatusOK || !strings.Contains(staticResponse.Body.String(), "delete-account-form") {
+		t.Fatalf("embedded static asset was not served: %d %s", staticResponse.Code, staticResponse.Body.String())
 	}
 }
 

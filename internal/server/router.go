@@ -87,7 +87,11 @@ func NewRouter(config RouterConfig) (http.Handler, error) {
 		return nil, fmt.Errorf("parse templates: %w", err)
 	}
 	router.SetHTMLTemplate(templates)
-	router.Static("/static", "./internal/web/static")
+	staticFiles, err := web.StaticFS()
+	if err != nil {
+		return nil, fmt.Errorf("load static assets: %w", err)
+	}
+	router.StaticFS("/static", http.FS(staticFiles))
 	router.GET("/media/products/:filename", serveProductImage(config.ImageStore, config.Logger))
 	registerRoutes(router, config.Database, config.Metrics, config.ImageStore, config.LogReader, config.SecurityKey)
 	api.RegisterRoutes(router, config.Database)
