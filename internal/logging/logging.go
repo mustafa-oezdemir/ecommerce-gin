@@ -57,6 +57,7 @@ func New(config Config) (*Runtime, error) {
 	if err := os.MkdirAll(filepath.Dir(filePath), 0o750); err != nil {
 		return nil, fmt.Errorf("create log directory: %w", err)
 	}
+	// #nosec G304 -- FilePath is an explicitly configured application log destination.
 	logFile, err := os.OpenFile(filePath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 	if err != nil {
 		return nil, fmt.Errorf("open log file: %w", err)

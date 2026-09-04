@@ -16,9 +16,12 @@ import (
 	"gorm.io/gorm"
 )
 
-const multipartFormOverhead = int64(1 << 20)
+const (
+	maxProductImageUploadBytes = int64(15 << 20)
+	maxProductImageFiles       = 4
+)
 
-func (h *EmployeeHandler) UpdateProductImage(c *gin.Context) {
+func (h *EmployeeHandler) UploadProductImages(c *gin.Context) {
 	var uri validation.ProductIDURI
 	if err := c.ShouldBindUri(&uri); err != nil {
 		c.AbortWithStatus(http.StatusNotFound)
@@ -35,54 +38,85 @@ func (h *EmployeeHandler) UpdateProductImage(c *gin.Context) {
 	}
 
 	h.limitImageUpload(c)
-	newFilename, err := h.saveProductImage(c, true)
+	newFilenames, err := h.saveProductImages(c, true)
 	if err != nil {
 		h.respondToImageError(c, err)
 		return
 	}
-	oldFilename := product.ImageFilename
-	update := db.DB.WithContext(c.Request.Context()).Model(&models.Product{}).Where("id = ?", product.ID)
-	if oldFilename == "" {
-		update = update.Where("image_filename IS NULL OR image_filename = ''")
-	} else {
-		update = update.Where("image_filename = ?", oldFilename)
-	}
-	result := update.Update("image_filename", newFilename)
-	if result.Error != nil {
-		h.cleanupProductImage(newFilename)
-		c.String(http.StatusInternalServerError, "Could not update product image")
+	savedFilenames := newFilenames
+	if err := db.DB.WithContext(c.Request.Context()).Transaction(func(tx *gorm.DB) error {
+		start := int64(0)
+		if err := tx.Model(&models.ProductImage{}).Where("product_id = ?", product.ID).Count(&start).Error; err != nil {
+			return err
+		}
+		if product.ImageFilename == "" {
+			if err := tx.Model(&models.Product{}).Where("id = ? AND (image_filename IS NULL OR image_filename = '')", product.ID).Update("image_filename", newFilenames[0]).Error; err != nil {
+				return err
+			}
+			newFilenames = newFilenames[1:]
+		}
+		if len(newFilenames) == 0 {
+			return nil
+		}
+		return tx.Create(productImageRecords(product.ID, start, newFilenames)).Error
+	}); err != nil {
+		h.cleanupProductImages(savedFilenames)
+		c.String(http.StatusInternalServerError, "Could not update product images")
 		return
 	}
-	if result.RowsAffected != 1 {
-		h.cleanupProductImage(newFilename)
-		c.String(http.StatusConflict, "Product image changed; please try again")
-		return
-	}
-	h.cleanupProductImage(oldFilename)
 	c.Redirect(http.StatusFound, "/employee/products")
 }
 
 func (h *EmployeeHandler) limitImageUpload(c *gin.Context) {
-	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, h.imageStore.MaxBytes()+multipartFormOverhead)
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxProductImageUploadBytes)
 }
 
-func (h *EmployeeHandler) saveProductImage(c *gin.Context, required bool) (string, error) {
-	header, err := c.FormFile("image")
+func (h *EmployeeHandler) saveProductImages(c *gin.Context, required bool) ([]string, error) {
+	form, err := c.MultipartForm()
 	if err != nil {
 		if !required && errors.Is(err, http.ErrMissingFile) {
-			return "", nil
+			return nil, nil
 		}
 		if !errors.Is(err, http.ErrMissingFile) && !isUploadTooLarge(err) {
-			return "", fmt.Errorf("%w: malformed multipart form", uploads.ErrInvalidImage)
+			return nil, fmt.Errorf("%w: malformed multipart form", uploads.ErrInvalidImage)
 		}
-		return "", err
+		return nil, err
 	}
-	file, err := header.Open()
-	if err != nil {
-		return "", err
+	headers := form.File["images"]
+	if len(headers) == 0 {
+		headers = form.File["image"]
 	}
-	defer file.Close()
-	return h.imageStore.Save(c.Request.Context(), header.Filename, file, header.Size)
+	if len(headers) == 0 {
+		if required {
+			return nil, http.ErrMissingFile
+		}
+		return nil, nil
+	}
+	if len(headers) > maxProductImageFiles {
+		return nil, fmt.Errorf("%w: at most %d files are allowed", uploads.ErrInvalidImage, maxProductImageFiles)
+	}
+
+	filenames := make([]string, 0, len(headers))
+	for _, header := range headers {
+		file, err := header.Open()
+		if err != nil {
+			h.cleanupProductImages(filenames)
+			return nil, err
+		}
+		filename, saveErr := h.imageStore.Save(c.Request.Context(), header.Filename, file, header.Size)
+		closeErr := file.Close()
+		if saveErr != nil {
+			h.cleanupProductImages(filenames)
+			return nil, saveErr
+		}
+		if closeErr != nil {
+			h.cleanupProductImage(filename)
+			h.cleanupProductImages(filenames)
+			return nil, closeErr
+		}
+		filenames = append(filenames, filename)
+	}
+	return filenames, nil
 }
 
 func (h *EmployeeHandler) respondToImageError(c *gin.Context, err error) {
@@ -110,6 +144,21 @@ func (h *EmployeeHandler) cleanupProductImage(filename string) {
 	if err := h.imageStore.Delete(filename); err != nil {
 		slog.Warn("product image cleanup failed", "error", err)
 	}
+}
+
+func (h *EmployeeHandler) cleanupProductImages(filenames []string) {
+	for _, filename := range filenames {
+		h.cleanupProductImage(filename)
+	}
+}
+
+func productImageRecords(productID uint, start int64, filenames []string) []models.ProductImage {
+	records := make([]models.ProductImage, 0, len(filenames))
+	for _, filename := range filenames {
+		records = append(records, models.ProductImage{ProductID: productID, Filename: filename, Position: start})
+		start++
+	}
+	return records
 }
 
 func isUploadTooLarge(err error) bool {

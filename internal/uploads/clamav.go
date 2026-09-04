@@ -54,6 +54,7 @@ func (scanner *ClamAVScanner) Scan(ctx context.Context, data []byte) error {
 	for offset := 0; offset < len(data); {
 		end := min(offset+32*1024, len(data))
 		var chunkSize [4]byte
+		// #nosec G115 -- each INSTREAM chunk is capped at 32 KiB, well within uint32.
 		binary.BigEndian.PutUint32(chunkSize[:], uint32(end-offset))
 		if err := writeAll(connection, chunkSize[:]); err != nil {
 			return fmt.Errorf("%w: send chunk size: %v", ErrScannerUnavailable, err)

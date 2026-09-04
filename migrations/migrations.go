@@ -16,6 +16,12 @@ var productListsSchema string
 //go:embed 000003_product_images.sql
 var productImagesSchema string
 
+//go:embed 000004_product_image_gallery.sql
+var productImageGallerySchema string
+
+//go:embed 000005_product_reviews.sql
+var productReviewsSchema string
+
 type migration struct {
 	version string
 	sql     string
@@ -30,6 +36,8 @@ func Apply(db *gorm.DB) error {
 			{version: "000001_initial", sql: initialSchema},
 			{version: "000002_product_lists", sql: productListsSchema},
 			{version: "000003_product_images", sql: productImagesSchema},
+			{version: "000004_product_image_gallery", sql: productImageGallerySchema},
+			{version: "000005_product_reviews", sql: productReviewsSchema},
 		} {
 			var count int64
 			if err := tx.Raw("SELECT COUNT(*) FROM schema_migrations WHERE version = ?", migration.version).Scan(&count).Error; err != nil {

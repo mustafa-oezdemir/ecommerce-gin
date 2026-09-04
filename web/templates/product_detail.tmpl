@@ -9,8 +9,10 @@
   <style>
     body { background: linear-gradient(180deg, #f8fafc 0%, #eef3ff 100%); }
     .detail-card { border: 0; border-radius: 1.5rem; box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08); }
-    .image-box { height: 420px; border-radius: 1.5rem; background: linear-gradient(135deg, rgba(79,70,229,0.12), rgba(56,189,248,0.12)); display: flex; align-items: center; justify-content: center; font-size: 5rem; font-weight: 700; color: #4f46e5; }
+    .image-box { height: 420px; border-radius: 1.5rem; background: #f97316; display: flex; align-items: center; justify-content: center; font-size: 5rem; font-weight: 700; color: #000; }
     .product-image { width: 100%; height: 420px; border-radius: 1.5rem; object-fit: cover; background: #eef2ff; }
+    .product-thumbnail { width: 88px; height: 88px; border-radius: .8rem; object-fit: cover; background: #eef2ff; }
+    .review-card { border: 0; border-radius: 1rem; box-shadow: 0 8px 20px rgba(15,23,42,0.06); }
   </style>
 </head>
 <body>
@@ -30,6 +32,7 @@
       <div class="row g-0">
         <div class="col-lg-6 p-4 p-lg-5">
           {{if .Product.ImageFilename}}<img class="product-image" src="/media/products/{{.Product.ImageFilename}}" alt="{{.Product.Name}}">{{else}}<div class="image-box">{{if .Product.Category}}{{initials .Product.Category.Name}}{{else}}N{{end}}</div>{{end}}
+          {{if .Product.Images}}<div class="d-flex flex-wrap gap-2 mt-3">{{range .Product.Images}}<img class="product-thumbnail" src="/media/products/{{.Filename}}" alt="{{$.Product.Name}}" loading="lazy">{{end}}</div>{{end}}
         </div>
         <div class="col-lg-6">
           <div class="card-body p-4 p-lg-5">
@@ -56,6 +59,53 @@
         </div>
       </div>
     </div>
+    <section class="row g-4 mt-1">
+      <div class="col-lg-7">
+        <div class="card review-card h-100">
+          <div class="card-body p-4">
+            <h2 class="h4 mb-3">Customer reviews</h2>
+            {{range .Product.Reviews}}
+            <article class="border-bottom pb-3 mb-3">
+              <div class="d-flex justify-content-between gap-3">
+                <strong>{{.User.Name}}</strong>
+                <span class="text-warning fw-semibold">{{.Rating}} / 5</span>
+              </div>
+              <p class="mb-0 mt-2">{{.Comment}}</p>
+            </article>
+            {{else}}
+            <p class="text-muted mb-0">There are no reviews for this product yet.</p>
+            {{end}}
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-5">
+        {{if .CanReview}}
+        <div class="card review-card">
+          <div class="card-body p-4">
+            <h2 class="h4 mb-3">{{if .ExistingReview}}Update your review{{else}}Write a review{{end}}</h2>
+            <form method="post" action="/products/{{.Product.ID}}/reviews">
+              {{.CSRFField}}
+              <fieldset class="mb-3">
+                <legend class="fs-6">Rating</legend>
+                <div class="d-flex gap-3">
+                  <label><input type="radio" name="rating" value="1" required {{if and .ExistingReview (eq .ExistingReview.Rating 1)}}checked{{end}}> 1</label>
+                  <label><input type="radio" name="rating" value="2" {{if and .ExistingReview (eq .ExistingReview.Rating 2)}}checked{{end}}> 2</label>
+                  <label><input type="radio" name="rating" value="3" {{if and .ExistingReview (eq .ExistingReview.Rating 3)}}checked{{end}}> 3</label>
+                  <label><input type="radio" name="rating" value="4" {{if and .ExistingReview (eq .ExistingReview.Rating 4)}}checked{{end}}> 4</label>
+                  <label><input type="radio" name="rating" value="5" {{if and .ExistingReview (eq .ExistingReview.Rating 5)}}checked{{end}}> 5</label>
+                </div>
+              </fieldset>
+              <div class="mb-3">
+                <label class="form-label" for="review-comment">Your review</label>
+                <textarea class="form-control" id="review-comment" name="comment" rows="4" minlength="3" maxlength="2000" required>{{if .ExistingReview}}{{.ExistingReview.Comment}}{{end}}</textarea>
+              </div>
+              <button class="btn btn-primary" type="submit">{{if .ExistingReview}}Update review{{else}}Submit review{{end}}</button>
+            </form>
+          </div>
+        </div>
+        {{end}}
+      </div>
+    </section>
   </main>
 </body>
 </html>

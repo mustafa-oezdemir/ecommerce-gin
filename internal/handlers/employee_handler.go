@@ -38,7 +38,7 @@ func (h *EmployeeHandler) Dashboard(c *gin.Context) {
 
 func (h *EmployeeHandler) ListProducts(c *gin.Context) {
 	var products []models.Product
-	if err := db.DB.Preload("Category").Order("created_at DESC").Find(&products).Error; err != nil {
+	if err := db.DB.Preload("Category").Preload("Images").Order("created_at DESC").Find(&products).Error; err != nil {
 		c.String(http.StatusInternalServerError, "Could not load products")
 		return
 	}
@@ -80,14 +80,25 @@ func (h *EmployeeHandler) CreateProduct(c *gin.Context) {
 		}
 		categoryID = &category.ID
 	}
-	imageFilename, err := h.saveProductImage(c, false)
+	imageFilenames, err := h.saveProductImages(c, false)
 	if err != nil {
 		h.respondToImageError(c, err)
 		return
 	}
-	product := models.Product{Name: name, Description: strings.TrimSpace(req.Description), ImageFilename: imageFilename, PriceCents: priceCents, Stock: req.Stock, Active: true, CategoryID: categoryID}
-	if err := db.DB.WithContext(c.Request.Context()).Create(&product).Error; err != nil {
-		h.cleanupProductImage(imageFilename)
+	product := models.Product{Name: name, Description: strings.TrimSpace(req.Description), PriceCents: priceCents, Stock: req.Stock, Active: true, CategoryID: categoryID}
+	if len(imageFilenames) > 0 {
+		product.ImageFilename = imageFilenames[0]
+	}
+	if err := db.DB.WithContext(c.Request.Context()).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(&product).Error; err != nil {
+			return err
+		}
+		if len(imageFilenames) < 2 {
+			return nil
+		}
+		return tx.Create(productImageRecords(product.ID, 0, imageFilenames[1:])).Error
+	}); err != nil {
+		h.cleanupProductImages(imageFilenames)
 		c.String(http.StatusInternalServerError, "Could not create product")
 		return
 	}

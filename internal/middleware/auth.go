@@ -52,6 +52,40 @@ func RequireAuth(database *gorm.DB) gin.HandlerFunc {
 	}
 }
 
+func LoadCurrentUser(database *gorm.DB) gin.HandlerFunc {
+	if database == nil {
+		panic("middleware: authentication database is required")
+	}
+
+	return func(c *gin.Context) {
+		session := sessions.Default(c)
+		userIDText, ok := session.Get(SessionUserIDKey).(string)
+		if !ok || userIDText == "" {
+			c.Next()
+			return
+		}
+		userID, err := strconv.ParseUint(userIDText, 10, 64)
+		if err != nil || userID == 0 {
+			clearSession(session)
+			c.Next()
+			return
+		}
+
+		var user models.User
+		if err := database.WithContext(c.Request.Context()).First(&user, uint(userID)).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				clearSession(session)
+				c.Next()
+				return
+			}
+			c.AbortWithStatus(http.StatusServiceUnavailable)
+			return
+		}
+		c.Set(CurrentUserKey, &user)
+		c.Next()
+	}
+}
+
 func CurrentUser(c *gin.Context) (*models.User, bool) {
 	value, exists := c.Get(CurrentUserKey)
 	user, ok := value.(*models.User)

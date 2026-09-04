@@ -161,6 +161,7 @@ func (store *ImageStore) Open(filename string) (*os.File, error) {
 	if !store.ValidFilename(filename) {
 		return nil, os.ErrNotExist
 	}
+	// #nosec G304 -- ValidFilename restricts names to generated image basenames.
 	return os.Open(filepath.Join(store.directory, filename))
 }
 

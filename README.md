@@ -8,7 +8,7 @@ A secure, server-rendered e-commerce demo built with Go, Gin, GORM, and MySQL. I
 - **Operations** — manage products, inventory, and order status as an employee.
 - **Administration** — review dashboards, users, categories, and orders.
 - **Security by default** — signed sessions, RBAC, ownership checks, CSRF protection, secure headers, validated requests, and rate-limited sign-in.
-- **Safe product media** — employee image uploads are size-limited, virus-scanned, decoded, sanitized, and stored under generated names.
+- **Safe product media** — employees can upload up to four images per request (15 MB total); every image is size-limited, virus-scanned, decoded, sanitized, and stored under a generated name.
 - **Reliable commerce data** — integer-cent pricing, transactional checkout, immutable order item snapshots, foreign keys, and indexed migrations.
 - **Observability** — liveness/readiness probes, structured request logs, Prometheus metrics, and a provisioned Grafana dashboard.
 
@@ -96,7 +96,7 @@ Copy `.env.example` and keep `.env` private. Docker passes only application-requ
 | `HTTP_SHUTDOWN_TIMEOUT` | Maximum graceful-shutdown duration before connections are forced closed |
 | `HTTP_MAX_HEADER_BYTES` | Maximum accepted HTTP request-header size |
 | `PRODUCT_IMAGE_DIRECTORY` | Private storage directory for sanitized product images |
-| `PRODUCT_IMAGE_MAX_BYTES` | Maximum uploaded and sanitized image size in bytes |
+| `PRODUCT_IMAGE_MAX_BYTES` | Maximum size of each uploaded and sanitized image in bytes; requests are capped at 15 MB total |
 | `PRODUCT_IMAGE_MAX_WIDTH`, `PRODUCT_IMAGE_MAX_HEIGHT`, `PRODUCT_IMAGE_MAX_PIXELS` | Decoded-image limits that prevent image bombs |
 | `CLAMAV_ADDRESS`, `CLAMAV_SCAN_TIMEOUT` | Internal `clamd` endpoint and fail-closed scan timeout |
 | `MYSQL_*` | MySQL connection settings |

@@ -61,7 +61,7 @@ func NewRouter(config RouterConfig) (http.Handler, error) {
 	}
 
 	router := gin.New()
-	router.MaxMultipartMemory = config.ImageStore.MaxBytes()
+	router.MaxMultipartMemory = 15 << 20
 	if err := router.SetTrustedProxies(config.TrustedProxies); err != nil {
 		return nil, fmt.Errorf("configure trusted proxies: %w", err)
 	}
@@ -118,10 +118,11 @@ func registerRoutes(router *gin.Engine, database *gorm.DB, appMetrics *metrics.M
 	requireAuth := middleware.RequireAuth(database)
 	router.GET("/", shop.Home)
 	router.GET("/products", shop.ListProducts)
-	router.GET("/products/:id", shop.ProductDetail)
+	router.GET("/products/:id", middleware.LoadCurrentUser(database), shop.ProductDetail)
 	customer := router.Group("")
 	customer.Use(requireAuth, middleware.RequireRoles(models.RoleCustomer))
 	customer.POST("/cart/add/:id", shop.AddToCart)
+	customer.POST("/products/:id/reviews", shop.CreateProductReview)
 	customer.GET("/cart", shop.ViewCart)
 	customer.POST("/cart/items/:id", shop.UpdateCartItem)
 	customer.POST("/cart/items/:id/remove", shop.RemoveCartItem)
@@ -166,7 +167,7 @@ func registerRoutes(router *gin.Engine, database *gorm.DB, appMetrics *metrics.M
 	employeeGroup.GET("/products", employee.ListProducts)
 	employeeGroup.POST("/products", employee.CreateProduct)
 	employeeGroup.POST("/products/:id", employee.UpdateProduct)
-	employeeGroup.POST("/products/:id/image", employee.UpdateProductImage)
+	employeeGroup.POST("/products/:id/image", employee.UploadProductImages)
 	employeeGroup.POST("/products/:id/deactivate", employee.DeactivateProduct)
 	employeeGroup.POST("/products/:id/stock", employee.UpdateStock)
 	employeeGroup.GET("/orders", employee.ListOrders)

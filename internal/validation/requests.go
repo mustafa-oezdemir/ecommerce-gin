@@ -70,6 +70,11 @@ type AddProductToListRequest struct {
 	ProductID uint `form:"product_id" binding:"required,gt=0"`
 }
 
+type CreateProductReviewRequest struct {
+	Rating  int    `form:"rating" binding:"required,gte=1,lte=5"`
+	Comment string `form:"comment" binding:"required,min=3,max=2000"`
+}
+
 type UpdateQuantityRequest struct {
 	Quantity int `form:"quantity" binding:"gte=1,lte=100"`
 }
