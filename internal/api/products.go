@@ -41,6 +41,7 @@ type productResource struct {
 	Name        string            `json:"name"`
 	Description string            `json:"description"`
 	ImageURL    string            `json:"image_url,omitempty"`
+	ImageURLs   []string          `json:"image_urls,omitempty"`
 	PriceCents  int64             `json:"price_cents"`
 	Stock       int               `json:"stock"`
 	Category    *categoryResource `json:"category,omitempty"`
@@ -166,6 +167,13 @@ func newProductResource(product *models.Product) productResource {
 	}
 	if product.ImageFilename != "" {
 		resource.ImageURL = "/media/products/" + product.ImageFilename
+	}
+	images := product.GalleryImages()
+	if len(images) > 0 {
+		resource.ImageURLs = make([]string, 0, len(images))
+		for _, image := range images {
+			resource.ImageURLs = append(resource.ImageURLs, "/media/products/"+image.Filename)
+		}
 	}
 	if product.Category != nil {
 		resource.Category = &categoryResource{ID: product.Category.ID, Name: product.Category.Name}

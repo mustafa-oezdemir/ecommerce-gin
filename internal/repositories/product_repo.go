@@ -60,15 +60,19 @@ func (repository *ProductRepository) ListActive(ctx context.Context, filter Prod
 	}
 
 	var products []models.Product
-	err := query.Preload("Category").Order(sortColumn + " " + direction).Limit(filter.Limit).Offset(filter.Offset).Find(&products).Error
+	err := query.Preload("Category").Preload("Images", productImageOrder).Order(sortColumn + " " + direction).Limit(filter.Limit).Offset(filter.Offset).Find(&products).Error
 	return products, total, err
 }
 
 func (repository *ProductRepository) GetActiveByID(ctx context.Context, productID uint) (*models.Product, error) {
 	var product models.Product
-	err := repository.database.WithContext(ctx).Preload("Category").Where("id = ? AND active = ?", productID, true).First(&product).Error
+	err := repository.database.WithContext(ctx).Preload("Category").Preload("Images", productImageOrder).Where("id = ? AND active = ?", productID, true).First(&product).Error
 	if err != nil {
 		return nil, err
 	}
 	return &product, nil
+}
+
+func productImageOrder(database *gorm.DB) *gorm.DB {
+	return database.Order("position ASC, id ASC")
 }

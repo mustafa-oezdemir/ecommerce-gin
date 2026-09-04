@@ -58,7 +58,9 @@ func (h *EmployeeHandler) Dashboard(c *gin.Context) {
 
 func (h *EmployeeHandler) ListProducts(c *gin.Context) {
 	var products []models.Product
-	if err := h.database.WithContext(c.Request.Context()).Preload("Category").Order("created_at DESC").Find(&products).Error; err != nil {
+	if err := h.database.WithContext(c.Request.Context()).Preload("Category").Preload("Images", func(database *gorm.DB) *gorm.DB {
+		return database.Order("position ASC, id ASC")
+	}).Order("created_at DESC").Find(&products).Error; err != nil {
 		c.String(http.StatusInternalServerError, "Could not load products")
 		return
 	}
@@ -67,7 +69,16 @@ func (h *EmployeeHandler) ListProducts(c *gin.Context) {
 		c.String(http.StatusInternalServerError, "Could not load products")
 		return
 	}
-	c.HTML(http.StatusOK, "employee_products.tmpl", viewData(c, gin.H{"Products": products, "Categories": categories, "ImageMaxMB": (h.imageStore.MaxBytes() + (1 << 20) - 1) / (1 << 20)}))
+	data := gin.H{"Products": products, "Categories": categories, "ImageMaxMB": (h.imageStore.MaxBytes() + (1 << 20) - 1) / (1 << 20), "ImageLimit": maxProductImages}
+	switch c.Query("status") {
+	case "images-added":
+		data["Success"] = "Product images were added successfully."
+	case "image-deleted":
+		data["Success"] = "The product image was deleted."
+	case "cover-updated":
+		data["Success"] = "The cover image was updated."
+	}
+	c.HTML(http.StatusOK, "employee_products.tmpl", viewData(c, data))
 }
 
 func (h *EmployeeHandler) CreateProduct(c *gin.Context) {
@@ -100,14 +111,21 @@ func (h *EmployeeHandler) CreateProduct(c *gin.Context) {
 		}
 		categoryID = &category.ID
 	}
-	imageFilename, err := h.saveProductImage(c, false)
+	imageFilenames, err := h.saveProductImages(c, false, maxProductImages)
 	if err != nil {
 		h.respondToImageError(c, err)
 		return
 	}
-	product := models.Product{Name: name, Description: strings.TrimSpace(req.Description), ImageFilename: imageFilename, PriceCents: priceCents, Stock: req.Stock, Active: true, CategoryID: categoryID}
+	product := models.Product{Name: name, Description: strings.TrimSpace(req.Description), PriceCents: priceCents, Stock: req.Stock, Active: true, CategoryID: categoryID}
+	if len(imageFilenames) > 0 {
+		product.ImageFilename = imageFilenames[0]
+		product.Images = make([]models.ProductImage, 0, len(imageFilenames))
+		for position, filename := range imageFilenames {
+			product.Images = append(product.Images, models.ProductImage{Filename: filename, Position: uint(position)})
+		}
+	}
 	if err := h.database.WithContext(c.Request.Context()).Create(&product).Error; err != nil {
-		h.cleanupProductImage(imageFilename)
+		h.cleanupProductImages(imageFilenames)
 		c.String(http.StatusInternalServerError, "Could not create product")
 		return
 	}

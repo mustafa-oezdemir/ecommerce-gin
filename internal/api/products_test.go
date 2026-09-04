@@ -65,6 +65,25 @@ func TestProductListReturnsFilteredPaginatedEnvelope(t *testing.T) {
 	}
 }
 
+func TestProductResourceIncludesOrderedGalleryAndLegacyCover(t *testing.T) {
+	product := models.Product{
+		Model:         gorm.Model{ID: 5},
+		Name:          "Phone",
+		ImageFilename: "cover.jpg",
+		Images: []models.ProductImage{
+			{ID: 1, Filename: "side.png", Position: 0},
+			{ID: 2, Filename: "cover.jpg", Position: 1},
+		},
+	}
+	resource := newProductResource(&product)
+	if resource.ImageURL != "/media/products/cover.jpg" {
+		t.Fatalf("unexpected cover URL %q", resource.ImageURL)
+	}
+	if len(resource.ImageURLs) != 2 || resource.ImageURLs[0] != "/media/products/cover.jpg" || resource.ImageURLs[1] != "/media/products/side.png" {
+		t.Fatalf("unexpected gallery URLs: %#v", resource.ImageURLs)
+	}
+}
+
 func TestProductListRejectsInvalidRangeWithoutQueryingStore(t *testing.T) {
 	called := false
 	handler := newProductHandler(productStoreStub{

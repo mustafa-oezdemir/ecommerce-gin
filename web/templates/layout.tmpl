@@ -8,28 +8,48 @@
       <div class="site-nav-links ms-auto">
         {{if .CurrentUser}}
           {{if eq .CurrentUser.Role "admin"}}
-            <a class="site-nav-link" href="/admin/dashboard">Dashboard</a>
             <a class="site-nav-link" href="/admin/users">Users</a>
             <a class="site-nav-link" href="/admin/orders">Orders</a>
             <a class="site-nav-link" href="/admin/categories">Categories</a>
             <a class="site-nav-link" href="/admin/logs">Logs</a>
-            <a class="site-nav-link" href="/">Store</a>
           {{else if eq .CurrentUser.Role "employee"}}
-            <a class="site-nav-link" href="/employee/dashboard">Dashboard</a>
             <a class="site-nav-link" href="/employee/products">Products</a>
             <a class="site-nav-link" href="/employee/orders">Orders</a>
-            <a class="site-nav-link" href="/">Store</a>
           {{else}}
             <a class="site-nav-link" href="/">Products</a>
             <a class="site-nav-link" href="/cart">Cart</a>
-            <a class="site-nav-link" href="/account/orders">Orders</a>
-            <a class="site-nav-link" href="/account/lists">Lists</a>
-            <a class="site-nav-link" href="/account">Account</a>
           {{end}}
-          <form class="site-logout" method="post" action="/logout">
-            {{.CSRFField}}
-            <button class="btn btn-sm btn-dark" type="submit">Log out</button>
-          </form>
+          <details class="account-dropdown">
+            <summary class="account-trigger">
+              <span class="account-trigger-label">Account</span>
+              <span class="account-avatar" aria-hidden="true">{{if .CurrentUser.Name}}{{initials .CurrentUser.Name}}{{else}}A{{end}}</span>
+            </summary>
+            <div class="account-dropdown-menu" role="group" aria-label="Account menu">
+              <div class="account-dropdown-header">
+                <span class="account-avatar account-avatar-large" aria-hidden="true">{{if .CurrentUser.Name}}{{initials .CurrentUser.Name}}{{else}}A{{end}}</span>
+                <span>
+                  <strong>{{if .CurrentUser.Name}}{{.CurrentUser.Name}}{{else}}Your account{{end}}</strong>
+                  <small>{{.CurrentUser.Email}}</small>
+                </span>
+              </div>
+              {{if eq .CurrentUser.Role "admin"}}
+                <a class="account-dropdown-link" href="/admin/dashboard">Admin dashboard</a>
+                <a class="account-dropdown-link" href="/">Store</a>
+              {{else if eq .CurrentUser.Role "employee"}}
+                <a class="account-dropdown-link" href="/employee/dashboard">Employee dashboard</a>
+                <a class="account-dropdown-link" href="/">Store</a>
+              {{else}}
+                <a class="account-dropdown-link" href="/account">Profile & security</a>
+                <a class="account-dropdown-link" href="/account/orders">Orders</a>
+                <a class="account-dropdown-link" href="/account/lists">Lists</a>
+              {{end}}
+              <div class="account-dropdown-divider"></div>
+              <form method="post" action="/logout">
+                {{.CSRFField}}
+                <button class="account-dropdown-action" type="submit">Log out</button>
+              </form>
+            </div>
+          </details>
         {{else}}
           <a class="site-nav-link" href="/">Products</a>
           <a class="btn btn-sm btn-brand" href="/login">Log in</a>

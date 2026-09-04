@@ -6,9 +6,11 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/logging"
+	"github.com/mustafa-oezdemir/ecommerce-gin/internal/middleware"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/models"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/validation"
 	"golang.org/x/crypto/bcrypt"
@@ -64,12 +66,26 @@ func (h *AdminHandler) Dashboard(c *gin.Context) {
 }
 
 func (h *AdminHandler) ListUsers(c *gin.Context) {
+	h.renderUsers(c, http.StatusOK, "")
+}
+
+func (h *AdminHandler) renderUsers(c *gin.Context, status int, errorMessage string) {
 	var users []models.User
 	if err := h.database.WithContext(c.Request.Context()).Order("created_at DESC").Find(&users).Error; err != nil {
 		c.String(http.StatusInternalServerError, "Could not load users")
 		return
 	}
-	c.HTML(http.StatusOK, "admin_users.tmpl", viewData(c, gin.H{"Users": users}))
+	data := gin.H{"Users": users}
+	if errorMessage != "" {
+		data["Error"] = errorMessage
+	}
+	switch c.Query("status") {
+	case "created":
+		data["Success"] = "The user was created successfully."
+	case "updated":
+		data["Success"] = "The user was updated successfully."
+	}
+	c.HTML(status, "admin_users.tmpl", viewData(c, data))
 }
 
 func (h *AdminHandler) Logs(c *gin.Context) {
@@ -108,12 +124,12 @@ func (h *AdminHandler) Logs(c *gin.Context) {
 func (h *AdminHandler) CreateUser(c *gin.Context) {
 	var req validation.CreateUserRequest
 	if err := c.ShouldBind(&req); err != nil {
-		c.String(http.StatusBadRequest, "Invalid user data")
+		h.renderUsers(c, http.StatusBadRequest, "Enter a valid name, email address, password, and role.")
 		return
 	}
 	name, email := strings.TrimSpace(req.Name), strings.ToLower(strings.TrimSpace(req.Email))
-	if name == "" || email == "" {
-		c.String(http.StatusBadRequest, "Invalid user data")
+	if utf8.RuneCountInString(name) < 2 || email == "" {
+		h.renderUsers(c, http.StatusBadRequest, "Enter a valid name and email address.")
 		return
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
@@ -123,10 +139,72 @@ func (h *AdminHandler) CreateUser(c *gin.Context) {
 	}
 	user := models.User{Name: name, Email: email, Password: string(hash), Role: models.Role(req.Role)}
 	if err := h.database.WithContext(c.Request.Context()).Create(&user).Error; err != nil {
-		c.String(http.StatusConflict, "Could not create user")
+		if errors.Is(err, gorm.ErrDuplicatedKey) {
+			h.renderUsers(c, http.StatusConflict, "That email address is already in use.")
+			return
+		}
+		slog.ErrorContext(c.Request.Context(), "admin user creation failed", "error", err)
+		h.renderUsers(c, http.StatusInternalServerError, "The user could not be created. Please try again.")
 		return
 	}
-	c.Redirect(http.StatusFound, "/admin/users")
+	slog.InfoContext(c.Request.Context(), "admin user created", "target_user_id", user.ID, "role", user.Role)
+	c.Redirect(http.StatusSeeOther, "/admin/users?status=created")
+}
+
+func (h *AdminHandler) UpdateUser(c *gin.Context) {
+	currentUser, ok := middleware.CurrentUser(c)
+	if !ok {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+	var uri validation.UserIDURI
+	if err := c.ShouldBindUri(&uri); err != nil {
+		c.AbortWithStatus(http.StatusNotFound)
+		return
+	}
+	var req validation.UpdateAdminUserRequest
+	if err := c.ShouldBind(&req); err != nil {
+		h.renderUsers(c, http.StatusBadRequest, "Enter a valid name, email address, and role.")
+		return
+	}
+
+	name := strings.TrimSpace(req.Name)
+	email := strings.ToLower(strings.TrimSpace(req.Email))
+	role := models.Role(req.Role)
+	if utf8.RuneCountInString(name) < 2 || email == "" {
+		h.renderUsers(c, http.StatusBadRequest, "Enter a valid name and email address.")
+		return
+	}
+	if currentUser.ID == uri.ID && role != models.RoleAdmin {
+		h.renderUsers(c, http.StatusConflict, "You cannot remove your own administrator access.")
+		return
+	}
+
+	database := h.database.WithContext(c.Request.Context())
+	var user models.User
+	if err := database.First(&user, uri.ID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.AbortWithStatus(http.StatusNotFound)
+			return
+		}
+		slog.ErrorContext(c.Request.Context(), "admin user lookup failed", "target_user_id", uri.ID, "error", err)
+		h.renderUsers(c, http.StatusInternalServerError, "The user could not be loaded. Please try again.")
+		return
+	}
+
+	updates := map[string]any{"name": name, "email": email, "role": role}
+	if err := database.Model(&models.User{}).Where("id = ?", user.ID).Updates(updates).Error; err != nil {
+		if errors.Is(err, gorm.ErrDuplicatedKey) {
+			h.renderUsers(c, http.StatusConflict, "That email address is already in use.")
+			return
+		}
+		slog.ErrorContext(c.Request.Context(), "admin user update failed", "target_user_id", user.ID, "error", err)
+		h.renderUsers(c, http.StatusInternalServerError, "The user could not be updated. Please try again.")
+		return
+	}
+
+	slog.InfoContext(c.Request.Context(), "admin user updated", "administrator_id", currentUser.ID, "target_user_id", user.ID, "role", role)
+	c.Redirect(http.StatusSeeOther, "/admin/users?status=updated")
 }
 
 func (h *AdminHandler) ListOrders(c *gin.Context) {

@@ -19,6 +19,16 @@ type CreateUserRequest struct {
 	Role     string `form:"role" binding:"required,oneof=employee customer"`
 }
 
+type UpdateAdminUserRequest struct {
+	Name  string `form:"name" binding:"required,min=2,max=100"`
+	Email string `form:"email" binding:"required,email,max=254"`
+	Role  string `form:"role" binding:"required,oneof=admin employee customer"`
+}
+
+type UserIDURI struct {
+	ID uint `uri:"id" binding:"required,gt=0"`
+}
+
 type UpdateProfileRequest struct {
 	FirstName string `form:"first_name" binding:"required,min=1,max=100"`
 	LastName  string `form:"last_name" binding:"required,min=1,max=100"`
@@ -62,6 +72,11 @@ type UpdateStockRequest struct {
 
 type ProductIDURI struct {
 	ID uint `uri:"id" binding:"required,gt=0"`
+}
+
+type ProductImageURI struct {
+	ProductID uint `uri:"id" binding:"required,gt=0"`
+	ImageID   uint `uri:"imageID" binding:"required,gt=0"`
 }
 
 type ProductListIDURI struct {

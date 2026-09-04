@@ -167,9 +167,9 @@ Both listeners enforce explicit read-header, read, write, idle, and maximum-head
 
 ## Product images
 
-Employees can add an optional image while creating a product or replace an image from Product Management. Only JPEG (`.jpg`, `.jpeg`) and PNG (`.png`) files are accepted. The server enforces the request and file size before processing, compares the extension with detected content and the decoder format, checks dimensions and total pixels, streams the original bytes to ClamAV, and fails closed when the scanner cannot be reached.
+Employees can add up to eight images to each product, either while creating it or later from Product Management. They can choose the storefront cover image and delete individual gallery images. Only JPEG (`.jpg`, `.jpeg`) and PNG (`.png`) files are accepted. The server enforces per-file and request size limits before processing, compares each extension with detected content and the decoder format, checks dimensions and total pixels, streams every original file to ClamAV, and fails closed when the scanner cannot be reached.
 
-Accepted images are decoded and re-encoded before storage. This removes original metadata, trailing payloads, and the client filename. A random server-generated filename is stored in MySQL, while the sanitized file is held in the persistent `app_uploads` Docker volume with non-executable permissions. Replaced files and failed database writes are cleaned up automatically. Public image responses allow only generated filenames and use immutable caching.
+Accepted images are decoded and re-encoded before storage. This removes original metadata, trailing payloads, and the client filename. Random server-generated filenames and their stable gallery order are stored in MySQL, while sanitized files are held in the persistent `app_uploads` Docker volume with non-executable permissions. Deleted files and failed database writes are cleaned up automatically. Public image responses allow only generated filenames and use immutable caching. The legacy single-image value is migrated automatically and remains the cover-image reference for backward compatibility.
 
 ClamAV is reachable only on the Compose network; port `3310` is not published to the host. Its signature database is retained in the `clamav_data` volume and updated by the official container.
 

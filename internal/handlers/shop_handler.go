@@ -75,7 +75,9 @@ func (h *ShopHandler) ProductDetail(c *gin.Context) {
 		return
 	}
 	var product models.Product
-	if err := h.database.WithContext(c.Request.Context()).Preload("Category").Where("id = ? AND active = ?", uint(id), true).First(&product).Error; err != nil {
+	if err := h.database.WithContext(c.Request.Context()).Preload("Category").Preload("Images", func(database *gorm.DB) *gorm.DB {
+		return database.Order("position ASC, id ASC")
+	}).Where("id = ? AND active = ?", uint(id), true).First(&product).Error; err != nil {
 		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}
@@ -88,7 +90,7 @@ func (h *ShopHandler) ProductDetail(c *gin.Context) {
 		c.String(http.StatusInternalServerError, "Could not load reviews")
 		return
 	}
-	data := gin.H{"Product": product, "Reviews": reviews.Reviews, "ReviewSummary": reviews.Summary, "ReviewPage": reviews, "Sort": c.Query("sort")}
+	data := gin.H{"Product": product, "Images": product.GalleryImages(), "Reviews": reviews.Reviews, "ReviewSummary": reviews.Summary, "ReviewPage": reviews, "Sort": c.Query("sort")}
 	if user, ok := middleware.CurrentUser(c); ok {
 		data["IsFavorite"], _ = h.engagement.IsFavorite(c.Request.Context(), user.ID, product.ID)
 		data["CanReview"], _ = h.engagement.HasPurchased(c.Request.Context(), user.ID, product.ID)
