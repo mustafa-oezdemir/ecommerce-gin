@@ -82,6 +82,7 @@ Copy `.env.example` and keep `.env` private. Docker passes only application-requ
 | Variable | Purpose |
 | --- | --- |
 | `APP_ENV` | `development`, `test`, or `production` |
+| `TRUSTED_PROXIES` | Comma-separated proxy IPs/CIDRs; leave empty for direct traffic |
 | `APP_PORT` | Application HTTP port |
 | `METRICS_PORT` | Internal Prometheus metrics port |
 | `MYSQL_*` | MySQL connection settings |
@@ -114,6 +115,12 @@ curl http://localhost:8080/health/ready
 ## Monitoring
 
 The application exposes Prometheus metrics only on its internal Docker port `9091`; it is scraped by Prometheus as `app:9091` and is not published by Compose. Grafana is provisioned automatically with the Prometheus datasource and an **Ecommerce Overview** dashboard. Metric labels use Gin route templates rather than raw URLs and never include customer or secret values.
+
+## Middleware
+
+Global middleware is installed as one ordered stack: request ID, structured access logging, Prometheus metrics, security headers, panic recovery, and sessions. Access logs use route templates and intentionally omit query strings; successful health-probe logs are skipped to reduce noise, while failures are always logged. Development uses readable text logs and production emits JSON to standard output so the runtime platform can collect and rotate them.
+
+Gin does not trust forwarded client IP headers by default. Set `TRUSTED_PROXIES` only when traffic arrives through known proxy IPs or CIDR ranges; this keeps login rate limiting tied to the real client address without trusting spoofed headers.
 
 ## Development
 

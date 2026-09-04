@@ -29,22 +29,34 @@ import (
 
 func main() {
 	cfg := config.Load()
+	var loggerHandler slog.Handler = slog.NewTextHandler(os.Stdout, nil)
+	if cfg.AppEnv == "production" {
+		loggerHandler = slog.NewJSONHandler(os.Stdout, nil)
+	}
+	slog.SetDefault(slog.New(loggerHandler))
 	gin.SetMode(cfg.GinMode)
 	if err := db.Init(cfg); err != nil {
 		log.Fatalf("database initialization failed: %v", err)
 	}
 
 	r := gin.New()
+	if err := r.SetTrustedProxies(cfg.TrustedProxies); err != nil {
+		log.Fatalf("invalid TRUSTED_PROXIES configuration: %v", err)
+	}
 	appMetrics := metrics.New(prometheus.DefaultRegisterer)
 	if sqlDB, err := db.SQL(); err == nil {
 		prometheus.MustRegister(collectors.NewDBStatsCollector(sqlDB, "ecommerce"))
 	}
 	appMetrics.HealthLive.Set(1)
 	metrics.SetDefault(appMetrics)
-	r.Use(gin.Recovery(), middleware.RequestID(), middleware.Metrics(appMetrics), middleware.RequestLogger(slog.Default()), middleware.SecurityHeaders(cfg.AppEnv == "production"))
 	store := cookie.NewStore([]byte(cfg.SessionSecret))
 	store.Options(sessions.Options{Path: "/", MaxAge: 60 * 60 * 8, HttpOnly: true, Secure: cfg.SessionSecure, SameSite: http.SameSiteLaxMode})
-	r.Use(sessions.Sessions("ecommerce_session", store))
+	middleware.Install(r, middleware.StackConfig{
+		Logger:          slog.Default(),
+		MetricsRegistry: appMetrics,
+		EnableHSTS:      cfg.AppEnv == "production",
+		Session:         sessions.Sessions("ecommerce_session", store),
+	})
 
 	templates, err := web.ParseTemplates()
 	if err != nil {
@@ -60,11 +72,12 @@ func main() {
 	r.GET("/readyz", health.Ready)
 	// Shop
 	shop := handlers.NewShopHandler()
+	requireAuth := middleware.RequireAuth(db.DB)
 	r.GET("/", shop.Home)
 	r.GET("/products", shop.ListProducts)
 	r.GET("/products/:id", shop.ProductDetail)
 	customer := r.Group("")
-	customer.Use(middleware.RequireAuth(), middleware.RequireRoles(models.RoleCustomer))
+	customer.Use(requireAuth, middleware.RequireRoles(models.RoleCustomer))
 	customer.POST("/cart/add/:id", shop.AddToCart)
 	customer.GET("/cart", shop.ViewCart)
 	customer.POST("/cart/items/:id", shop.UpdateCartItem)
@@ -90,12 +103,12 @@ func main() {
 	r.GET("/login", auth.ShowLogin)
 	loginLimiter := middleware.NewLoginRateLimiter(10, time.Minute)
 	r.POST("/login", loginLimiter.Middleware(), auth.Login)
-	r.POST("/logout", middleware.RequireAuth(), auth.Logout)
+	r.POST("/logout", requireAuth, auth.Logout)
 
 	// Admin
 	admin := handlers.NewAdminHandler()
 	adminGroup := r.Group("/admin")
-	adminGroup.Use(middleware.RequireAuth(), middleware.RequireRoles(models.RoleAdmin))
+	adminGroup.Use(requireAuth, middleware.RequireRoles(models.RoleAdmin))
 	{
 		adminGroup.GET("/dashboard", admin.Dashboard)
 		adminGroup.GET("/users", admin.ListUsers)
@@ -109,7 +122,7 @@ func main() {
 	// Employee
 	employee := handlers.NewEmployeeHandler()
 	employeeGroup := r.Group("/employee")
-	employeeGroup.Use(middleware.RequireAuth(), middleware.RequireRoles(models.RoleAdmin, models.RoleEmployee))
+	employeeGroup.Use(requireAuth, middleware.RequireRoles(models.RoleAdmin, models.RoleEmployee))
 	{
 		employeeGroup.GET("/dashboard", employee.Dashboard)
 		employeeGroup.GET("/products", employee.ListProducts)

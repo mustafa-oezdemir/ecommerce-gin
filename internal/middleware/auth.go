@@ -1,14 +1,15 @@
 package middleware
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 
-	"github.com/mustafa-oezdemir/ecommerce-gin/internal/db"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/models"
+	"gorm.io/gorm"
 )
 
 const (
@@ -16,7 +17,11 @@ const (
 	CurrentUserKey   = "currentUser"
 )
 
-func RequireAuth() gin.HandlerFunc {
+func RequireAuth(database *gorm.DB) gin.HandlerFunc {
+	if database == nil {
+		panic("middleware: authentication database is required")
+	}
+
 	return func(c *gin.Context) {
 		session := sessions.Default(c)
 		value := session.Get(SessionUserIDKey)
@@ -33,9 +38,13 @@ func RequireAuth() gin.HandlerFunc {
 		}
 
 		var user models.User
-		if err := db.DB.First(&user, uint(userID)).Error; err != nil {
-			clearSession(session)
-			redirectToLogin(c)
+		if err := database.WithContext(c.Request.Context()).First(&user, uint(userID)).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				clearSession(session)
+				redirectToLogin(c)
+				return
+			}
+			c.AbortWithStatus(http.StatusServiceUnavailable)
 			return
 		}
 		c.Set(CurrentUserKey, &user)

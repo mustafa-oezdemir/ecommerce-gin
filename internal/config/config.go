@@ -18,6 +18,7 @@ type Config struct {
 	AppPort           string
 	MetricsPort       string
 	GinMode           string
+	TrustedProxies    []string
 	MySQLHost         string
 	MySQLPort         string
 	MySQLDatabase     string
@@ -46,6 +47,7 @@ func Load() *Config {
 	appPort := strings.TrimSpace(os.Getenv("APP_PORT"))
 	metricsPort := strings.TrimSpace(os.Getenv("METRICS_PORT"))
 	ginMode := strings.TrimSpace(os.Getenv("GIN_MODE"))
+	trustedProxies := envCSV("TRUSTED_PROXIES")
 	mysqlHost := strings.TrimSpace(os.Getenv("MYSQL_HOST"))
 	mysqlPort := strings.TrimSpace(os.Getenv("MYSQL_PORT"))
 	mysqlDB := strings.TrimSpace(os.Getenv("MYSQL_DATABASE"))
@@ -140,6 +142,7 @@ func Load() *Config {
 		AppPort:           appPort,
 		MetricsPort:       metricsPort,
 		GinMode:           ginMode,
+		TrustedProxies:    trustedProxies,
 		MySQLHost:         mysqlHost,
 		MySQLPort:         mysqlPort,
 		MySQLDatabase:     mysqlDB,
@@ -158,6 +161,22 @@ func Load() *Config {
 		CSRFKey:           csrfKey,
 		DSN:               dsn,
 	}
+}
+
+func envCSV(name string) []string {
+	value := strings.TrimSpace(os.Getenv(name))
+	if value == "" {
+		return nil
+	}
+
+	parts := strings.Split(value, ",")
+	result := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if item := strings.TrimSpace(part); item != "" {
+			result = append(result, item)
+		}
+	}
+	return result
 }
 
 func envInt(name string, fallback int) int {
