@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/mustafa-oezdemir/ecommerce-gin/internal/logging"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/models"
 	"gorm.io/gorm"
 )
@@ -58,5 +59,38 @@ func TestEmployeeOrdersShowsOnlyAllowedTransitions(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestAdminLogsRendersStructuredEntriesAndEscapesValues(t *testing.T) {
+	templates, err := ParseTemplates()
+	if err != nil {
+		t.Fatalf("parse templates: %v", err)
+	}
+	var output bytes.Buffer
+	data := map[string]any{
+		"Snapshot": logging.LogSnapshot{
+			FileSizeText: "1.0 KB",
+			Entries: []logging.LogEntry{{
+				Time:       "2026-09-04 10:00:00.000 UTC",
+				Level:      "ERROR",
+				LevelClass: "danger",
+				Message:    `<script>alert("unsafe")</script>`,
+				Attributes: []logging.LogAttribute{{Name: "route", Value: "/checkout"}},
+			}},
+		},
+		"Level":  "all",
+		"Limit":  100,
+		"Search": "",
+	}
+	if err := templates.ExecuteTemplate(&output, "admin_logs.tmpl", data); err != nil {
+		t.Fatalf("execute log template: %v", err)
+	}
+	body := output.String()
+	if strings.Contains(body, `<script>alert`) || !strings.Contains(body, `&lt;script&gt;alert`) {
+		t.Fatalf("log message was not safely escaped: %s", body)
+	}
+	if !strings.Contains(body, "Application Logs") || !strings.Contains(body, "/checkout") {
+		t.Fatalf("log view is missing expected content: %s", body)
 	}
 }

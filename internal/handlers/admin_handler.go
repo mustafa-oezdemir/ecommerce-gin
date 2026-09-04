@@ -1,19 +1,30 @@
 package handlers
 
 import (
+	"errors"
+	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/db"
+	"github.com/mustafa-oezdemir/ecommerce-gin/internal/logging"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/models"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/validation"
 	"golang.org/x/crypto/bcrypt"
 )
 
-type AdminHandler struct{}
+type AdminHandler struct {
+	logReader *logging.Reader
+}
 
-func NewAdminHandler() *AdminHandler { return &AdminHandler{} }
+func NewAdminHandler(logReader *logging.Reader) *AdminHandler {
+	if logReader == nil {
+		panic("handlers: application log reader is required")
+	}
+	return &AdminHandler{logReader: logReader}
+}
 
 func (h *AdminHandler) Dashboard(c *gin.Context) {
 	var customers, employees, products, pendingOrders, lowStock, totalOrders int64
@@ -35,6 +46,39 @@ func (h *AdminHandler) ListUsers(c *gin.Context) {
 		return
 	}
 	c.HTML(http.StatusOK, "admin_users.tmpl", viewData(c, gin.H{"Users": users}))
+}
+
+func (h *AdminHandler) Logs(c *gin.Context) {
+	limit, err := strconv.Atoi(c.DefaultQuery("limit", "100"))
+	if err != nil || limit < 1 {
+		limit = 100
+	}
+	limit = min(limit, 500)
+	level := strings.ToLower(strings.TrimSpace(c.DefaultQuery("level", "all")))
+	search := strings.TrimSpace(c.Query("q"))
+	if searchRunes := []rune(search); len(searchRunes) > 100 {
+		search = string(searchRunes[:100])
+	}
+	snapshot, err := h.logReader.Read(logging.LogQuery{Limit: limit, Level: level, Search: search})
+	if err != nil {
+		if errors.Is(err, logging.ErrInvalidLogLevel) {
+			level = "all"
+			snapshot, err = h.logReader.Read(logging.LogQuery{Limit: limit, Search: search})
+		}
+		if err != nil {
+			slog.Error("application logs could not be read", "error", err)
+			c.String(http.StatusInternalServerError, "Could not load application logs")
+			return
+		}
+	}
+	c.Header("Cache-Control", "no-store")
+	c.HTML(http.StatusOK, "admin_logs.tmpl", viewData(c, gin.H{
+		"Snapshot":    snapshot,
+		"Level":       level,
+		"Limit":       limit,
+		"Search":      search,
+		"AutoRefresh": c.Query("refresh") == "10",
+	}))
 }
 
 func (h *AdminHandler) CreateUser(c *gin.Context) {

@@ -6,9 +6,12 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/mustafa-oezdemir/ecommerce-gin/internal/logging"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/metrics"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/middleware"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/uploads"
@@ -26,6 +29,7 @@ func TestNewRouterBuildsApplicationRoutes(t *testing.T) {
 		Metrics:       metrics.New(prometheus.NewRegistry()),
 		Logger:        slog.New(slog.NewTextHandler(io.Discard, nil)),
 		ImageStore:    testImageStore(t),
+		LogReader:     testLogReader(t),
 	})
 	if err != nil {
 		t.Fatalf("build router: %v", err)
@@ -52,6 +56,19 @@ func testImageStore(t *testing.T) *uploads.ImageStore {
 		t.Fatalf("create test image store: %v", err)
 	}
 	return store
+}
+
+func testLogReader(t *testing.T) *logging.Reader {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "application.log")
+	if err := os.WriteFile(path, nil, 0o600); err != nil {
+		t.Fatalf("create test log file: %v", err)
+	}
+	reader, err := logging.NewReader(logging.ReaderConfig{FilePath: path})
+	if err != nil {
+		t.Fatalf("create test log reader: %v", err)
+	}
+	return reader
 }
 
 func TestNewRouterRequiresDependencies(t *testing.T) {

@@ -96,6 +96,10 @@ func run() (runErr error) {
 	if err != nil {
 		return fmt.Errorf("configure product image storage: %w", err)
 	}
+	logReader, err := logging.NewReader(logging.ReaderConfig{FilePath: logRuntime.FilePath()})
+	if err != nil {
+		return fmt.Errorf("configure application log reader: %w", err)
+	}
 	applicationHandler, err := appserver.NewRouter(appserver.RouterConfig{
 		Environment:    cfg.AppEnv,
 		TrustedProxies: cfg.TrustedProxies,
@@ -106,6 +110,7 @@ func run() (runErr error) {
 		Metrics:        appMetrics,
 		Logger:         slog.Default(),
 		ImageStore:     imageStore,
+		LogReader:      logReader,
 	})
 	if err != nil {
 		return fmt.Errorf("build application router: %w", err)

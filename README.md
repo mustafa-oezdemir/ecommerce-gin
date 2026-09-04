@@ -140,6 +140,8 @@ Gin does not trust forwarded client IP headers by default. Set `TRUSTED_PROXIES`
 
 The application uses one `log/slog` pipeline for HTTP requests, Gin diagnostics, database warnings, application events, and recovered panics. Records are written to the console and to a rotating file. The file is always newline-delimited JSON; the development console defaults to text and production defaults to JSON. Request status controls its level: 2xx/3xx is `INFO`, 4xx is `WARN`, and 5xx is `ERROR`. Raw query strings, passwords, tokens, and session values are not recorded.
 
+Administrators can inspect the structured log at `/admin/logs`. The dashboard supports level and text filters, bounded result sizes, newest-first entries, file statistics, and optional 10-second refreshes. It reads only the newest 2 MB instead of loading the entire rotating file and applies an additional sensitive-field redaction pass before rendering values as escaped HTML.
+
 Docker stores logs in the persistent `app_logs` volume. Inspect the active file with:
 
 ```bash

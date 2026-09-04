@@ -12,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/csrf"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/handlers"
+	"github.com/mustafa-oezdemir/ecommerce-gin/internal/logging"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/metrics"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/middleware"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/models"
@@ -30,6 +31,7 @@ type RouterConfig struct {
 	Metrics        *metrics.Metrics
 	Logger         *slog.Logger
 	ImageStore     *uploads.ImageStore
+	LogReader      *logging.Reader
 }
 
 func NewRouter(config RouterConfig) (http.Handler, error) {
@@ -50,6 +52,9 @@ func NewRouter(config RouterConfig) (http.Handler, error) {
 	}
 	if config.ImageStore == nil {
 		return nil, errors.New("server: product image store is required")
+	}
+	if config.LogReader == nil {
+		return nil, errors.New("server: application log reader is required")
 	}
 	if config.Logger == nil {
 		config.Logger = slog.Default()
@@ -78,7 +83,7 @@ func NewRouter(config RouterConfig) (http.Handler, error) {
 	router.SetHTMLTemplate(templates)
 	router.Static("/static", "./internal/web/static")
 	router.GET("/media/products/:filename", serveProductImage(config.ImageStore, config.Logger))
-	registerRoutes(router, config.Database, config.Metrics, config.ImageStore)
+	registerRoutes(router, config.Database, config.Metrics, config.ImageStore, config.LogReader)
 
 	csrfMiddleware := csrf.Protect(
 		config.CSRFKey,
@@ -102,7 +107,7 @@ func NewRouter(config RouterConfig) (http.Handler, error) {
 	return handler, nil
 }
 
-func registerRoutes(router *gin.Engine, database *gorm.DB, appMetrics *metrics.Metrics, imageStore *uploads.ImageStore) {
+func registerRoutes(router *gin.Engine, database *gorm.DB, appMetrics *metrics.Metrics, imageStore *uploads.ImageStore, logReader *logging.Reader) {
 	health := handlers.NewHealthHandler(database, appMetrics)
 	router.GET("/health/live", health.Live)
 	router.GET("/health/ready", health.Ready)
@@ -142,10 +147,11 @@ func registerRoutes(router *gin.Engine, database *gorm.DB, appMetrics *metrics.M
 	router.POST("/login", loginLimiter.Middleware(), auth.Login)
 	router.POST("/logout", requireAuth, auth.Logout)
 
-	admin := handlers.NewAdminHandler()
+	admin := handlers.NewAdminHandler(logReader)
 	adminGroup := router.Group("/admin")
 	adminGroup.Use(requireAuth, middleware.RequireRoles(models.RoleAdmin))
 	adminGroup.GET("/dashboard", admin.Dashboard)
+	adminGroup.GET("/logs", admin.Logs)
 	adminGroup.GET("/users", admin.ListUsers)
 	adminGroup.POST("/users", admin.CreateUser)
 	adminGroup.GET("/orders", admin.ListOrders)
