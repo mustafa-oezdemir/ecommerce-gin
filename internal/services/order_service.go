@@ -1,11 +1,11 @@
 package services
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sort"
 
-	"github.com/mustafa-oezdemir/ecommerce-gin/internal/db"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/models"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/repositories"
 	"gorm.io/gorm"
@@ -22,18 +22,30 @@ var (
 	ErrInvalidTransition  = errors.New("invalid order status transition")
 )
 
-type OrderService struct{ orderRepo *repositories.OrderRepository }
-
-func NewOrderService() *OrderService {
-	return &OrderService{orderRepo: repositories.NewOrderRepository()}
+type OrderService struct {
+	database  *gorm.DB
+	orderRepo orderRepository
 }
 
-func (s *OrderService) CreateOrder(user models.User) (*models.Order, error) {
+type orderRepository interface {
+	ListByUserID(ctx context.Context, userID uint) ([]models.Order, error)
+	GetByIDForUser(ctx context.Context, orderID, userID uint) (*models.Order, error)
+}
+
+func NewOrderService(database *gorm.DB) *OrderService {
+	return newOrderService(database, repositories.NewOrderRepository(database))
+}
+
+func newOrderService(database *gorm.DB, repo orderRepository) *OrderService {
+	return &OrderService{database: database, orderRepo: repo}
+}
+
+func (s *OrderService) CreateOrder(ctx context.Context, user models.User) (*models.Order, error) {
 	if user.ID == 0 {
 		return nil, ErrInvalidUser
 	}
 	var created models.Order
-	err := db.DB.Transaction(func(tx *gorm.DB) error {
+	err := s.database.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var cart models.Cart
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("user_id = ?", user.ID).First(&cart).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -107,29 +119,29 @@ func (s *OrderService) CreateOrder(user models.User) (*models.Order, error) {
 	return &created, nil
 }
 
-func (s *OrderService) ListUserOrders(userID uint) ([]models.Order, error) {
+func (s *OrderService) ListUserOrders(ctx context.Context, userID uint) ([]models.Order, error) {
 	if userID == 0 {
 		return nil, ErrInvalidUser
 	}
-	return s.orderRepo.ListByUserID(userID)
+	return s.orderRepo.ListByUserID(ctx, userID)
 }
 
-func (s *OrderService) GetUserOrder(userID, orderID uint) (*models.Order, error) {
+func (s *OrderService) GetUserOrder(ctx context.Context, userID, orderID uint) (*models.Order, error) {
 	if userID == 0 || orderID == 0 {
 		return nil, ErrInvalidUser
 	}
-	return s.orderRepo.GetByIDForUser(orderID, userID)
+	return s.orderRepo.GetByIDForUser(ctx, orderID, userID)
 }
 
 func CanTransitionOrderStatus(from, to models.OrderStatus) bool {
 	return models.CanTransitionOrderStatus(from, to)
 }
 
-func (s *OrderService) UpdateStatus(orderID uint, status models.OrderStatus) error {
+func (s *OrderService) UpdateStatus(ctx context.Context, orderID uint, status models.OrderStatus) error {
 	if orderID == 0 {
 		return ErrInvalidTransition
 	}
-	return db.DB.Transaction(func(tx *gorm.DB) error {
+	return s.database.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var order models.Order
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&order, orderID).Error; err != nil {
 			return err

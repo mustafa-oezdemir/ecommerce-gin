@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/mustafa-oezdemir/ecommerce-gin/internal/db"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/models"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/uploads"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/validation"
@@ -25,7 +24,7 @@ func (h *EmployeeHandler) UpdateProductImage(c *gin.Context) {
 		return
 	}
 	var product models.Product
-	if err := db.DB.WithContext(c.Request.Context()).First(&product, uri.ID).Error; err != nil {
+	if err := h.database.WithContext(c.Request.Context()).First(&product, uri.ID).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			c.AbortWithStatus(http.StatusNotFound)
 		} else {
@@ -41,7 +40,7 @@ func (h *EmployeeHandler) UpdateProductImage(c *gin.Context) {
 		return
 	}
 	oldFilename := product.ImageFilename
-	update := db.DB.WithContext(c.Request.Context()).Model(&models.Product{}).Where("id = ?", product.ID)
+	update := h.database.WithContext(c.Request.Context()).Model(&models.Product{}).Where("id = ?", product.ID)
 	if oldFilename == "" {
 		update = update.Where("image_filename IS NULL OR image_filename = ''")
 	} else {

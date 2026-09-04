@@ -114,7 +114,7 @@ func registerRoutes(router *gin.Engine, database *gorm.DB, appMetrics *metrics.M
 	router.GET("/healthz", health.Live)
 	router.GET("/readyz", health.Ready)
 
-	shop := handlers.NewShopHandler()
+	shop := handlers.NewShopHandler(database)
 	requireAuth := middleware.RequireAuth(database)
 	router.GET("/", shop.Home)
 	router.GET("/products", shop.ListProducts)
@@ -129,7 +129,7 @@ func registerRoutes(router *gin.Engine, database *gorm.DB, appMetrics *metrics.M
 	customer.GET("/account/orders", shop.ListOrders)
 	customer.GET("/account/orders/:id", shop.OrderDetail)
 	customer.GET("/account/purchases", shop.ListOrders)
-	account := handlers.NewAccountHandler()
+	account := handlers.NewAccountHandler(database)
 	customer.GET("/account", account.Show)
 	customer.GET("/account/profile", account.Show)
 	customer.POST("/account/profile", account.UpdateProfile)
@@ -141,13 +141,13 @@ func registerRoutes(router *gin.Engine, database *gorm.DB, appMetrics *metrics.M
 	customer.POST("/account/lists/:id/products/:productID/remove", account.RemoveProductFromList)
 	customer.POST("/account/lists/:id/delete", account.DeleteProductList)
 
-	auth := handlers.NewAuthHandler()
+	auth := handlers.NewAuthHandler(database)
 	router.GET("/login", auth.ShowLogin)
 	loginLimiter := middleware.NewLoginRateLimiter(10, time.Minute)
 	router.POST("/login", loginLimiter.Middleware(), auth.Login)
 	router.POST("/logout", requireAuth, auth.Logout)
 
-	admin := handlers.NewAdminHandler(logReader)
+	admin := handlers.NewAdminHandler(database, logReader)
 	adminGroup := router.Group("/admin")
 	adminGroup.Use(requireAuth, middleware.RequireRoles(models.RoleAdmin))
 	adminGroup.GET("/dashboard", admin.Dashboard)
@@ -159,7 +159,7 @@ func registerRoutes(router *gin.Engine, database *gorm.DB, appMetrics *metrics.M
 	adminGroup.POST("/categories", admin.CreateCategory)
 	adminGroup.POST("/categories/:id/delete", admin.DeleteCategory)
 
-	employee := handlers.NewEmployeeHandler(imageStore)
+	employee := handlers.NewEmployeeHandler(database, imageStore)
 	employeeGroup := router.Group("/employee")
 	employeeGroup.Use(requireAuth, middleware.RequireRoles(models.RoleAdmin, models.RoleEmployee))
 	employeeGroup.GET("/dashboard", employee.Dashboard)

@@ -66,17 +66,18 @@ func run() (runErr error) {
 		slog.Debug("route registered", "method", method, "route", path, "handler", handler, "handler_count", handlerCount)
 	}
 	slog.Info("logging initialized", "file", logRuntime.FilePath(), "minimum_level", cfg.LogLevel, "console_format", cfg.LogConsoleFormat)
-	if err := db.Init(cfg); err != nil {
+	database, err := db.Open(cfg)
+	if err != nil {
 		return fmt.Errorf("initialize database: %w", err)
 	}
 	defer func() {
-		if err := db.Close(); err != nil {
+		if err := db.Close(database); err != nil {
 			runErr = errors.Join(runErr, fmt.Errorf("close database: %w", err))
 		}
 	}()
 
 	appMetrics := metrics.New(prometheus.DefaultRegisterer)
-	if sqlDB, err := db.SQL(); err == nil {
+	if sqlDB, err := db.SQL(database); err == nil {
 		prometheus.MustRegister(collectors.NewDBStatsCollector(sqlDB, "ecommerce"))
 	}
 	appMetrics.HealthLive.Set(1)
@@ -106,7 +107,7 @@ func run() (runErr error) {
 		SessionSecret:  cfg.SessionSecret,
 		SessionSecure:  cfg.SessionSecure,
 		CSRFKey:        cfg.CSRFKey,
-		Database:       db.DB,
+		Database:       database,
 		Metrics:        appMetrics,
 		Logger:         slog.Default(),
 		ImageStore:     imageStore,

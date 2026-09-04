@@ -113,6 +113,8 @@ Use `MYSQL_HOST=127.0.0.1` and `MYSQL_PORT=3307` for a host process; the Docker 
 
 `migrations/000001_initial.sql` is applied once and tracked in `schema_migrations`. It defines indexes, foreign keys, user-email uniqueness, integer-cent money columns and cart/order ownership relationships.
 
+The database is opened once in `cmd/server` and passed explicitly through the router to handlers, services, and repositories. There is no package-level database singleton or runtime type assertion. Every request-path query uses the request context, while checkout and order-status changes keep their row locks and writes inside GORM transactions. The underlying `database/sql` pool is configured with bounded open/idle connections, connection lifetime, idle timeout, startup ping timeout, and graceful shutdown.
+
 ## Health checks
 
 - `GET /health/live` checks whether the process is running.

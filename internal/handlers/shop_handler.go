@@ -6,22 +6,26 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
-	"github.com/mustafa-oezdemir/ecommerce-gin/internal/db"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/metrics"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/middleware"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/models"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/services"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/validation"
+	"gorm.io/gorm"
 )
 
 type ShopHandler struct {
+	database     *gorm.DB
 	cartService  *services.CartService
 	orderService *services.OrderService
 	mailService  *services.MailService
 }
 
-func NewShopHandler() *ShopHandler {
-	return &ShopHandler{cartService: services.NewCartService(), orderService: services.NewOrderService(), mailService: services.NewMailServiceFromEnv()}
+func NewShopHandler(database *gorm.DB) *ShopHandler {
+	if database == nil {
+		panic("handlers: database is required")
+	}
+	return &ShopHandler{database: database, cartService: services.NewCartService(database), orderService: services.NewOrderService(database), mailService: services.NewMailServiceFromEnv()}
 }
 
 func (h *ShopHandler) Home(c *gin.Context)         { h.renderProducts(c) }
@@ -33,7 +37,7 @@ func (h *ShopHandler) renderProducts(c *gin.Context) {
 	if categoryID, err := strconv.ParseUint(c.Query("category"), 10, 64); err == nil && categoryID > 0 {
 		selectedCategoryID = uint(categoryID)
 	}
-	query := db.DB.Preload("Category").Where("active = ?", true).Order("created_at DESC")
+	query := h.database.WithContext(c.Request.Context()).Preload("Category").Where("active = ?", true).Order("created_at DESC")
 	if selectedCategoryID > 0 {
 		query = query.Where("category_id = ?", selectedCategoryID)
 	}
@@ -42,7 +46,7 @@ func (h *ShopHandler) renderProducts(c *gin.Context) {
 		return
 	}
 	var categories []models.Category
-	if err := db.DB.Order("name ASC").Find(&categories).Error; err != nil {
+	if err := h.database.WithContext(c.Request.Context()).Order("name ASC").Find(&categories).Error; err != nil {
 		c.String(http.StatusInternalServerError, "Could not load products")
 		return
 	}
@@ -56,7 +60,7 @@ func (h *ShopHandler) ProductDetail(c *gin.Context) {
 		return
 	}
 	var product models.Product
-	if err := db.DB.Preload("Category").Where("id = ? AND active = ?", uint(id), true).First(&product).Error; err != nil {
+	if err := h.database.WithContext(c.Request.Context()).Preload("Category").Where("id = ? AND active = ?", uint(id), true).First(&product).Error; err != nil {
 		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}
@@ -79,8 +83,12 @@ func (h *ShopHandler) AddToCart(c *gin.Context) {
 		c.String(http.StatusBadRequest, "Invalid quantity")
 		return
 	}
-	if err := h.cartService.AddToCart(*user, uri.ID, req.Quantity); err != nil {
-		c.String(http.StatusBadRequest, "Could not add product to cart")
+	if err := h.cartService.AddToCart(c.Request.Context(), *user, uri.ID, req.Quantity); err != nil {
+		if errors.Is(err, services.ErrInvalidCartInput) || errors.Is(err, services.ErrProductNotFound) || errors.Is(err, services.ErrProductInactive) {
+			c.String(http.StatusBadRequest, "Could not add product to cart")
+			return
+		}
+		c.String(http.StatusInternalServerError, "Could not add product to cart")
 		return
 	}
 	c.Redirect(http.StatusFound, "/cart")
@@ -92,7 +100,7 @@ func (h *ShopHandler) ViewCart(c *gin.Context) {
 		c.AbortWithStatus(http.StatusUnauthorized)
 		return
 	}
-	cart, err := h.cartService.GetCart(*user)
+	cart, err := h.cartService.GetCart(c.Request.Context(), *user)
 	if err != nil {
 		c.String(http.StatusInternalServerError, "Could not load cart")
 		return
@@ -120,12 +128,16 @@ func (h *ShopHandler) UpdateCartItem(c *gin.Context) {
 		c.String(http.StatusBadRequest, "Invalid quantity")
 		return
 	}
-	if err := h.cartService.UpdateQuantity(*user, uri.ID, req.Quantity); err != nil {
+	if err := h.cartService.UpdateQuantity(c.Request.Context(), *user, uri.ID, req.Quantity); err != nil {
 		if errors.Is(err, services.ErrCartItemNotFound) {
 			c.AbortWithStatus(http.StatusNotFound)
 			return
 		}
-		c.String(http.StatusBadRequest, "Could not update cart")
+		if errors.Is(err, services.ErrInvalidCartInput) {
+			c.String(http.StatusBadRequest, "Could not update cart")
+			return
+		}
+		c.String(http.StatusInternalServerError, "Could not update cart")
 		return
 	}
 	c.Redirect(http.StatusFound, "/cart")
@@ -142,12 +154,16 @@ func (h *ShopHandler) RemoveCartItem(c *gin.Context) {
 		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}
-	if err := h.cartService.RemoveItem(*user, uri.ID); err != nil {
+	if err := h.cartService.RemoveItem(c.Request.Context(), *user, uri.ID); err != nil {
 		if errors.Is(err, services.ErrCartItemNotFound) {
 			c.AbortWithStatus(http.StatusNotFound)
 			return
 		}
-		c.String(http.StatusBadRequest, "Could not remove cart item")
+		if errors.Is(err, services.ErrInvalidCartInput) {
+			c.String(http.StatusBadRequest, "Could not remove cart item")
+			return
+		}
+		c.String(http.StatusInternalServerError, "Could not remove cart item")
 		return
 	}
 	c.Redirect(http.StatusFound, "/cart")
@@ -159,7 +175,7 @@ func (h *ShopHandler) Checkout(c *gin.Context) {
 		c.AbortWithStatus(http.StatusUnauthorized)
 		return
 	}
-	order, err := h.orderService.CreateOrder(*user)
+	order, err := h.orderService.CreateOrder(c.Request.Context(), *user)
 	if err != nil {
 		switch {
 		case errors.Is(err, services.ErrCartNotFound), errors.Is(err, services.ErrCartEmpty), errors.Is(err, services.ErrInvalidQuantity):
@@ -198,7 +214,7 @@ func (h *ShopHandler) ListOrders(c *gin.Context) {
 		c.AbortWithStatus(http.StatusUnauthorized)
 		return
 	}
-	orders, err := h.orderService.ListUserOrders(user.ID)
+	orders, err := h.orderService.ListUserOrders(c.Request.Context(), user.ID)
 	if err != nil {
 		c.String(http.StatusInternalServerError, "Could not load orders")
 		return
@@ -217,7 +233,7 @@ func (h *ShopHandler) OrderDetail(c *gin.Context) {
 		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}
-	order, err := h.orderService.GetUserOrder(user.ID, uint(id))
+	order, err := h.orderService.GetUserOrder(c.Request.Context(), user.ID, uint(id))
 	if err != nil {
 		c.AbortWithStatus(http.StatusNotFound)
 		return

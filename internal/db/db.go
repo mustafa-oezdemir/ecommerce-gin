@@ -3,7 +3,6 @@ package db
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -16,9 +15,7 @@ import (
 	"github.com/mustafa-oezdemir/ecommerce-gin/migrations"
 )
 
-var DB *gorm.DB
-
-func Init(cfg *config.Config) error {
+func Open(cfg *config.Config) (*gorm.DB, error) {
 	databaseLogger := gormlogger.New(
 		slog.NewLogLogger(slog.Default().Handler(), slog.LevelWarn),
 		gormlogger.Config{
@@ -31,11 +28,11 @@ func Init(cfg *config.Config) error {
 	)
 	database, err := gorm.Open(mysql.Open(cfg.DSN), &gorm.Config{TranslateError: true, Logger: databaseLogger})
 	if err != nil {
-		return fmt.Errorf("open database: %w", err)
+		return nil, fmt.Errorf("open database: %w", err)
 	}
 	sqlDB, err := database.DB()
 	if err != nil {
-		return fmt.Errorf("get connection pool: %w", err)
+		return nil, fmt.Errorf("get connection pool: %w", err)
 	}
 	sqlDB.SetMaxOpenConns(cfg.DBMaxOpenConns)
 	sqlDB.SetMaxIdleConns(cfg.DBMaxIdleConns)
@@ -46,25 +43,24 @@ func Init(cfg *config.Config) error {
 	defer cancel()
 	if err := sqlDB.PingContext(ctx); err != nil {
 		_ = sqlDB.Close()
-		return fmt.Errorf("ping database: %w", err)
+		return nil, fmt.Errorf("ping database: %w", err)
 	}
 	if err := migrations.Apply(database); err != nil {
 		_ = sqlDB.Close()
-		return fmt.Errorf("apply migrations: %w", err)
+		return nil, fmt.Errorf("apply migrations: %w", err)
 	}
-	DB = database
-	return nil
+	return database, nil
 }
 
-func SQL() (*sql.DB, error) {
-	if DB == nil {
-		return nil, errors.New("database is not initialized")
+func SQL(database *gorm.DB) (*sql.DB, error) {
+	if database == nil {
+		return nil, fmt.Errorf("database is required")
 	}
-	return DB.DB()
+	return database.DB()
 }
 
-func Close() error {
-	sqlDB, err := SQL()
+func Close(database *gorm.DB) error {
+	sqlDB, err := SQL(database)
 	if err != nil {
 		return err
 	}

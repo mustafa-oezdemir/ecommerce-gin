@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/mustafa-oezdemir/ecommerce-gin/internal/db"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/models"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/services"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/uploads"
@@ -15,35 +14,56 @@ import (
 )
 
 type EmployeeHandler struct {
+	database     *gorm.DB
 	orderService *services.OrderService
 	mailService  *services.MailService
 	imageStore   *uploads.ImageStore
 }
 
-func NewEmployeeHandler(imageStore *uploads.ImageStore) *EmployeeHandler {
+func NewEmployeeHandler(database *gorm.DB, imageStore *uploads.ImageStore) *EmployeeHandler {
+	if database == nil {
+		panic("handlers: database is required")
+	}
 	if imageStore == nil {
 		panic("handlers: product image store is required")
 	}
-	return &EmployeeHandler{orderService: services.NewOrderService(), mailService: services.NewMailServiceFromEnv(), imageStore: imageStore}
+	return &EmployeeHandler{database: database, orderService: services.NewOrderService(database), mailService: services.NewMailServiceFromEnv(), imageStore: imageStore}
 }
 
 func (h *EmployeeHandler) Dashboard(c *gin.Context) {
+	database := h.database.WithContext(c.Request.Context())
 	var pendingOrders, processingOrders, lowStockProducts, outOfStockProducts int64
-	db.DB.Model(&models.Order{}).Where("status = ?", models.OrderStatusPending).Count(&pendingOrders)
-	db.DB.Model(&models.Order{}).Where("status = ?", models.OrderStatusProcessing).Count(&processingOrders)
-	db.DB.Model(&models.Product{}).Where("active = ? AND stock BETWEEN ? AND ?", true, 1, 5).Count(&lowStockProducts)
-	db.DB.Model(&models.Product{}).Where("active = ? AND stock = ?", true, 0).Count(&outOfStockProducts)
+	queries := []func() error{
+		func() error {
+			return database.Model(&models.Order{}).Where("status = ?", models.OrderStatusPending).Count(&pendingOrders).Error
+		},
+		func() error {
+			return database.Model(&models.Order{}).Where("status = ?", models.OrderStatusProcessing).Count(&processingOrders).Error
+		},
+		func() error {
+			return database.Model(&models.Product{}).Where("active = ? AND stock BETWEEN ? AND ?", true, 1, 5).Count(&lowStockProducts).Error
+		},
+		func() error {
+			return database.Model(&models.Product{}).Where("active = ? AND stock = ?", true, 0).Count(&outOfStockProducts).Error
+		},
+	}
+	for _, query := range queries {
+		if err := query(); err != nil {
+			c.String(http.StatusInternalServerError, "Could not load dashboard")
+			return
+		}
+	}
 	c.HTML(http.StatusOK, "employee_dashboard.tmpl", viewData(c, gin.H{"PendingOrders": pendingOrders, "ProcessingOrders": processingOrders, "LowStockProducts": lowStockProducts, "OutOfStockProducts": outOfStockProducts}))
 }
 
 func (h *EmployeeHandler) ListProducts(c *gin.Context) {
 	var products []models.Product
-	if err := db.DB.Preload("Category").Order("created_at DESC").Find(&products).Error; err != nil {
+	if err := h.database.WithContext(c.Request.Context()).Preload("Category").Order("created_at DESC").Find(&products).Error; err != nil {
 		c.String(http.StatusInternalServerError, "Could not load products")
 		return
 	}
 	var categories []models.Category
-	if err := db.DB.Order("name ASC").Find(&categories).Error; err != nil {
+	if err := h.database.WithContext(c.Request.Context()).Order("name ASC").Find(&categories).Error; err != nil {
 		c.String(http.StatusInternalServerError, "Could not load products")
 		return
 	}
@@ -74,7 +94,7 @@ func (h *EmployeeHandler) CreateProduct(c *gin.Context) {
 	var categoryID *uint
 	if req.CategoryID != 0 {
 		var category models.Category
-		if err := db.DB.WithContext(c.Request.Context()).First(&category, req.CategoryID).Error; err != nil {
+		if err := h.database.WithContext(c.Request.Context()).First(&category, req.CategoryID).Error; err != nil {
 			c.String(http.StatusBadRequest, "Invalid product data")
 			return
 		}
@@ -86,7 +106,7 @@ func (h *EmployeeHandler) CreateProduct(c *gin.Context) {
 		return
 	}
 	product := models.Product{Name: name, Description: strings.TrimSpace(req.Description), ImageFilename: imageFilename, PriceCents: priceCents, Stock: req.Stock, Active: true, CategoryID: categoryID}
-	if err := db.DB.WithContext(c.Request.Context()).Create(&product).Error; err != nil {
+	if err := h.database.WithContext(c.Request.Context()).Create(&product).Error; err != nil {
 		h.cleanupProductImage(imageFilename)
 		c.String(http.StatusInternalServerError, "Could not create product")
 		return
@@ -105,7 +125,7 @@ func (h *EmployeeHandler) UpdateStock(c *gin.Context) {
 		c.String(http.StatusBadRequest, "Invalid stock value")
 		return
 	}
-	result := db.DB.Model(&models.Product{}).Where("id = ?", uri.ID).Update("stock", req.Stock)
+	result := h.database.WithContext(c.Request.Context()).Model(&models.Product{}).Where("id = ?", uri.ID).Update("stock", req.Stock)
 	if result.Error != nil {
 		c.String(http.StatusInternalServerError, "Could not update stock")
 		return
@@ -141,13 +161,13 @@ func (h *EmployeeHandler) UpdateProduct(c *gin.Context) {
 	var categoryID *uint
 	if req.CategoryID != 0 {
 		var category models.Category
-		if err := db.DB.First(&category, req.CategoryID).Error; err != nil {
+		if err := h.database.WithContext(c.Request.Context()).First(&category, req.CategoryID).Error; err != nil {
 			c.String(http.StatusBadRequest, "Invalid product data")
 			return
 		}
 		categoryID = &category.ID
 	}
-	result := db.DB.Model(&models.Product{}).Where("id = ?", uri.ID).Updates(map[string]any{"name": name, "description": strings.TrimSpace(req.Description), "price_cents": priceCents, "stock": req.Stock, "category_id": categoryID})
+	result := h.database.WithContext(c.Request.Context()).Model(&models.Product{}).Where("id = ?", uri.ID).Updates(map[string]any{"name": name, "description": strings.TrimSpace(req.Description), "price_cents": priceCents, "stock": req.Stock, "category_id": categoryID})
 	if result.Error != nil {
 		c.String(http.StatusInternalServerError, "Could not update product")
 		return
@@ -165,7 +185,7 @@ func (h *EmployeeHandler) DeactivateProduct(c *gin.Context) {
 		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}
-	result := db.DB.Model(&models.Product{}).Where("id = ?", uri.ID).Update("active", false)
+	result := h.database.WithContext(c.Request.Context()).Model(&models.Product{}).Where("id = ?", uri.ID).Update("active", false)
 	if result.Error != nil {
 		c.String(http.StatusInternalServerError, "Could not deactivate product")
 		return
@@ -179,7 +199,7 @@ func (h *EmployeeHandler) DeactivateProduct(c *gin.Context) {
 
 func (h *EmployeeHandler) ListOrders(c *gin.Context) {
 	var orders []models.Order
-	if err := db.DB.Preload("Items").Preload("User").Order("created_at DESC").Find(&orders).Error; err != nil {
+	if err := h.database.WithContext(c.Request.Context()).Preload("Items").Preload("User").Order("created_at DESC").Find(&orders).Error; err != nil {
 		c.String(http.StatusInternalServerError, "Could not load orders")
 		return
 	}
@@ -197,7 +217,7 @@ func (h *EmployeeHandler) UpdateOrderStatus(c *gin.Context) {
 		c.String(http.StatusBadRequest, "Invalid order status")
 		return
 	}
-	err := h.orderService.UpdateStatus(uri.ID, models.OrderStatus(req.Status))
+	err := h.orderService.UpdateStatus(c.Request.Context(), uri.ID, models.OrderStatus(req.Status))
 	if err != nil {
 		if errors.Is(err, services.ErrInvalidTransition) {
 			c.String(http.StatusConflict, "Invalid order status transition")
@@ -211,7 +231,7 @@ func (h *EmployeeHandler) UpdateOrderStatus(c *gin.Context) {
 		return
 	}
 	var order models.Order
-	if err := db.DB.Preload("User").First(&order, uri.ID).Error; err == nil {
+	if err := h.database.WithContext(c.Request.Context()).Preload("User").First(&order, uri.ID).Error; err == nil {
 		go h.mailService.SendOrderStatusChanged(order.User, order)
 	}
 	c.Redirect(http.StatusFound, "/employee/orders")

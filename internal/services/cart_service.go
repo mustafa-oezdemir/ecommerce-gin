@@ -1,11 +1,13 @@
 package services
 
 import (
+	"context"
 	"errors"
+	"fmt"
 
-	"github.com/mustafa-oezdemir/ecommerce-gin/internal/db"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/models"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/repositories"
+	"gorm.io/gorm"
 )
 
 var (
@@ -16,45 +18,59 @@ var (
 )
 
 type CartService struct {
-	repo *repositories.CartRepository
+	database *gorm.DB
+	repo     cartRepository
 }
 
-func NewCartService() *CartService {
-	return &CartService{
-		repo: repositories.NewCartRepository(),
-	}
+type cartRepository interface {
+	GetOrCreateCart(ctx context.Context, userID uint) (*models.Cart, error)
+	AddItem(ctx context.Context, cartID, productID uint, qty int) error
+	ClearCart(ctx context.Context, cartID uint) error
+	UpdateQuantityForUser(ctx context.Context, userID, itemID uint, quantity int) (bool, error)
+	RemoveItemForUser(ctx context.Context, userID, itemID uint) (bool, error)
 }
 
-func (s *CartService) AddToCart(user models.User, productID uint, qty int) error {
+func NewCartService(database *gorm.DB) *CartService {
+	return newCartService(database, repositories.NewCartRepository(database))
+}
+
+func newCartService(database *gorm.DB, repo cartRepository) *CartService {
+	return &CartService{database: database, repo: repo}
+}
+
+func (s *CartService) AddToCart(ctx context.Context, user models.User, productID uint, qty int) error {
 	if user.ID == 0 || productID == 0 || qty < 1 || qty > 100 {
 		return ErrInvalidCartInput
 	}
 	var product models.Product
-	if err := db.DB.First(&product, productID).Error; err != nil {
-		return ErrProductNotFound
+	if err := s.database.WithContext(ctx).First(&product, productID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrProductNotFound
+		}
+		return fmt.Errorf("load product: %w", err)
 	}
 	if !product.Active {
 		return ErrProductInactive
 	}
-	cart, err := s.repo.GetOrCreateCart(user.ID)
+	cart, err := s.repo.GetOrCreateCart(ctx, user.ID)
 	if err != nil {
 		return err
 	}
-	return s.repo.AddItem(cart.ID, productID, qty)
+	return s.repo.AddItem(ctx, cart.ID, productID, qty)
 }
 
-func (s *CartService) GetCart(user models.User) (*models.Cart, error) {
+func (s *CartService) GetCart(ctx context.Context, user models.User) (*models.Cart, error) {
 	if user.ID == 0 {
 		return nil, ErrInvalidCartInput
 	}
-	return s.repo.GetOrCreateCart(user.ID)
+	return s.repo.GetOrCreateCart(ctx, user.ID)
 }
 
-func (s *CartService) UpdateQuantity(user models.User, itemID uint, quantity int) error {
+func (s *CartService) UpdateQuantity(ctx context.Context, user models.User, itemID uint, quantity int) error {
 	if user.ID == 0 || itemID == 0 || quantity < 1 || quantity > 100 {
 		return ErrInvalidCartInput
 	}
-	found, err := s.repo.UpdateQuantityForUser(user.ID, itemID, quantity)
+	found, err := s.repo.UpdateQuantityForUser(ctx, user.ID, itemID, quantity)
 	if err != nil {
 		return err
 	}
@@ -64,11 +80,11 @@ func (s *CartService) UpdateQuantity(user models.User, itemID uint, quantity int
 	return nil
 }
 
-func (s *CartService) RemoveItem(user models.User, itemID uint) error {
+func (s *CartService) RemoveItem(ctx context.Context, user models.User, itemID uint) error {
 	if user.ID == 0 || itemID == 0 {
 		return ErrInvalidCartInput
 	}
-	found, err := s.repo.RemoveItemForUser(user.ID, itemID)
+	found, err := s.repo.RemoveItemForUser(ctx, user.ID, itemID)
 	if err != nil {
 		return err
 	}
@@ -78,10 +94,10 @@ func (s *CartService) RemoveItem(user models.User, itemID uint) error {
 	return nil
 }
 
-func (s *CartService) ClearCart(user models.User) error {
-	cart, err := s.repo.GetOrCreateCart(user.ID)
+func (s *CartService) ClearCart(ctx context.Context, user models.User) error {
+	cart, err := s.repo.GetOrCreateCart(ctx, user.ID)
 	if err != nil {
 		return err
 	}
-	return s.repo.ClearCart(cart.ID)
+	return s.repo.ClearCart(ctx, cart.ID)
 }

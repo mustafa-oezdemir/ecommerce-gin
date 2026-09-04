@@ -8,40 +8,64 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/mustafa-oezdemir/ecommerce-gin/internal/db"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/logging"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/models"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/validation"
 	"golang.org/x/crypto/bcrypt"
+	"gorm.io/gorm"
 )
 
 type AdminHandler struct {
+	database  *gorm.DB
 	logReader *logging.Reader
 }
 
-func NewAdminHandler(logReader *logging.Reader) *AdminHandler {
+func NewAdminHandler(database *gorm.DB, logReader *logging.Reader) *AdminHandler {
+	if database == nil {
+		panic("handlers: database is required")
+	}
 	if logReader == nil {
 		panic("handlers: application log reader is required")
 	}
-	return &AdminHandler{logReader: logReader}
+	return &AdminHandler{database: database, logReader: logReader}
 }
 
 func (h *AdminHandler) Dashboard(c *gin.Context) {
+	database := h.database.WithContext(c.Request.Context())
 	var customers, employees, products, pendingOrders, lowStock, totalOrders int64
 	var revenue struct{ Total int64 }
-	db.DB.Model(&models.User{}).Where("role = ?", models.RoleCustomer).Count(&customers)
-	db.DB.Model(&models.User{}).Where("role = ?", models.RoleEmployee).Count(&employees)
-	db.DB.Model(&models.Product{}).Count(&products)
-	db.DB.Model(&models.Product{}).Where("active = ? AND stock <= ?", true, 5).Count(&lowStock)
-	db.DB.Model(&models.Order{}).Where("status = ?", models.OrderStatusPending).Count(&pendingOrders)
-	db.DB.Model(&models.Order{}).Count(&totalOrders)
-	db.DB.Model(&models.Order{}).Select("COALESCE(SUM(total_cents), 0) AS total").Where("status <> ?", models.OrderStatusCancelled).Scan(&revenue)
+	queries := []func() error{
+		func() error {
+			return database.Model(&models.User{}).Where("role = ?", models.RoleCustomer).Count(&customers).Error
+		},
+		func() error {
+			return database.Model(&models.User{}).Where("role = ?", models.RoleEmployee).Count(&employees).Error
+		},
+		func() error { return database.Model(&models.Product{}).Count(&products).Error },
+		func() error {
+			return database.Model(&models.Product{}).Where("active = ? AND stock <= ?", true, 5).Count(&lowStock).Error
+		},
+		func() error {
+			return database.Model(&models.Order{}).Where("status = ?", models.OrderStatusPending).Count(&pendingOrders).Error
+		},
+		func() error { return database.Model(&models.Order{}).Count(&totalOrders).Error },
+		func() error {
+			return database.Model(&models.Order{}).Select("COALESCE(SUM(total_cents), 0) AS total").Where("status <> ?", models.OrderStatusCancelled).Scan(&revenue).Error
+		},
+	}
+	for _, query := range queries {
+		if err := query(); err != nil {
+			slog.Error("admin dashboard database query failed", "error", err)
+			c.String(http.StatusInternalServerError, "Could not load dashboard")
+			return
+		}
+	}
 	c.HTML(http.StatusOK, "admin_dashboard.tmpl", viewData(c, gin.H{"Customers": customers, "Employees": employees, "Products": products, "PendingOrders": pendingOrders, "LowStock": lowStock, "TotalOrders": totalOrders, "RevenueCents": revenue.Total}))
 }
 
 func (h *AdminHandler) ListUsers(c *gin.Context) {
 	var users []models.User
-	if err := db.DB.Order("created_at DESC").Find(&users).Error; err != nil {
+	if err := h.database.WithContext(c.Request.Context()).Order("created_at DESC").Find(&users).Error; err != nil {
 		c.String(http.StatusInternalServerError, "Could not load users")
 		return
 	}
@@ -98,7 +122,7 @@ func (h *AdminHandler) CreateUser(c *gin.Context) {
 		return
 	}
 	user := models.User{Name: name, Email: email, Password: string(hash), Role: models.Role(req.Role)}
-	if err := db.DB.Create(&user).Error; err != nil {
+	if err := h.database.WithContext(c.Request.Context()).Create(&user).Error; err != nil {
 		c.String(http.StatusConflict, "Could not create user")
 		return
 	}
@@ -107,7 +131,7 @@ func (h *AdminHandler) CreateUser(c *gin.Context) {
 
 func (h *AdminHandler) ListOrders(c *gin.Context) {
 	var orders []models.Order
-	if err := db.DB.Preload("Items").Preload("User").Order("created_at DESC").Find(&orders).Error; err != nil {
+	if err := h.database.WithContext(c.Request.Context()).Preload("Items").Preload("User").Order("created_at DESC").Find(&orders).Error; err != nil {
 		c.String(http.StatusInternalServerError, "Could not load orders")
 		return
 	}
@@ -116,7 +140,7 @@ func (h *AdminHandler) ListOrders(c *gin.Context) {
 
 func (h *AdminHandler) ListCategories(c *gin.Context) {
 	var categories []models.Category
-	if err := db.DB.Order("name ASC").Find(&categories).Error; err != nil {
+	if err := h.database.WithContext(c.Request.Context()).Order("name ASC").Find(&categories).Error; err != nil {
 		c.String(http.StatusInternalServerError, "Could not load categories")
 		return
 	}
@@ -134,7 +158,7 @@ func (h *AdminHandler) CreateCategory(c *gin.Context) {
 		c.String(http.StatusBadRequest, "Invalid category data")
 		return
 	}
-	if err := db.DB.Create(&category).Error; err != nil {
+	if err := h.database.WithContext(c.Request.Context()).Create(&category).Error; err != nil {
 		c.String(http.StatusConflict, "Could not create category")
 		return
 	}
@@ -147,7 +171,7 @@ func (h *AdminHandler) DeleteCategory(c *gin.Context) {
 		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}
-	result := db.DB.Delete(&models.Category{}, uri.ID)
+	result := h.database.WithContext(c.Request.Context()).Delete(&models.Category{}, uri.ID)
 	if result.Error != nil {
 		c.String(http.StatusInternalServerError, "Could not delete category")
 		return

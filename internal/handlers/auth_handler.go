@@ -7,18 +7,21 @@ import (
 
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
-	"github.com/mustafa-oezdemir/ecommerce-gin/internal/db"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/metrics"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/middleware"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/models"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/validation"
 	"golang.org/x/crypto/bcrypt"
+	"gorm.io/gorm"
 )
 
-type AuthHandler struct{}
+type AuthHandler struct{ database *gorm.DB }
 
-func NewAuthHandler() *AuthHandler {
-	return &AuthHandler{}
+func NewAuthHandler(database *gorm.DB) *AuthHandler {
+	if database == nil {
+		panic("handlers: database is required")
+	}
+	return &AuthHandler{database: database}
 }
 
 func (h *AuthHandler) ShowLogin(c *gin.Context) {
@@ -35,7 +38,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	password := req.Password
 
 	var user models.User
-	if err := db.DB.Where("email = ?", email).First(&user).Error; err != nil {
+	if err := h.database.WithContext(c.Request.Context()).Where("email = ?", email).First(&user).Error; err != nil {
 		if metric := metrics.Default(); metric != nil {
 			metric.LoginFailures.Inc()
 		}

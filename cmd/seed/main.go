@@ -25,11 +25,12 @@ func main() {
 		log.Fatal("seed is disabled in production")
 	}
 
-	if err := appdb.Init(cfg); err != nil {
+	database, err := appdb.Open(cfg)
+	if err != nil {
 		log.Fatalf("database initialization failed: %v", err)
 	}
 	defer func() {
-		if err := appdb.Close(); err != nil {
+		if err := appdb.Close(database); err != nil {
 			log.Printf("database close failed: %v", err)
 		}
 	}()
@@ -56,16 +57,16 @@ func main() {
 	}
 
 	for _, user := range users {
-		if err := createUserIfNotExists(appdb.DB, user); err != nil {
+		if err := createUserIfNotExists(database, user); err != nil {
 			log.Fatalf("seed user %s failed: %v", user.Email, err)
 		}
 	}
-	if err := translateLegacyDemoData(appdb.DB); err != nil {
+	if err := translateLegacyDemoData(database); err != nil {
 		log.Fatalf("translate legacy demo data failed: %v", err)
 	}
 
 	category := models.Category{Name: "Electronics", Description: "Demo electronics products"}
-	if err := appdb.DB.Where("name = ?", category.Name).FirstOrCreate(&category).Error; err != nil {
+	if err := database.Where("name = ?", category.Name).FirstOrCreate(&category).Error; err != nil {
 		log.Fatalf("seed category failed: %v", err)
 	}
 	products := []models.Product{
@@ -74,8 +75,8 @@ func main() {
 	}
 	for _, product := range products {
 		var existing models.Product
-		if err := appdb.DB.Where("name = ?", product.Name).First(&existing).Error; errors.Is(err, gorm.ErrRecordNotFound) {
-			if err := appdb.DB.Create(&product).Error; err != nil {
+		if err := database.Where("name = ?", product.Name).First(&existing).Error; errors.Is(err, gorm.ErrRecordNotFound) {
+			if err := database.Create(&product).Error; err != nil {
 				log.Fatalf("seed product %s failed: %v", product.Name, err)
 			}
 		} else if err != nil {
