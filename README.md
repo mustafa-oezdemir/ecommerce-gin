@@ -90,6 +90,9 @@ Copy `.env.example` and keep `.env` private. Docker passes only application-requ
 | `LOG_FILE` | Rotating application log path; Docker uses `/app/logs/ecommerce.log` |
 | `LOG_MAX_SIZE_MB`, `LOG_MAX_BACKUPS`, `LOG_MAX_AGE_DAYS` | File rotation and retention limits |
 | `LOG_COMPRESS`, `LOG_ADD_SOURCE` | Compress rotated files and optionally include source locations |
+| `HTTP_READ_HEADER_TIMEOUT`, `HTTP_READ_TIMEOUT`, `HTTP_WRITE_TIMEOUT`, `HTTP_IDLE_TIMEOUT` | Public and metrics server connection timeouts |
+| `HTTP_SHUTDOWN_TIMEOUT` | Maximum graceful-shutdown duration before connections are forced closed |
+| `HTTP_MAX_HEADER_BYTES` | Maximum accepted HTTP request-header size |
 | `MYSQL_*` | MySQL connection settings |
 | `DB_MAX_OPEN_CONNS`, `DB_MAX_IDLE_CONNS` | Database connection pool limits |
 | `DB_CONN_MAX_LIFETIME`, `DB_CONN_MAX_IDLE_TIME` | Connection rotation and idle limits |
@@ -138,6 +141,12 @@ docker compose exec app tail -f /app/logs/ecommerce.log
 ```
 
 For a host process, the default file is `logs/ecommerce.log`. Rotation defaults to 100 MB per file, five backups, 28 days of retention, and gzip compression.
+
+## HTTP server architecture
+
+Router composition and HTTP process management live in `internal/server`, leaving `cmd/server` as the application composition root. The application and metrics listeners start as one supervised group: if either listener fails, both shut down. `SIGINT` and `SIGTERM` stop accepting new connections, allow active requests to finish within the configured shutdown timeout, and then force-close remaining connections.
+
+Both listeners enforce explicit read-header, read, write, idle, and maximum-header limits. Request contexts propagate to database operations, and database/log resources close after the listeners have stopped.
 
 ## Development
 

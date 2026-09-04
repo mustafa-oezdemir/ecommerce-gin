@@ -14,36 +14,42 @@ import (
 )
 
 type Config struct {
-	AppEnv            string
-	AppPort           string
-	MetricsPort       string
-	GinMode           string
-	TrustedProxies    []string
-	LogLevel          string
-	LogConsoleFormat  string
-	LogFile           string
-	LogMaxSizeMB      int
-	LogMaxBackups     int
-	LogMaxAgeDays     int
-	LogCompress       bool
-	LogAddSource      bool
-	MySQLHost         string
-	MySQLPort         string
-	MySQLDatabase     string
-	MySQLUser         string
-	MySQLPassword     string
-	DBMaxOpenConns    int
-	DBMaxIdleConns    int
-	DBConnMaxLifetime time.Duration
-	DBConnMaxIdleTime time.Duration
-	DBConnectTimeout  time.Duration
-	DBReadTimeout     time.Duration
-	DBWriteTimeout    time.Duration
-	DBPingTimeout     time.Duration
-	SessionSecret     string
-	SessionSecure     bool
-	CSRFKey           []byte
-	DSN               string
+	AppEnv                string
+	AppPort               string
+	MetricsPort           string
+	GinMode               string
+	TrustedProxies        []string
+	LogLevel              string
+	LogConsoleFormat      string
+	LogFile               string
+	LogMaxSizeMB          int
+	LogMaxBackups         int
+	LogMaxAgeDays         int
+	LogCompress           bool
+	LogAddSource          bool
+	HTTPReadHeaderTimeout time.Duration
+	HTTPReadTimeout       time.Duration
+	HTTPWriteTimeout      time.Duration
+	HTTPIdleTimeout       time.Duration
+	HTTPShutdownTimeout   time.Duration
+	HTTPMaxHeaderBytes    int
+	MySQLHost             string
+	MySQLPort             string
+	MySQLDatabase         string
+	MySQLUser             string
+	MySQLPassword         string
+	DBMaxOpenConns        int
+	DBMaxIdleConns        int
+	DBConnMaxLifetime     time.Duration
+	DBConnMaxIdleTime     time.Duration
+	DBConnectTimeout      time.Duration
+	DBReadTimeout         time.Duration
+	DBWriteTimeout        time.Duration
+	DBPingTimeout         time.Duration
+	SessionSecret         string
+	SessionSecure         bool
+	CSRFKey               []byte
+	DSN                   string
 }
 
 func Load() *Config {
@@ -64,6 +70,12 @@ func Load() *Config {
 	logMaxAgeDays := envInt("LOG_MAX_AGE_DAYS", 28)
 	logCompress := envBool("LOG_COMPRESS", true)
 	logAddSource := envBool("LOG_ADD_SOURCE", false)
+	httpReadHeaderTimeout := envDuration("HTTP_READ_HEADER_TIMEOUT", 5*time.Second)
+	httpReadTimeout := envDuration("HTTP_READ_TIMEOUT", 15*time.Second)
+	httpWriteTimeout := envDuration("HTTP_WRITE_TIMEOUT", 30*time.Second)
+	httpIdleTimeout := envDuration("HTTP_IDLE_TIMEOUT", 60*time.Second)
+	httpShutdownTimeout := envDuration("HTTP_SHUTDOWN_TIMEOUT", 10*time.Second)
+	httpMaxHeaderBytes := envInt("HTTP_MAX_HEADER_BYTES", 1<<20)
 	mysqlHost := strings.TrimSpace(os.Getenv("MYSQL_HOST"))
 	mysqlPort := strings.TrimSpace(os.Getenv("MYSQL_PORT"))
 	mysqlDB := strings.TrimSpace(os.Getenv("MYSQL_DATABASE"))
@@ -128,6 +140,9 @@ func Load() *Config {
 	if logMaxSizeMB < 1 || logMaxBackups < 1 || logMaxAgeDays < 1 {
 		log.Fatal("LOG_MAX_SIZE_MB, LOG_MAX_BACKUPS, and LOG_MAX_AGE_DAYS must be at least 1")
 	}
+	if httpMaxHeaderBytes < 8192 {
+		log.Fatal("HTTP_MAX_HEADER_BYTES must be at least 8192")
+	}
 
 	if mysqlHost == "" || mysqlPort == "" || mysqlDB == "" || mysqlUser == "" || mysqlPassword == "" {
 		log.Fatal("Required MySQL environment variables are missing: MYSQL_HOST, MYSQL_PORT, MYSQL_DATABASE, MYSQL_USER, MYSQL_PASSWORD")
@@ -176,36 +191,42 @@ func Load() *Config {
 	dsn := mysqlConfig.FormatDSN()
 
 	return &Config{
-		AppEnv:            appEnv,
-		AppPort:           appPort,
-		MetricsPort:       metricsPort,
-		GinMode:           ginMode,
-		TrustedProxies:    trustedProxies,
-		LogLevel:          logLevel,
-		LogConsoleFormat:  logConsoleFormat,
-		LogFile:           logFile,
-		LogMaxSizeMB:      logMaxSizeMB,
-		LogMaxBackups:     logMaxBackups,
-		LogMaxAgeDays:     logMaxAgeDays,
-		LogCompress:       logCompress,
-		LogAddSource:      logAddSource,
-		MySQLHost:         mysqlHost,
-		MySQLPort:         mysqlPort,
-		MySQLDatabase:     mysqlDB,
-		MySQLUser:         mysqlUser,
-		MySQLPassword:     mysqlPassword,
-		DBMaxOpenConns:    dbMaxOpenConns,
-		DBMaxIdleConns:    dbMaxIdleConns,
-		DBConnMaxLifetime: dbConnMaxLifetime,
-		DBConnMaxIdleTime: dbConnMaxIdleTime,
-		DBConnectTimeout:  dbConnectTimeout,
-		DBReadTimeout:     dbReadTimeout,
-		DBWriteTimeout:    dbWriteTimeout,
-		DBPingTimeout:     dbPingTimeout,
-		SessionSecret:     sessionSecret,
-		SessionSecure:     sessionSecure,
-		CSRFKey:           csrfKey,
-		DSN:               dsn,
+		AppEnv:                appEnv,
+		AppPort:               appPort,
+		MetricsPort:           metricsPort,
+		GinMode:               ginMode,
+		TrustedProxies:        trustedProxies,
+		LogLevel:              logLevel,
+		LogConsoleFormat:      logConsoleFormat,
+		LogFile:               logFile,
+		LogMaxSizeMB:          logMaxSizeMB,
+		LogMaxBackups:         logMaxBackups,
+		LogMaxAgeDays:         logMaxAgeDays,
+		LogCompress:           logCompress,
+		LogAddSource:          logAddSource,
+		HTTPReadHeaderTimeout: httpReadHeaderTimeout,
+		HTTPReadTimeout:       httpReadTimeout,
+		HTTPWriteTimeout:      httpWriteTimeout,
+		HTTPIdleTimeout:       httpIdleTimeout,
+		HTTPShutdownTimeout:   httpShutdownTimeout,
+		HTTPMaxHeaderBytes:    httpMaxHeaderBytes,
+		MySQLHost:             mysqlHost,
+		MySQLPort:             mysqlPort,
+		MySQLDatabase:         mysqlDB,
+		MySQLUser:             mysqlUser,
+		MySQLPassword:         mysqlPassword,
+		DBMaxOpenConns:        dbMaxOpenConns,
+		DBMaxIdleConns:        dbMaxIdleConns,
+		DBConnMaxLifetime:     dbConnMaxLifetime,
+		DBConnMaxIdleTime:     dbConnMaxIdleTime,
+		DBConnectTimeout:      dbConnectTimeout,
+		DBReadTimeout:         dbReadTimeout,
+		DBWriteTimeout:        dbWriteTimeout,
+		DBPingTimeout:         dbPingTimeout,
+		SessionSecret:         sessionSecret,
+		SessionSecure:         sessionSecure,
+		CSRFKey:               csrfKey,
+		DSN:                   dsn,
 	}
 }
 
