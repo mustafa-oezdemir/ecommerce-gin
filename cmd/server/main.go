@@ -2,7 +2,8 @@ package main
 
 import (
 	"context"
-	"log"
+	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -21,6 +22,7 @@ import (
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/config"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/db"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/handlers"
+	"github.com/mustafa-oezdemir/ecommerce-gin/internal/logging"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/metrics"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/middleware"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/models"
@@ -28,20 +30,61 @@ import (
 )
 
 func main() {
+	if err := run(); err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "application stopped: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func run() (runErr error) {
 	cfg := config.Load()
-	var loggerHandler slog.Handler = slog.NewTextHandler(os.Stdout, nil)
-	if cfg.AppEnv == "production" {
-		loggerHandler = slog.NewJSONHandler(os.Stdout, nil)
+	logRuntime, err := logging.New(logging.Config{
+		Environment:   cfg.AppEnv,
+		Level:         cfg.LogLevel,
+		ConsoleFormat: cfg.LogConsoleFormat,
+		FilePath:      cfg.LogFile,
+		MaxSizeMB:     cfg.LogMaxSizeMB,
+		MaxBackups:    cfg.LogMaxBackups,
+		MaxAgeDays:    cfg.LogMaxAgeDays,
+		Compress:      cfg.LogCompress,
+		AddSource:     cfg.LogAddSource,
+	})
+	if err != nil {
+		return fmt.Errorf("initialize logging: %w", err)
 	}
-	slog.SetDefault(slog.New(loggerHandler))
+	defer func() {
+		if err := logRuntime.Close(); err != nil {
+			runErr = errors.Join(runErr, fmt.Errorf("close log file: %w", err))
+		}
+	}()
+	slog.SetDefault(logRuntime.Logger)
+	defer func() {
+		if runErr != nil {
+			slog.Error("application stopped with errors", "error", runErr)
+		} else {
+			slog.Info("application stopped cleanly")
+		}
+	}()
 	gin.SetMode(cfg.GinMode)
-	if err := db.Init(cfg); err != nil {
-		log.Fatalf("database initialization failed: %v", err)
+	gin.DisableConsoleColor()
+	gin.DefaultWriter = logging.NewWriter(slog.Default(), slog.LevelDebug, "gin")
+	gin.DefaultErrorWriter = logging.NewWriter(slog.Default(), slog.LevelError, "gin")
+	gin.DebugPrintRouteFunc = func(method, path, handler string, handlerCount int) {
+		slog.Debug("route registered", "method", method, "route", path, "handler", handler, "handler_count", handlerCount)
 	}
+	slog.Info("logging initialized", "file", logRuntime.FilePath(), "minimum_level", cfg.LogLevel, "console_format", cfg.LogConsoleFormat)
+	if err := db.Init(cfg); err != nil {
+		return fmt.Errorf("initialize database: %w", err)
+	}
+	defer func() {
+		if err := db.Close(); err != nil {
+			runErr = errors.Join(runErr, fmt.Errorf("close database: %w", err))
+		}
+	}()
 
 	r := gin.New()
 	if err := r.SetTrustedProxies(cfg.TrustedProxies); err != nil {
-		log.Fatalf("invalid TRUSTED_PROXIES configuration: %v", err)
+		return fmt.Errorf("configure trusted proxies: %w", err)
 	}
 	appMetrics := metrics.New(prometheus.DefaultRegisterer)
 	if sqlDB, err := db.SQL(); err == nil {
@@ -60,7 +103,7 @@ func main() {
 
 	templates, err := web.ParseTemplates()
 	if err != nil {
-		panic(err)
+		return fmt.Errorf("parse templates: %w", err)
 	}
 
 	r.SetHTMLTemplate(templates)
@@ -147,30 +190,36 @@ func main() {
 	}
 	server := &http.Server{Addr: ":" + cfg.AppPort, Handler: serverHandler, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second}
 	metricsServer := &http.Server{Addr: ":" + cfg.MetricsPort, Handler: promhttp.Handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second}
+	serverErrors := make(chan error, 2)
 	go func() {
-		log.Printf("server listening on %s", server.Addr)
+		slog.Info("application server listening", "address", server.Addr)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatal(err)
+			serverErrors <- fmt.Errorf("application server: %w", err)
 		}
 	}()
 	go func() {
-		log.Printf("metrics listening on %s", metricsServer.Addr)
+		slog.Info("metrics server listening", "address", metricsServer.Addr)
 		if err := metricsServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatal(err)
+			serverErrors <- fmt.Errorf("metrics server: %w", err)
 		}
 	}()
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
-	<-stop
+	defer signal.Stop(stop)
+	select {
+	case receivedSignal := <-stop:
+		slog.Info("shutdown signal received", "signal", receivedSignal.String())
+	case err := <-serverErrors:
+		slog.Error("server failure triggered shutdown", "error", err)
+		runErr = errors.Join(runErr, err)
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := server.Shutdown(ctx); err != nil {
-		log.Printf("graceful shutdown failed: %v", err)
+		runErr = errors.Join(runErr, fmt.Errorf("shutdown application server: %w", err))
 	}
 	if err := metricsServer.Shutdown(ctx); err != nil {
-		log.Printf("metrics shutdown failed: %v", err)
+		runErr = errors.Join(runErr, fmt.Errorf("shutdown metrics server: %w", err))
 	}
-	if err := db.Close(); err != nil {
-		log.Printf("database close failed: %v", err)
-	}
+	return runErr
 }

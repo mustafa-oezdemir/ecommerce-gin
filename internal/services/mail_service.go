@@ -2,7 +2,7 @@ package services
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"net/smtp"
 	"os"
 	"strings"
@@ -47,6 +47,7 @@ func (s *MailService) send(to, subject, body string) {
 	}
 	message := "To: " + to + "\r\nFrom: " + s.from + "\r\nSubject: " + subject + "\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n" + body
 	if err := smtp.SendMail(s.host+":"+s.port, nil, s.from, []string{to}, []byte(message)); err != nil {
-		log.Printf("informational email delivery failed: %v", err)
+		errorMessage := strings.NewReplacer(to, "[recipient]", s.from, "[sender]").Replace(err.Error())
+		slog.Warn("informational email delivery failed", "error", errorMessage)
 	}
 }

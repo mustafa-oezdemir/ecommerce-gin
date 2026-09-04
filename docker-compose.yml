@@ -40,6 +40,14 @@ services:
       METRICS_PORT: ${METRICS_PORT}
       GIN_MODE: ${GIN_MODE}
       TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      LOG_CONSOLE_FORMAT: ${LOG_CONSOLE_FORMAT:-text}
+      LOG_FILE: /app/logs/ecommerce.log
+      LOG_MAX_SIZE_MB: ${LOG_MAX_SIZE_MB:-100}
+      LOG_MAX_BACKUPS: ${LOG_MAX_BACKUPS:-5}
+      LOG_MAX_AGE_DAYS: ${LOG_MAX_AGE_DAYS:-28}
+      LOG_COMPRESS: ${LOG_COMPRESS:-true}
+      LOG_ADD_SOURCE: ${LOG_ADD_SOURCE:-false}
       MYSQL_HOST: mysql
       MYSQL_PORT: 3306
       MYSQL_DATABASE: ${MYSQL_DATABASE}
@@ -65,6 +73,9 @@ services:
 
     expose:
       - "9091"
+
+    volumes:
+      - app_logs:/app/logs
 
     depends_on:
       mysql:
@@ -116,3 +127,4 @@ services:
 volumes:
   mysql_data:
   grafana_data:
+  app_logs:

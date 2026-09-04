@@ -5,9 +5,12 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log/slog"
+	"time"
 
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
+	gormlogger "gorm.io/gorm/logger"
 
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/config"
 	"github.com/mustafa-oezdemir/ecommerce-gin/migrations"
@@ -16,7 +19,17 @@ import (
 var DB *gorm.DB
 
 func Init(cfg *config.Config) error {
-	database, err := gorm.Open(mysql.Open(cfg.DSN), &gorm.Config{TranslateError: true})
+	databaseLogger := gormlogger.New(
+		slog.NewLogLogger(slog.Default().Handler(), slog.LevelWarn),
+		gormlogger.Config{
+			SlowThreshold:             500 * time.Millisecond,
+			LogLevel:                  gormlogger.Warn,
+			IgnoreRecordNotFoundError: true,
+			ParameterizedQueries:      true,
+			Colorful:                  false,
+		},
+	)
+	database, err := gorm.Open(mysql.Open(cfg.DSN), &gorm.Config{TranslateError: true, Logger: databaseLogger})
 	if err != nil {
 		return fmt.Errorf("open database: %w", err)
 	}

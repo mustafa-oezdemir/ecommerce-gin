@@ -18,7 +18,8 @@ FROM alpine:3.22
 WORKDIR /app
 
 RUN apk add --no-cache ca-certificates \
-    && addgroup -S app && adduser -S app -G app
+    && addgroup -S app && adduser -S app -G app \
+    && mkdir -p /app/logs && chown app:app /app/logs
 
 COPY --from=builder /out/server /app/server
 COPY --from=builder /out/seed /app/seed

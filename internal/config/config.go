@@ -19,6 +19,14 @@ type Config struct {
 	MetricsPort       string
 	GinMode           string
 	TrustedProxies    []string
+	LogLevel          string
+	LogConsoleFormat  string
+	LogFile           string
+	LogMaxSizeMB      int
+	LogMaxBackups     int
+	LogMaxAgeDays     int
+	LogCompress       bool
+	LogAddSource      bool
 	MySQLHost         string
 	MySQLPort         string
 	MySQLDatabase     string
@@ -48,6 +56,14 @@ func Load() *Config {
 	metricsPort := strings.TrimSpace(os.Getenv("METRICS_PORT"))
 	ginMode := strings.TrimSpace(os.Getenv("GIN_MODE"))
 	trustedProxies := envCSV("TRUSTED_PROXIES")
+	logLevel := strings.ToLower(strings.TrimSpace(os.Getenv("LOG_LEVEL")))
+	logConsoleFormat := strings.ToLower(strings.TrimSpace(os.Getenv("LOG_CONSOLE_FORMAT")))
+	logFile := strings.TrimSpace(os.Getenv("LOG_FILE"))
+	logMaxSizeMB := envInt("LOG_MAX_SIZE_MB", 100)
+	logMaxBackups := envInt("LOG_MAX_BACKUPS", 5)
+	logMaxAgeDays := envInt("LOG_MAX_AGE_DAYS", 28)
+	logCompress := envBool("LOG_COMPRESS", true)
+	logAddSource := envBool("LOG_ADD_SOURCE", false)
 	mysqlHost := strings.TrimSpace(os.Getenv("MYSQL_HOST"))
 	mysqlPort := strings.TrimSpace(os.Getenv("MYSQL_PORT"))
 	mysqlDB := strings.TrimSpace(os.Getenv("MYSQL_DATABASE"))
@@ -89,6 +105,28 @@ func Load() *Config {
 	ginMode = strings.ToLower(ginMode)
 	if appEnv == "production" && ginMode != "release" {
 		log.Fatal("GIN_MODE must be release in production")
+	}
+	if logLevel == "" {
+		logLevel = "info"
+	}
+	if logLevel != "debug" && logLevel != "info" && logLevel != "warn" && logLevel != "error" {
+		log.Fatal("LOG_LEVEL must be one of: debug, info, warn, error")
+	}
+	if logConsoleFormat == "" {
+		if appEnv == "production" {
+			logConsoleFormat = "json"
+		} else {
+			logConsoleFormat = "text"
+		}
+	}
+	if logConsoleFormat != "text" && logConsoleFormat != "json" {
+		log.Fatal("LOG_CONSOLE_FORMAT must be one of: text, json")
+	}
+	if logFile == "" {
+		logFile = "logs/ecommerce.log"
+	}
+	if logMaxSizeMB < 1 || logMaxBackups < 1 || logMaxAgeDays < 1 {
+		log.Fatal("LOG_MAX_SIZE_MB, LOG_MAX_BACKUPS, and LOG_MAX_AGE_DAYS must be at least 1")
 	}
 
 	if mysqlHost == "" || mysqlPort == "" || mysqlDB == "" || mysqlUser == "" || mysqlPassword == "" {
@@ -143,6 +181,14 @@ func Load() *Config {
 		MetricsPort:       metricsPort,
 		GinMode:           ginMode,
 		TrustedProxies:    trustedProxies,
+		LogLevel:          logLevel,
+		LogConsoleFormat:  logConsoleFormat,
+		LogFile:           logFile,
+		LogMaxSizeMB:      logMaxSizeMB,
+		LogMaxBackups:     logMaxBackups,
+		LogMaxAgeDays:     logMaxAgeDays,
+		LogCompress:       logCompress,
+		LogAddSource:      logAddSource,
 		MySQLHost:         mysqlHost,
 		MySQLPort:         mysqlPort,
 		MySQLDatabase:     mysqlDB,
@@ -199,6 +245,18 @@ func envDuration(name string, fallback time.Duration) time.Duration {
 	parsed, err := time.ParseDuration(value)
 	if err != nil || parsed <= 0 {
 		log.Fatalf("%s must be a positive duration (for example 5s or 1m)", name)
+	}
+	return parsed
+}
+
+func envBool(name string, fallback bool) bool {
+	value := strings.TrimSpace(os.Getenv(name))
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.ParseBool(value)
+	if err != nil {
+		log.Fatalf("%s must be a boolean", name)
 	}
 	return parsed
 }

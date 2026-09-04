@@ -85,6 +85,11 @@ Copy `.env.example` and keep `.env` private. Docker passes only application-requ
 | `TRUSTED_PROXIES` | Comma-separated proxy IPs/CIDRs; leave empty for direct traffic |
 | `APP_PORT` | Application HTTP port |
 | `METRICS_PORT` | Internal Prometheus metrics port |
+| `LOG_LEVEL` | Minimum log level: `debug`, `info`, `warn`, or `error` |
+| `LOG_CONSOLE_FORMAT` | Console output format: `text` or `json` |
+| `LOG_FILE` | Rotating application log path; Docker uses `/app/logs/ecommerce.log` |
+| `LOG_MAX_SIZE_MB`, `LOG_MAX_BACKUPS`, `LOG_MAX_AGE_DAYS` | File rotation and retention limits |
+| `LOG_COMPRESS`, `LOG_ADD_SOURCE` | Compress rotated files and optionally include source locations |
 | `MYSQL_*` | MySQL connection settings |
 | `DB_MAX_OPEN_CONNS`, `DB_MAX_IDLE_CONNS` | Database connection pool limits |
 | `DB_CONN_MAX_LIFETIME`, `DB_CONN_MAX_IDLE_TIME` | Connection rotation and idle limits |
@@ -121,6 +126,18 @@ The application exposes Prometheus metrics only on its internal Docker port `909
 Global middleware is installed as one ordered stack: request ID, structured access logging, Prometheus metrics, security headers, panic recovery, and sessions. Access logs use route templates and intentionally omit query strings; successful health-probe logs are skipped to reduce noise, while failures are always logged. Development uses readable text logs and production emits JSON to standard output so the runtime platform can collect and rotate them.
 
 Gin does not trust forwarded client IP headers by default. Set `TRUSTED_PROXIES` only when traffic arrives through known proxy IPs or CIDR ranges; this keeps login rate limiting tied to the real client address without trusting spoofed headers.
+
+## Logging
+
+The application uses one `log/slog` pipeline for HTTP requests, Gin diagnostics, database warnings, application events, and recovered panics. Records are written to the console and to a rotating file. The file is always newline-delimited JSON; the development console defaults to text and production defaults to JSON. Request status controls its level: 2xx/3xx is `INFO`, 4xx is `WARN`, and 5xx is `ERROR`. Raw query strings, passwords, tokens, and session values are not recorded.
+
+Docker stores logs in the persistent `app_logs` volume. Inspect the active file with:
+
+```bash
+docker compose exec app tail -f /app/logs/ecommerce.log
+```
+
+For a host process, the default file is `logs/ecommerce.log`. Rotation defaults to 100 MB per file, five backups, 28 days of retention, and gzip compression.
 
 ## Development
 
