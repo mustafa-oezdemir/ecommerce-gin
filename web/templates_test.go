@@ -48,6 +48,9 @@ func TestAccountTemplateUsesExternalScriptWithoutInlineHandlers(t *testing.T) {
 	if strings.Contains(body, "onsubmit=") || strings.Contains(body, "<script>") {
 		t.Fatal("account template contains CSP-incompatible inline JavaScript")
 	}
+	if !strings.Contains(body, `action="/logout"`) || !strings.Contains(body, ">Log out</button>") {
+		t.Fatal("account template is missing the logout form")
+	}
 }
 
 func TestEmployeeOrdersShowsOnlyAllowedTransitions(t *testing.T) {
