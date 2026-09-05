@@ -3,6 +3,8 @@ package handlers
 import (
 	"errors"
 	"net/http"
+	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -57,10 +59,33 @@ func (h *EmployeeHandler) Dashboard(c *gin.Context) {
 }
 
 func (h *EmployeeHandler) ListProducts(c *gin.Context) {
+	search := strings.TrimSpace(c.Query("q"))
+	if searchRunes := []rune(search); len(searchRunes) > 100 {
+		search = string(searchRunes[:100])
+	}
+	selectedCategoryID, _ := strconv.ParseUint(strings.TrimSpace(c.Query("category_id")), 10, 64)
+	selectedAvailability := strings.ToLower(strings.TrimSpace(c.DefaultQuery("availability", "all")))
+	if !slices.Contains([]string{"all", "active", "inactive"}, selectedAvailability) {
+		selectedAvailability = "all"
+	}
+
 	var products []models.Product
-	if err := h.database.WithContext(c.Request.Context()).Preload("Category").Preload("Images", func(database *gorm.DB) *gorm.DB {
+	query := h.database.WithContext(c.Request.Context()).Preload("Category").Preload("Images", func(database *gorm.DB) *gorm.DB {
 		return database.Order("position ASC, id ASC")
-	}).Order("created_at DESC").Find(&products).Error; err != nil {
+	}).Order("products.created_at DESC")
+	if search != "" {
+		query = query.Where("products.name LIKE ?", "%"+search+"%")
+	}
+	if selectedCategoryID > 0 {
+		query = query.Where("products.category_id = ?", selectedCategoryID)
+	}
+	switch selectedAvailability {
+	case "active":
+		query = query.Where("products.active = ?", true)
+	case "inactive":
+		query = query.Where("products.active = ?", false)
+	}
+	if err := query.Find(&products).Error; err != nil {
 		c.String(http.StatusInternalServerError, "Could not load products")
 		return
 	}
@@ -69,7 +94,23 @@ func (h *EmployeeHandler) ListProducts(c *gin.Context) {
 		c.String(http.StatusInternalServerError, "Could not load products")
 		return
 	}
-	data := gin.H{"Products": products, "Categories": categories, "ImageMaxMB": (h.imageStore.MaxBytes() + (1 << 20) - 1) / (1 << 20), "ImageLimit": maxProductImages}
+	data := gin.H{
+		"Products":             products,
+		"Categories":           categories,
+		"ImageMaxMB":           (h.imageStore.MaxBytes() + (1 << 20) - 1) / (1 << 20),
+		"ImageLimit":           maxProductImages,
+		"Search":               search,
+		"SelectedCategoryID":   uint(selectedCategoryID),
+		"SelectedAvailability": selectedAvailability,
+	}
+	if editID, err := strconv.ParseUint(strings.TrimSpace(c.Query("edit")), 10, 64); err == nil && editID > 0 {
+		for index := range products {
+			if products[index].ID == uint(editID) {
+				data["EditProduct"] = &products[index]
+				break
+			}
+		}
+	}
 	switch c.Query("status") {
 	case "images-added":
 		data["Success"] = "Product images were added successfully."
@@ -216,12 +257,56 @@ func (h *EmployeeHandler) DeactivateProduct(c *gin.Context) {
 }
 
 func (h *EmployeeHandler) ListOrders(c *gin.Context) {
+	userSearch := strings.TrimSpace(c.Query("user"))
+	if searchRunes := []rune(userSearch); len(searchRunes) > 100 {
+		userSearch = string(searchRunes[:100])
+	}
+	selectedStatus := models.OrderStatus(strings.ToLower(strings.TrimSpace(c.Query("status"))))
+	validStatuses := []models.OrderStatus{
+		models.OrderStatusPending,
+		models.OrderStatusProcessing,
+		models.OrderStatusShipped,
+		models.OrderStatusCompleted,
+		models.OrderStatusCancelled,
+	}
+	if !slices.Contains(validStatuses, selectedStatus) {
+		selectedStatus = ""
+	}
+	selectedSort := strings.ToLower(strings.TrimSpace(c.DefaultQuery("sort", "id_desc")))
+	sortOptions := map[string]string{
+		"id_desc":    "orders.id DESC",
+		"id_asc":     "orders.id ASC",
+		"user_asc":   "COALESCE(NULLIF(users.name, ''), users.email) ASC, orders.id DESC",
+		"user_desc":  "COALESCE(NULLIF(users.name, ''), users.email) DESC, orders.id DESC",
+		"total_desc": "orders.total_cents DESC, orders.id DESC",
+		"total_asc":  "orders.total_cents ASC, orders.id DESC",
+	}
+	orderBy, validSort := sortOptions[selectedSort]
+	if !validSort {
+		selectedSort = "id_desc"
+		orderBy = sortOptions[selectedSort]
+	}
+
 	var orders []models.Order
-	if err := h.database.WithContext(c.Request.Context()).Preload("Items").Preload("User").Order("created_at DESC").Find(&orders).Error; err != nil {
+	query := h.database.WithContext(c.Request.Context()).Preload("Items").Preload("User").Joins("JOIN users ON users.id = orders.user_id").Order(orderBy)
+	if userSearch != "" {
+		like := "%" + userSearch + "%"
+		query = query.Where("(users.name LIKE ? OR users.email LIKE ?)", like, like)
+	}
+	if selectedStatus != "" {
+		query = query.Where("orders.status = ?", selectedStatus)
+	}
+	if err := query.Find(&orders).Error; err != nil {
 		c.String(http.StatusInternalServerError, "Could not load orders")
 		return
 	}
-	c.HTML(http.StatusOK, "employee_orders.tmpl", viewData(c, gin.H{"Orders": orders}))
+	c.HTML(http.StatusOK, "employee_orders.tmpl", viewData(c, gin.H{
+		"Orders":         orders,
+		"Statuses":       validStatuses,
+		"UserSearch":     userSearch,
+		"SelectedStatus": string(selectedStatus),
+		"SelectedSort":   selectedSort,
+	}))
 }
 
 func (h *EmployeeHandler) UpdateOrderStatus(c *gin.Context) {

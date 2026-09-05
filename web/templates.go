@@ -24,6 +24,7 @@ func StaticFS() (fs.FS, error) {
 func ParseTemplates() (*template.Template, error) {
 	return template.New("root").Funcs(template.FuncMap{
 		"money":             formatCents,
+		"priceInput":        formatPriceInput,
 		"mulCents":          mulCents,
 		"initials":          initials,
 		"nextOrderStatuses": models.AllowedOrderStatusTransitions,
@@ -56,6 +57,13 @@ func formatCents(cents int64) string {
 		return "-" + formatCents(-cents)
 	}
 	return fmt.Sprintf("%d,%02d €", cents/100, cents%100)
+}
+
+func formatPriceInput(cents int64) string {
+	if cents < 0 {
+		return "-" + formatPriceInput(-cents)
+	}
+	return fmt.Sprintf("%d.%02d", cents/100, cents%100)
 }
 
 func mulCents(priceCents int64, quantity int) int64 {

@@ -138,6 +138,8 @@ func TestEmployeeProductsTemplateRendersMultiImageManagement(t *testing.T) {
 		Model:         gorm.Model{ID: 7},
 		Name:          "Camera",
 		ImageFilename: "cover.jpg",
+		PriceCents:    12999,
+		Active:        true,
 		Images: []models.ProductImage{
 			{ID: 11, ProductID: 7, Filename: "cover.jpg"},
 			{ID: 12, ProductID: 7, Filename: "side.png", Position: 1},
@@ -145,11 +147,13 @@ func TestEmployeeProductsTemplateRendersMultiImageManagement(t *testing.T) {
 	}
 	var output bytes.Buffer
 	if err := templates.ExecuteTemplate(&output, "employee_products.tmpl", map[string]any{
-		"CurrentUser": &employee,
-		"Products":    []models.Product{product},
-		"CSRFField":   template.HTML("csrf"),
-		"ImageMaxMB":  5,
-		"ImageLimit":  8,
+		"CurrentUser":          &employee,
+		"Products":             []models.Product{product},
+		"EditProduct":          &product,
+		"CSRFField":            template.HTML("csrf"),
+		"ImageMaxMB":           5,
+		"ImageLimit":           8,
+		"SelectedAvailability": "all",
 	}); err != nil {
 		t.Fatalf("execute employee products template: %v", err)
 	}
@@ -160,6 +164,11 @@ func TestEmployeeProductsTemplateRendersMultiImageManagement(t *testing.T) {
 		`action="/employee/products/7/images/12/cover"`,
 		`action="/employee/products/7/images/11/delete"`,
 		`2 / 8 images`,
+		`action="/employee/products"`,
+		`name="q"`, `name="category_id"`, `name="availability"`,
+		`href="/products/7"`, `href="/employee/products?edit=7#edit-product"`,
+		`action="/employee/products/7/deactivate"`,
+		`id="new-product"`, `value="129.99"`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("employee image management does not contain %q", want)
@@ -220,8 +229,9 @@ func TestEmployeeOrdersShowsOnlyAllowedTransitions(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			var output bytes.Buffer
 			data := map[string]any{
-				"CSRFField": template.HTML(`<input type="hidden" name="csrf">`),
-				"Orders":    []models.Order{{Model: gorm.Model{ID: 7}, Status: tt.status}},
+				"CSRFField":    template.HTML(`<input type="hidden" name="csrf">`),
+				"Orders":       []models.Order{{Model: gorm.Model{ID: 7}, Status: tt.status}},
+				"SelectedSort": "id_desc",
 			}
 			if err := templates.ExecuteTemplate(&output, "employee_orders.tmpl", data); err != nil {
 				t.Fatalf("execute template: %v", err)
@@ -238,6 +248,36 @@ func TestEmployeeOrdersShowsOnlyAllowedTransitions(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestEmployeeOrdersRendersFiltersAndSorting(t *testing.T) {
+	templates, err := ParseTemplates()
+	if err != nil {
+		t.Fatalf("parse templates: %v", err)
+	}
+	user := models.User{Name: "Ada Lovelace", Email: "ada@example.com"}
+	var output bytes.Buffer
+	data := map[string]any{
+		"Orders":         []models.Order{{Model: gorm.Model{ID: 11}, User: user, Status: models.OrderStatusProcessing, TotalCents: 2599}},
+		"Statuses":       []models.OrderStatus{models.OrderStatusPending, models.OrderStatusProcessing},
+		"UserSearch":     "ada@example.com",
+		"SelectedStatus": "processing",
+		"SelectedSort":   "total_desc",
+		"CSRFField":      template.HTML(`<input type="hidden" name="csrf">`),
+	}
+	if err := templates.ExecuteTemplate(&output, "employee_orders.tmpl", data); err != nil {
+		t.Fatalf("execute employee orders template: %v", err)
+	}
+	body := output.String()
+	for _, want := range []string{
+		`action="/employee/orders"`, `name="user" value="ada@example.com"`, `name="status"`, `name="sort"`,
+		`value="processing" selected`, `value="total_desc" selected`, `href="/employee/orders">Reset`,
+		`Ada Lovelace`, `25,99 €`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("employee orders page does not contain %q", want)
+		}
 	}
 }
 
