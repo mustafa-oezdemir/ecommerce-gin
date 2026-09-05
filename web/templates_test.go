@@ -35,7 +35,7 @@ func TestAccountTemplateUsesExternalScriptWithoutInlineHandlers(t *testing.T) {
 		t.Fatalf("parse templates: %v", err)
 	}
 	var output bytes.Buffer
-	user := models.User{Email: "customer@example.com", Role: models.RoleCustomer}
+	user := models.User{FirstName: "Mustafa", LastName: "Özdemir", Email: "customer@example.com", Role: models.RoleCustomer}
 	if err := templates.ExecuteTemplate(&output, "account.tmpl", map[string]any{
 		"User":        user,
 		"CurrentUser": &user,
@@ -52,6 +52,42 @@ func TestAccountTemplateUsesExternalScriptWithoutInlineHandlers(t *testing.T) {
 	}
 	if !strings.Contains(body, `action="/logout"`) || !strings.Contains(body, ">Log out</button>") {
 		t.Fatal("account template is missing the logout form")
+	}
+	for _, want := range []string{
+		`name="first_name" value="Mustafa"`,
+		`name="last_name" value="Özdemir"`,
+		`id="profile-email" type="email" value="customer@example.com" readonly`,
+		`action="/account/password"`,
+		`href="/account/two-factor"`,
+		`Status: Not enabled`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("account template does not contain %q", want)
+		}
+	}
+}
+
+func TestTwoFactorManagementTemplateShowsEnabledState(t *testing.T) {
+	templates, err := ParseTemplates()
+	if err != nil {
+		t.Fatalf("parse templates: %v", err)
+	}
+	user := models.User{TwoFactorEnabled: true}
+	var output bytes.Buffer
+	if err := templates.ExecuteTemplate(&output, "two_factor.tmpl", map[string]any{
+		"User":      &user,
+		"CSRFField": template.HTML(`<input type="hidden" name="_csrf">`),
+	}); err != nil {
+		t.Fatalf("execute two-factor template: %v", err)
+	}
+	body := output.String()
+	for _, want := range []string{`Status: Enabled`, `action="/account/recovery-codes"`, `action="/account/two-factor/disable"`, `name="current_password"`, `name="code"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("two-factor management template does not contain %q", want)
+		}
+	}
+	if strings.Contains(body, `action="/account/two-factor"><`) {
+		t.Fatal("enabled two-factor page unexpectedly renders setup action")
 	}
 }
 

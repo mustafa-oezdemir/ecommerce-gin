@@ -59,7 +59,7 @@ func (h *AccountHandler) UpdateProfile(c *gin.Context) {
 		h.renderAccount(c, http.StatusBadRequest, gin.H{"User": user, "error": "Could not update profile"})
 		return
 	}
-	c.Redirect(http.StatusFound, "/account")
+	c.Redirect(http.StatusSeeOther, "/account?status=profile-updated")
 }
 
 func (h *AccountHandler) ChangePassword(c *gin.Context) {
@@ -79,7 +79,7 @@ func (h *AccountHandler) ChangePassword(c *gin.Context) {
 		return
 	}
 	setSessionSecurityVersion(c, version)
-	c.Redirect(http.StatusFound, "/account")
+	c.Redirect(http.StatusSeeOther, "/account?status=password-updated")
 }
 
 func (h *AccountHandler) RequestEmailChange(c *gin.Context) {
@@ -138,7 +138,22 @@ func (h *AccountHandler) ConfirmEmailChange(c *gin.Context) {
 		return
 	}
 	setSessionSecurityVersion(c, version)
-	c.Redirect(http.StatusFound, "/account")
+	c.Redirect(http.StatusSeeOther, "/account?status=email-updated")
+}
+
+func (h *AccountHandler) ShowTwoFactor(c *gin.Context) {
+	user, ok := middleware.CurrentUser(c)
+	if !ok {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+	if !user.TwoFactorEnabled {
+		if setup, err := h.securityService.PendingTwoFactor(c.Request.Context(), user.ID); err == nil {
+			h.renderTwoFactorSetup(c, user, setup, nil)
+			return
+		}
+	}
+	h.renderTwoFactor(c, http.StatusOK, gin.H{"User": user})
 }
 
 func (h *AccountHandler) BeginTwoFactor(c *gin.Context) {
@@ -188,7 +203,7 @@ func (h *AccountHandler) ConfirmTwoFactor(c *gin.Context) {
 	}
 	setSessionSecurityVersion(c, version)
 	user.TwoFactorEnabled = true
-	h.renderAccount(c, http.StatusOK, gin.H{"User": user, "RecoveryCodes": codes, "success": "Two-factor authentication is enabled. Save these recovery codes now; they will not be shown again."})
+	h.renderTwoFactor(c, http.StatusOK, gin.H{"User": user, "RecoveryCodes": codes, "success": "Two-factor authentication is enabled. Save these recovery codes now; they will not be shown again."})
 }
 
 func (h *AccountHandler) RegenerateRecoveryCodes(c *gin.Context) {
@@ -208,7 +223,7 @@ func (h *AccountHandler) RegenerateRecoveryCodes(c *gin.Context) {
 		return
 	}
 	setSessionSecurityVersion(c, version)
-	h.renderAccount(c, http.StatusOK, gin.H{"User": user, "RecoveryCodes": codes, "success": "New recovery codes were generated. Previous codes are no longer valid."})
+	h.renderTwoFactor(c, http.StatusOK, gin.H{"User": user, "RecoveryCodes": codes, "success": "New recovery codes were generated. Previous codes are no longer valid."})
 }
 
 func (h *AccountHandler) DisableTwoFactor(c *gin.Context) {
@@ -228,7 +243,7 @@ func (h *AccountHandler) DisableTwoFactor(c *gin.Context) {
 		return
 	}
 	setSessionSecurityVersion(c, version)
-	c.Redirect(http.StatusFound, "/account")
+	c.Redirect(http.StatusSeeOther, "/account/two-factor?status=disabled")
 }
 
 func (h *AccountHandler) DeleteAccount(c *gin.Context) {
@@ -250,7 +265,33 @@ func (h *AccountHandler) DeleteAccount(c *gin.Context) {
 }
 
 func (h *AccountHandler) renderAccount(c *gin.Context, status int, extra gin.H) {
+	if extra == nil {
+		extra = gin.H{}
+	}
+	if _, exists := extra["success"]; !exists {
+		switch c.Query("status") {
+		case "profile-updated":
+			extra["success"] = "Profile updated successfully."
+		case "password-updated":
+			extra["success"] = "Password updated successfully."
+		case "email-updated":
+			extra["success"] = "Email updated successfully."
+		}
+	}
+	c.Header("Cache-Control", "no-store")
 	c.HTML(status, "account.tmpl", viewData(c, extra))
+}
+
+func (h *AccountHandler) renderTwoFactor(c *gin.Context, status int, extra gin.H) {
+	if extra == nil {
+		extra = gin.H{}
+	}
+	if c.Query("status") == "disabled" {
+		extra["success"] = "Two-factor authentication was disabled."
+	}
+	c.Header("Cache-Control", "no-store")
+	c.Header("Pragma", "no-cache")
+	c.HTML(status, "two_factor.tmpl", viewData(c, extra))
 }
 
 func (h *AccountHandler) renderTwoFactorSetup(c *gin.Context, user *models.User, setup *services.TwoFactorSetup, extra gin.H) {
@@ -273,7 +314,7 @@ func (h *AccountHandler) renderTwoFactorSetup(c *gin.Context, user *models.User,
 		c.String(http.StatusInternalServerError, "Could not create QR code")
 		return
 	}
-	data := gin.H{"User": user, "TwoFactorSecret": setup.Secret, "TwoFactorQR": "data:image/png;base64," + base64.StdEncoding.EncodeToString(buffer.Bytes())}
+	data := gin.H{"User": user, "TwoFactorSecret": setup.Secret, "TwoFactorQRBase64": base64.StdEncoding.EncodeToString(buffer.Bytes())}
 	for key, value := range extra {
 		data[key] = value
 	}

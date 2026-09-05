@@ -87,6 +87,7 @@ func (h *AuthHandler) ShowTwoFactorChallenge(c *gin.Context) {
 		c.Redirect(http.StatusFound, "/login")
 		return
 	}
+	c.Header("Cache-Control", "no-store")
 	c.HTML(http.StatusOK, "two_factor_challenge.tmpl", viewData(c, nil))
 }
 
@@ -101,6 +102,7 @@ func (h *AuthHandler) VerifyTwoFactorChallenge(c *gin.Context) {
 	recovery := c.PostForm("method") == "recovery"
 	user, err := h.security.VerifySecondFactor(c.Request.Context(), userID, code, recovery)
 	if err != nil {
+		c.Header("Cache-Control", "no-store")
 		c.HTML(http.StatusUnauthorized, "two_factor_challenge.tmpl", viewData(c, gin.H{"error": "Invalid or expired authentication code"}))
 		return
 	}

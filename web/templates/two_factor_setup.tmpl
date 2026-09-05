@@ -59,7 +59,7 @@
 
                 <div class="text-center my-4">
                     <img
-                        src="{{ .TwoFactorQR }}"
+                        src="data:image/png;base64,{{ .TwoFactorQRBase64 }}"
                         width="240"
                         height="240"
                         alt="Two-factor authentication QR code"
@@ -98,7 +98,7 @@
                     </div>
                 </form>
 
-                <a class="btn btn-link mt-3" href="/account">
+                <a class="btn btn-link mt-3" href="/account/two-factor">
                     Cancel
                 </a>
 

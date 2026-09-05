@@ -13,10 +13,12 @@ import (
 )
 
 type seedUser struct {
-	Name     string
-	Email    string
-	Password string
-	Role     models.Role
+	Name      string
+	FirstName string
+	LastName  string
+	Email     string
+	Password  string
+	Role      models.Role
 }
 
 func main() {
@@ -37,22 +39,28 @@ func main() {
 
 	users := []seedUser{
 		{
-			Name:     "Admin User",
-			Email:    "admin@example.com",
-			Password: "AdminPass123!",
-			Role:     models.RoleAdmin,
+			Name:      "Admin User",
+			FirstName: "Admin",
+			LastName:  "User",
+			Email:     "admin@example.com",
+			Password:  "AdminPass123!",
+			Role:      models.RoleAdmin,
 		},
 		{
-			Name:     "Employee User",
-			Email:    "employee@example.com",
-			Password: "EmployeePass123!",
-			Role:     models.RoleEmployee,
+			Name:      "Employee User",
+			FirstName: "Employee",
+			LastName:  "User",
+			Email:     "employee@example.com",
+			Password:  "EmployeePass123!",
+			Role:      models.RoleEmployee,
 		},
 		{
-			Name:     "Customer User",
-			Email:    "customer@example.com",
-			Password: "CustomerPass123!",
-			Role:     models.RoleCustomer,
+			Name:      "Customer User",
+			FirstName: "Customer",
+			LastName:  "User",
+			Email:     "customer@example.com",
+			Password:  "CustomerPass123!",
+			Role:      models.RoleCustomer,
 		},
 	}
 
@@ -129,10 +137,12 @@ func createUserIfNotExists(database *gorm.DB, seed seedUser) error {
 	}
 
 	user := models.User{
-		Name:     seed.Name,
-		Email:    seed.Email,
-		Password: string(hashedPassword),
-		Role:     seed.Role,
+		Name:      seed.Name,
+		FirstName: seed.FirstName,
+		LastName:  seed.LastName,
+		Email:     seed.Email,
+		Password:  string(hashedPassword),
+		Role:      seed.Role,
 	}
 
 	if err := database.Create(&user).Error; err != nil {

@@ -74,7 +74,8 @@ Never use these seed accounts or their passwords in production. The seed command
 | Area | Routes | Access |
 | --- | --- | --- |
 | Shop | `/`, `/products`, `/cart`, `/checkout` | Customer actions require sign-in |
-| Account | `/account`, `/account/orders` | Signed-in customer |
+| Account security | `/account`, `/account/two-factor` | Any signed-in user |
+| Customer account | `/account/orders`, `/account/lists` | Signed-in customer |
 | Product engagement | `/products/:id/favorite`, `/products/:id/lists`, `/products/:id/reviews`, `/reviews/:id` | Signed-in customer; JSON/AJAX |
 | Two-factor challenge | `/auth/two-factor-challenge` | Password-verified session awaiting TOTP/recovery code |
 | Employee | `/employee/*` | Employee or admin |

@@ -53,6 +53,40 @@ func TestNewRouterBuildsApplicationRoutes(t *testing.T) {
 	}
 }
 
+func TestAccountRoutesRequireAuthenticationAndCSRF(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	handler, err := NewRouter(RouterConfig{
+		Environment:   "test",
+		SessionSecret: "a-session-secret-that-is-long-enough",
+		CSRFKey:       []byte("12345678901234567890123456789012"),
+		SecurityKey:   []byte("abcdefghijklmnopqrstuvwx12345678"),
+		Database:      &gorm.DB{},
+		Metrics:       metrics.New(prometheus.NewRegistry()),
+		Logger:        slog.New(slog.NewTextHandler(io.Discard, nil)),
+		ImageStore:    testImageStore(t),
+		LogReader:     testLogReader(t),
+	})
+	if err != nil {
+		t.Fatalf("build router: %v", err)
+	}
+
+	for _, path := range []string{"/account", "/account/profile", "/account/two-factor"} {
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
+		if response.Code != http.StatusFound || response.Header().Get("Location") != "/login" {
+			t.Errorf("GET %s = %d location %q, want login redirect", path, response.Code, response.Header().Get("Location"))
+		}
+	}
+
+	request := httptest.NewRequest(http.MethodPost, "/account/profile", strings.NewReader("first_name=Other&last_name=User&user_id=99"))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("profile update without CSRF token = %d, want %d", response.Code, http.StatusForbidden)
+	}
+}
+
 func TestNewRouterRegistersVersionedProductAPI(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	handler, err := NewRouter(RouterConfig{
