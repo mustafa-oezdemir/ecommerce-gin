@@ -18,7 +18,43 @@
   <main class="app-main container py-5">
     <div class="card panel-card">
       <div class="card-body p-4">
-        <h1 class="h4 mb-3">All Orders</h1>
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
+          <div>
+            <h1 class="h4 mb-1">All Orders</h1>
+            <p class="text-muted small mb-0">Filter by user or status, then sort the results.</p>
+          </div>
+          <span class="badge rounded-pill text-bg-light">{{len .Orders}} orders</span>
+        </div>
+        <form method="get" action="/admin/orders" class="row g-3 align-items-end mb-4">
+          <div class="col-md-6 col-lg-4">
+            <label class="form-label" for="order-user">User</label>
+            <input class="form-control" id="order-user" name="user" value="{{.UserSearch}}" maxlength="100" placeholder="Name or email">
+          </div>
+          <div class="col-md-6 col-lg-3">
+            <label class="form-label" for="order-status">Status</label>
+            <select class="form-select text-capitalize" id="order-status" name="status">
+              <option value="">All statuses</option>
+              {{range .Statuses}}
+              <option value="{{.}}" {{if eq (printf "%s" .) $.SelectedStatus}}selected{{end}}>{{.}}</option>
+              {{end}}
+            </select>
+          </div>
+          <div class="col-md-6 col-lg-3">
+            <label class="form-label" for="order-sort">Sort by</label>
+            <select class="form-select" id="order-sort" name="sort">
+              <option value="id_desc" {{if eq .SelectedSort "id_desc"}}selected{{end}}>ID — newest first</option>
+              <option value="id_asc" {{if eq .SelectedSort "id_asc"}}selected{{end}}>ID — oldest first</option>
+              <option value="user_asc" {{if eq .SelectedSort "user_asc"}}selected{{end}}>User — A to Z</option>
+              <option value="user_desc" {{if eq .SelectedSort "user_desc"}}selected{{end}}>User — Z to A</option>
+              <option value="total_desc" {{if eq .SelectedSort "total_desc"}}selected{{end}}>Total — highest first</option>
+              <option value="total_asc" {{if eq .SelectedSort "total_asc"}}selected{{end}}>Total — lowest first</option>
+            </select>
+          </div>
+          <div class="col-md-6 col-lg-2 d-flex gap-2">
+            <button class="btn btn-primary flex-grow-1" type="submit">Apply filters</button>
+            {{if or .UserSearch .SelectedStatus (ne .SelectedSort "id_desc")}}<a class="btn btn-outline-secondary" href="/admin/orders">Reset</a>{{end}}
+          </div>
+        </form>
         <div class="table-responsive">
           <table class="table align-middle mb-0">
             <thead>
@@ -28,7 +64,7 @@
               {{range .Orders}}
               <tr>
                 <td>#{{.ID}}</td>
-                <td>{{.User.Email}}</td>
+                <td>{{if .User.Name}}<span class="d-block">{{.User.Name}}</span>{{end}}<small class="text-muted">{{.User.Email}}</small></td>
                 <td><span class="badge bg-light text-dark text-capitalize">{{.Status}}</span></td>
                 <td>{{money .TotalCents}}</td>
               </tr>

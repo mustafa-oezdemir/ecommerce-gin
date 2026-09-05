@@ -113,7 +113,12 @@
                       </select>
                       {{if eq .ID $current.ID}}<div class="form-text">You cannot remove your own administrator access.</div>{{end}}
                     </div>
-                    <div class="col-md-7 d-flex justify-content-md-end">
+                    <div class="col-md-7">
+                      <label class="form-label" for="user-password-{{.ID}}">New password</label>
+                      <input class="form-control" id="user-password-{{.ID}}" type="password" name="password" minlength="12" maxlength="72" autocomplete="new-password" placeholder="Leave blank to keep current password">
+                      <div class="form-text">At least 12 characters. Changing it signs the user out of other sessions.</div>
+                    </div>
+                    <div class="col-12 d-flex justify-content-md-end">
                       <button type="submit" class="btn btn-primary px-4">Save changes</button>
                     </div>
                   </div>

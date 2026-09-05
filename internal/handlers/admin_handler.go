@@ -4,6 +4,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -164,7 +165,7 @@ func (h *AdminHandler) UpdateUser(c *gin.Context) {
 	}
 	var req validation.UpdateAdminUserRequest
 	if err := c.ShouldBind(&req); err != nil {
-		h.renderUsers(c, http.StatusBadRequest, "Enter a valid name, email address, and role.")
+		h.renderUsers(c, http.StatusBadRequest, "Enter a valid name, email address, role, and a password of at least 12 characters when changing it.")
 		return
 	}
 
@@ -193,6 +194,17 @@ func (h *AdminHandler) UpdateUser(c *gin.Context) {
 	}
 
 	updates := map[string]any{"name": name, "email": email, "role": role}
+	passwordChanged := req.Password != ""
+	if passwordChanged {
+		hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+		if err != nil {
+			slog.ErrorContext(c.Request.Context(), "admin password hashing failed", "target_user_id", user.ID, "error", err)
+			h.renderUsers(c, http.StatusInternalServerError, "The user could not be updated. Please try again.")
+			return
+		}
+		updates["password"] = string(hash)
+		updates["security_version"] = gorm.Expr("security_version + 1")
+	}
 	if err := database.Model(&models.User{}).Where("id = ?", user.ID).Updates(updates).Error; err != nil {
 		if errors.Is(err, gorm.ErrDuplicatedKey) {
 			h.renderUsers(c, http.StatusConflict, "That email address is already in use.")
@@ -202,18 +214,70 @@ func (h *AdminHandler) UpdateUser(c *gin.Context) {
 		h.renderUsers(c, http.StatusInternalServerError, "The user could not be updated. Please try again.")
 		return
 	}
+	if passwordChanged && currentUser.ID == user.ID {
+		var securityVersion uint64
+		if err := database.Model(&models.User{}).Where("id = ?", user.ID).Pluck("security_version", &securityVersion).Error; err == nil {
+			setSessionSecurityVersion(c, securityVersion)
+		}
+	}
 
-	slog.InfoContext(c.Request.Context(), "admin user updated", "administrator_id", currentUser.ID, "target_user_id", user.ID, "role", role)
+	slog.InfoContext(c.Request.Context(), "admin user updated", "administrator_id", currentUser.ID, "target_user_id", user.ID, "role", role, "password_changed", passwordChanged)
 	c.Redirect(http.StatusSeeOther, "/admin/users?status=updated")
 }
 
 func (h *AdminHandler) ListOrders(c *gin.Context) {
+	database := h.database.WithContext(c.Request.Context())
+	userSearch := strings.TrimSpace(c.Query("user"))
+	if searchRunes := []rune(userSearch); len(searchRunes) > 100 {
+		userSearch = string(searchRunes[:100])
+	}
+	selectedStatus := models.OrderStatus(strings.ToLower(strings.TrimSpace(c.Query("status"))))
+	validStatuses := []models.OrderStatus{
+		models.OrderStatusPending,
+		models.OrderStatusProcessing,
+		models.OrderStatusShipped,
+		models.OrderStatusCompleted,
+		models.OrderStatusCancelled,
+	}
+	if !slices.Contains(validStatuses, selectedStatus) {
+		selectedStatus = ""
+	}
+	selectedSort := strings.ToLower(strings.TrimSpace(c.DefaultQuery("sort", "id_desc")))
+	sortOptions := map[string]string{
+		"id_desc":    "orders.id DESC",
+		"id_asc":     "orders.id ASC",
+		"user_asc":   "COALESCE(NULLIF(users.name, ''), users.email) ASC, orders.id DESC",
+		"user_desc":  "COALESCE(NULLIF(users.name, ''), users.email) DESC, orders.id DESC",
+		"total_desc": "orders.total_cents DESC, orders.id DESC",
+		"total_asc":  "orders.total_cents ASC, orders.id DESC",
+	}
+	orderBy, validSort := sortOptions[selectedSort]
+	if !validSort {
+		selectedSort = "id_desc"
+		orderBy = sortOptions[selectedSort]
+	}
+
 	var orders []models.Order
-	if err := h.database.WithContext(c.Request.Context()).Preload("Items").Preload("User").Order("created_at DESC").Find(&orders).Error; err != nil {
+	query := database.Preload("Items").Preload("User").Joins("JOIN users ON users.id = orders.user_id").Order(orderBy)
+	if userSearch != "" {
+		like := "%" + userSearch + "%"
+		query = query.Where("(users.name LIKE ? OR users.email LIKE ?)", like, like)
+	}
+	if selectedStatus != "" {
+		query = query.Where("status = ?", selectedStatus)
+	}
+	if err := query.Find(&orders).Error; err != nil {
 		c.String(http.StatusInternalServerError, "Could not load orders")
 		return
 	}
-	c.HTML(http.StatusOK, "admin_orders.tmpl", viewData(c, gin.H{"Orders": orders}))
+
+	c.HTML(http.StatusOK, "admin_orders.tmpl", viewData(c, gin.H{
+		"Orders":         orders,
+		"Statuses":       validStatuses,
+		"UserSearch":     userSearch,
+		"SelectedStatus": string(selectedStatus),
+		"SelectedSort":   selectedSort,
+	}))
 }
 
 func (h *AdminHandler) ListCategories(c *gin.Context) {

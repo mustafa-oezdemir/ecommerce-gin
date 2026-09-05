@@ -113,6 +113,8 @@ func TestAdminUsersTemplateRendersSecureEditForms(t *testing.T) {
 		`action="/admin/users/7"`,
 		`name="name" value="Employee User"`,
 		`name="email" value="employee@example.com"`,
+		`id="user-password-7" type="password" name="password"`,
+		`placeholder="Leave blank to keep current password"`,
 		`<option value="employee" selected>Employee</option>`,
 		`You cannot remove your own administrator access.`,
 		`The user was updated successfully.`,
@@ -236,6 +238,35 @@ func TestEmployeeOrdersShowsOnlyAllowedTransitions(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestAdminOrdersRendersUserAndStatusFilters(t *testing.T) {
+	templates, err := ParseTemplates()
+	if err != nil {
+		t.Fatalf("parse templates: %v", err)
+	}
+	user := models.User{Model: gorm.Model{ID: 7}, Name: "Ada Lovelace", Email: "ada@example.com"}
+	var output bytes.Buffer
+	data := map[string]any{
+		"Orders":         []models.Order{{Model: gorm.Model{ID: 11}, User: user, Status: models.OrderStatusProcessing}},
+		"Statuses":       []models.OrderStatus{models.OrderStatusPending, models.OrderStatusProcessing},
+		"UserSearch":     "ada@example.com",
+		"SelectedStatus": "processing",
+		"SelectedSort":   "total_desc",
+	}
+	if err := templates.ExecuteTemplate(&output, "admin_orders.tmpl", data); err != nil {
+		t.Fatalf("execute admin orders template: %v", err)
+	}
+	body := output.String()
+	for _, want := range []string{
+		`action="/admin/orders"`, `name="user" value="ada@example.com"`, `name="status"`, `name="sort"`,
+		`value="processing" selected`, `value="total_desc" selected`, `href="/admin/orders">Reset`,
+		`Ada Lovelace`, `ada@example.com`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("admin orders page does not contain %q", want)
+		}
 	}
 }
 
