@@ -151,6 +151,80 @@ func TestCheckoutTemplateUsesServerSummaryAndSafePaymentOptions(t *testing.T) {
 	}
 }
 
+func TestOrderDetailUsesEachActiveProductsCoverAndLink(t *testing.T) {
+	templates, err := ParseTemplates()
+	if err != nil {
+		t.Fatal(err)
+	}
+	order := models.Order{
+		Model: gorm.Model{ID: 17},
+		Items: []models.OrderItem{
+			{
+				ProductID:   4,
+				ProductName: "Historical Camera Name",
+				ProductSKU:  "CAM-4",
+				Product: models.Product{
+					Model:         gorm.Model{ID: 4},
+					Name:          "Current Camera Name",
+					ImageFilename: "cover-camera.png",
+					Images: []models.ProductImage{
+						{ID: 10, Filename: "secondary-camera.png", Position: 0},
+						{ID: 11, Filename: "cover-camera.png", Position: 1},
+					},
+				},
+			},
+			{
+				ProductID:   12,
+				ProductName: "Product Without Image",
+				Product:     models.Product{Model: gorm.Model{ID: 12}},
+			},
+			{
+				ProductID:   29,
+				ProductName: "Third Ordered Product",
+				Product: models.Product{
+					Model:         gorm.Model{ID: 29},
+					ImageFilename: "cover-third-product.png",
+				},
+			},
+			{
+				ProductID:   30,
+				ProductName: "Deleted Historical Product",
+			},
+		},
+	}
+	var output bytes.Buffer
+	if err := templates.ExecuteTemplate(&output, "order_detail.tmpl", map[string]any{"Order": order}); err != nil {
+		t.Fatalf("execute order detail template: %v", err)
+	}
+	body := output.String()
+	for _, expected := range []string{
+		`href="/products/4"`,
+		`href="/products/12"`,
+		`href="/products/29"`,
+		`src="/media/products/cover-camera.png"`,
+		`src="/media/products/cover-third-product.png"`,
+		`alt="Historical Camera Name"`,
+		`Historical Camera Name`,
+		`Product Without Image`,
+		`Deleted Historical Product`,
+		`order-product-placeholder`,
+	} {
+		if !strings.Contains(body, expected) {
+			t.Errorf("order detail template missing %q", expected)
+		}
+	}
+	for _, unexpected := range []string{
+		`href="/products/17"`,
+		`href="/products/30"`,
+		`secondary-camera.png`,
+		`Current Camera Name`,
+	} {
+		if strings.Contains(body, unexpected) {
+			t.Errorf("order detail template unexpectedly contains %q", unexpected)
+		}
+	}
+}
+
 func TestSharedShellRendersBrandAndRoleNavigation(t *testing.T) {
 	templates, err := ParseTemplates()
 	if err != nil {

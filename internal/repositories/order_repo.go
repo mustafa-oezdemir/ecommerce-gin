@@ -21,7 +21,13 @@ func (r *OrderRepository) ListByUserID(ctx context.Context, userID uint) ([]mode
 
 func (r *OrderRepository) GetByIDForUser(ctx context.Context, orderID, userID uint) (*models.Order, error) {
 	var order models.Order
-	if err := r.database.WithContext(ctx).Preload("Items").Preload("Addresses").Preload("Payment").Where("id = ? AND user_id = ?", orderID, userID).First(&order).Error; err != nil {
+	if err := r.database.WithContext(ctx).
+		Preload("Items").
+		Preload("Items.Product", "active = ?", true).
+		Preload("Addresses").
+		Preload("Payment").
+		Where("id = ? AND user_id = ?", orderID, userID).
+		First(&order).Error; err != nil {
 		return nil, err
 	}
 	return &order, nil

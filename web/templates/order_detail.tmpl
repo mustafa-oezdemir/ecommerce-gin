@@ -10,6 +10,10 @@
   <style>
     body { background: linear-gradient(180deg, #f8fafc 0%, #eef4ff 100%); }
     .detail-card { border: 0; border-radius: 1.25rem; box-shadow: 0 12px 30px rgba(15,23,42,0.08); }
+    .order-product-image { width: 64px; height: 64px; object-fit: cover; border-radius: .75rem; background: #eef2ff; }
+    .order-product-placeholder { display: inline-flex; align-items: center; justify-content: center; background: linear-gradient(135deg, #e0e7ff, #e0f2fe); color: #4f46e5; font-weight: 700; }
+    .order-product-link { color: inherit; text-decoration: none; }
+    .order-product-link:hover .order-product-image, .order-product-link:focus-visible .order-product-image { outline: 3px solid #f97316; outline-offset: 2px; }
   </style>
 </head>
 <body>
@@ -47,7 +51,7 @@
           <table class="table align-middle mb-0">
             <thead>
               <tr>
-                <th>Product</th>
+                <th scope="col">Product</th>
                 <th>Unit Price</th>
                 <th>Quantity</th>
                 <th>Subtotal</th>
@@ -56,7 +60,19 @@
             <tbody>
               {{range .Order.Items}}
               <tr>
-                <td>{{.ProductName}}{{if .ProductSKU}}<div class="small text-muted">{{.ProductSKU}}</div>{{end}}</td>
+                <td>
+                  <div class="d-flex align-items-center gap-3">
+                    {{if .Product.ID}}
+                    <a class="order-product-link" href="/products/{{.ProductID}}" aria-label="View {{.ProductName}}">
+                      {{if .Product.ImageFilename}}<img class="order-product-image" src="/media/products/{{.Product.ImageFilename}}" alt="{{.ProductName}}" loading="lazy">{{else}}<span class="order-product-image order-product-placeholder" aria-hidden="true">{{initials .ProductName}}</span>{{end}}
+                    </a>
+                    <div><a class="order-product-link fw-semibold" href="/products/{{.ProductID}}">{{.ProductName}}</a>{{if .ProductSKU}}<div class="small text-muted">{{.ProductSKU}}</div>{{end}}</div>
+                    {{else}}
+                    <span class="order-product-image order-product-placeholder" aria-hidden="true">{{initials .ProductName}}</span>
+                    <div><span class="fw-semibold">{{.ProductName}}</span>{{if .ProductSKU}}<div class="small text-muted">{{.ProductSKU}}</div>{{end}}</div>
+                    {{end}}
+                  </div>
+                </td>
                 <td>{{money .UnitPriceCents}}</td>
                 <td>{{.Quantity}}</td>
                 <td>{{money .SubtotalCents}}</td>
