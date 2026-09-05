@@ -100,10 +100,12 @@ func TestAdminUsersTemplateRendersSecureEditForms(t *testing.T) {
 	employee := models.User{Model: gorm.Model{ID: 7}, Name: "Employee User", Email: "employee@example.com", Role: models.RoleEmployee}
 	var output bytes.Buffer
 	if err := templates.ExecuteTemplate(&output, "admin_users.tmpl", map[string]any{
-		"CurrentUser": &admin,
-		"Users":       []models.User{admin, employee},
-		"CSRFField":   template.HTML(`<input type="hidden" name="_csrf" value="test">`),
-		"Success":     "The user was updated successfully.",
+		"CurrentUser":  &admin,
+		"Users":        []models.User{admin, employee},
+		"CSRFField":    template.HTML(`<input type="hidden" name="_csrf" value="test">`),
+		"Success":      "The user was updated successfully.",
+		"Search":       "employee@example.com",
+		"SelectedRole": "employee",
 	}); err != nil {
 		t.Fatalf("execute admin users template: %v", err)
 	}
@@ -118,6 +120,12 @@ func TestAdminUsersTemplateRendersSecureEditForms(t *testing.T) {
 		`<option value="employee" selected>Employee</option>`,
 		`You cannot remove your own administrator access.`,
 		`The user was updated successfully.`,
+		`id="new-user"`,
+		`action="/admin/users"`,
+		`name="q" value="employee@example.com"`,
+		`name="role"`,
+		`value="employee" selected`,
+		`href="/admin/users">Reset`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("admin users page does not contain %q", want)

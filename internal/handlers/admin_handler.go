@@ -71,12 +71,29 @@ func (h *AdminHandler) ListUsers(c *gin.Context) {
 }
 
 func (h *AdminHandler) renderUsers(c *gin.Context, status int, errorMessage string) {
+	search := strings.TrimSpace(c.Query("q"))
+	if searchRunes := []rune(search); len(searchRunes) > 100 {
+		search = string(searchRunes[:100])
+	}
+	selectedRole := strings.ToLower(strings.TrimSpace(c.DefaultQuery("role", "all")))
+	if !slices.Contains([]string{"all", string(models.RoleAdmin), string(models.RoleEmployee), string(models.RoleCustomer)}, selectedRole) {
+		selectedRole = "all"
+	}
+
 	var users []models.User
-	if err := h.database.WithContext(c.Request.Context()).Order("created_at DESC").Find(&users).Error; err != nil {
+	query := h.database.WithContext(c.Request.Context()).Order("created_at DESC")
+	if search != "" {
+		like := "%" + search + "%"
+		query = query.Where("(name LIKE ? OR email LIKE ?)", like, like)
+	}
+	if selectedRole != "all" {
+		query = query.Where("role = ?", selectedRole)
+	}
+	if err := query.Find(&users).Error; err != nil {
 		c.String(http.StatusInternalServerError, "Could not load users")
 		return
 	}
-	data := gin.H{"Users": users}
+	data := gin.H{"Users": users, "Search": search, "SelectedRole": selectedRole}
 	if errorMessage != "" {
 		data["Error"] = errorMessage
 	}

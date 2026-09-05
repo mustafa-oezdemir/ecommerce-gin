@@ -10,10 +10,10 @@
   <style>
     body { background: linear-gradient(180deg, #f8fafc 0%, #eef4ff 100%); }
     .panel-card { border: 0; border-radius: 1.2rem; box-shadow: 0 12px 28px rgba(15,23,42,0.08); }
+    .toggle-card > summary, .user-summary { cursor: pointer; list-style: none; }
+    .toggle-card > summary::-webkit-details-marker, .user-summary::-webkit-details-marker { display: none; }
     .user-row { border: 1px solid #e7e5e4; border-radius: 1rem; background: #fff; }
     .user-row + .user-row { margin-top: .85rem; }
-    .user-summary { cursor: pointer; list-style: none; }
-    .user-summary::-webkit-details-marker { display: none; }
     .user-edit { border-top: 1px solid #f1f5f9; background: #fffaf5; }
     .role-badge { background: #fff7ed; color: #9a3412; }
   </style>
@@ -22,116 +22,127 @@
   {{template "site-nav" .}}
 
   <main class="app-main container py-5">
-    <div class="row g-4">
-      {{if .Success}}
-      <div class="col-12">
-        <div class="alert alert-success mb-0" role="status">{{.Success}}</div>
+    {{if .Success}}<div class="alert alert-success" role="status">{{.Success}}</div>{{end}}
+    {{if .Error}}<div class="alert alert-danger" role="alert">{{.Error}}</div>{{end}}
+
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+      <div>
+        <h1 class="h3 mb-1">Users</h1>
+        <p class="text-muted mb-0">Manage account details and permissions.</p>
       </div>
-      {{end}}
-      {{if .Error}}
-      <div class="col-12">
-        <div class="alert alert-danger mb-0" role="alert">{{.Error}}</div>
+      <span class="badge rounded-pill text-bg-light">{{len .Users}} accounts</span>
+    </div>
+
+    <details class="card panel-card toggle-card mb-4" id="new-user">
+      <summary class="card-body p-3 d-flex align-items-center justify-content-between gap-3">
+        <span class="fw-semibold">New User</span>
+        <span class="btn btn-primary btn-sm">Add user</span>
+      </summary>
+      <div class="card-body border-top p-4">
+        <form method="post" action="/admin/users">
+          {{.CSRFField}}
+          <div class="row g-3 align-items-end">
+            <div class="col-md-6 col-lg-3">
+              <label class="form-label" for="new-user-name">Name</label>
+              <input class="form-control" id="new-user-name" name="name" minlength="2" maxlength="100" required>
+            </div>
+            <div class="col-md-6 col-lg-3">
+              <label class="form-label" for="new-user-email">Email</label>
+              <input class="form-control" id="new-user-email" type="email" name="email" maxlength="254" required>
+            </div>
+            <div class="col-md-6 col-lg-3">
+              <label class="form-label" for="new-user-password">Password</label>
+              <input class="form-control" id="new-user-password" type="password" name="password" minlength="12" maxlength="72" autocomplete="new-password" required>
+            </div>
+            <div class="col-md-6 col-lg-2">
+              <label class="form-label" for="new-user-role">Role</label>
+              <select class="form-select" id="new-user-role" name="role" required>
+                <option value="customer">Customer</option>
+                <option value="employee">Employee</option>
+              </select>
+            </div>
+            <div class="col-lg-1 d-grid"><button type="submit" class="btn btn-primary">Create</button></div>
+          </div>
+        </form>
       </div>
-      {{end}}
-      <div class="col-lg-4">
-        <div class="card panel-card h-100">
-          <div class="card-body p-4">
-            <h1 class="h4 mb-3">New User</h1>
-            <form method="post" action="/admin/users">
-              {{.CSRFField}}
-              <div class="mb-3">
-                <label class="form-label">Name</label>
-                <input class="form-control" name="name" placeholder="Name" required>
+    </details>
+
+    <section class="card panel-card mb-4">
+      <div class="card-body p-4">
+        <form method="get" action="/admin/users" class="row g-3 align-items-end">
+          <div class="col-md-6">
+            <label class="form-label" for="user-search">User</label>
+            <input class="form-control" id="user-search" name="q" value="{{.Search}}" maxlength="100" placeholder="Search by name or email">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label" for="user-role-filter">Role</label>
+            <select class="form-select" id="user-role-filter" name="role">
+              <option value="all"{{if eq .SelectedRole "all"}} selected{{end}}>All roles</option>
+              <option value="admin"{{if eq .SelectedRole "admin"}} selected{{end}}>Administrator</option>
+              <option value="employee"{{if eq .SelectedRole "employee"}} selected{{end}}>Employee</option>
+              <option value="customer"{{if eq .SelectedRole "customer"}} selected{{end}}>Customer</option>
+            </select>
+          </div>
+          <div class="col-md-3 d-flex gap-2">
+            <button class="btn btn-primary flex-grow-1" type="submit">Filter</button>
+            {{if or .Search (ne .SelectedRole "all")}}<a class="btn btn-outline-secondary" href="/admin/users">Reset</a>{{end}}
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <section class="card panel-card">
+      <div class="card-body p-4">
+        {{$current := .CurrentUser}}
+        {{range .Users}}
+        <details class="user-row overflow-hidden">
+          <summary class="user-summary d-flex flex-wrap align-items-center justify-content-between gap-3 p-3">
+            <span class="d-flex align-items-center gap-3 min-w-0">
+              <span class="account-avatar account-avatar-large" aria-hidden="true">{{if .Name}}{{initials .Name}}{{else}}U{{end}}</span>
+              <span class="min-w-0"><strong class="d-block text-truncate">{{.Name}}</strong><small class="text-muted d-block text-truncate">{{.Email}}</small></span>
+            </span>
+            <span class="d-flex align-items-center gap-2">
+              {{if eq .ID $current.ID}}<span class="badge text-bg-dark">You</span>{{end}}
+              <span class="badge role-badge text-capitalize">{{.Role}}</span>
+              <span class="btn btn-sm btn-outline-primary">Edit</span>
+            </span>
+          </summary>
+          <div class="user-edit p-3 p-md-4">
+            <form method="post" action="/admin/users/{{.ID}}">
+              {{$root := $}}{{$root.CSRFField}}
+              <div class="row g-3 align-items-end">
+                <div class="col-md-5">
+                  <label class="form-label" for="user-name-{{.ID}}">Name</label>
+                  <input class="form-control" id="user-name-{{.ID}}" name="name" value="{{.Name}}" minlength="2" maxlength="100" required>
+                </div>
+                <div class="col-md-7">
+                  <label class="form-label" for="user-email-{{.ID}}">Email</label>
+                  <input class="form-control" id="user-email-{{.ID}}" type="email" name="email" value="{{.Email}}" maxlength="254" required>
+                </div>
+                <div class="col-md-5">
+                  <label class="form-label" for="user-role-{{.ID}}">Role</label>
+                  <select class="form-select" id="user-role-{{.ID}}" name="role" required>
+                    <option value="customer"{{if eq .Role "customer"}} selected{{end}}{{if eq .ID $current.ID}} disabled{{end}}>Customer</option>
+                    <option value="employee"{{if eq .Role "employee"}} selected{{end}}{{if eq .ID $current.ID}} disabled{{end}}>Employee</option>
+                    <option value="admin"{{if eq .Role "admin"}} selected{{end}}>Administrator</option>
+                  </select>
+                  {{if eq .ID $current.ID}}<div class="form-text">You cannot remove your own administrator access.</div>{{end}}
+                </div>
+                <div class="col-md-7">
+                  <label class="form-label" for="user-password-{{.ID}}">New password</label>
+                  <input class="form-control" id="user-password-{{.ID}}" type="password" name="password" minlength="12" maxlength="72" autocomplete="new-password" placeholder="Leave blank to keep current password">
+                  <div class="form-text">At least 12 characters. Changing it signs the user out of other sessions.</div>
+                </div>
+                <div class="col-12 d-flex justify-content-md-end"><button type="submit" class="btn btn-primary px-4">Save changes</button></div>
               </div>
-              <div class="mb-3">
-                <label class="form-label">Email</label>
-                <input class="form-control" type="email" name="email" placeholder="Email" required>
-              </div>
-              <div class="mb-3">
-                <label class="form-label">Password</label>
-                <input class="form-control" type="password" name="password" minlength="12" placeholder="Password" required>
-              </div>
-              <div class="mb-3">
-                <label class="form-label">Role</label>
-                <select class="form-select" name="role">
-                  <option value="customer">customer</option>
-                  <option value="employee">employee</option>
-                </select>
-              </div>
-              <button type="submit" class="btn btn-primary">Create User</button>
             </form>
           </div>
-        </div>
+        </details>
+        {{else}}
+        <div class="text-muted border rounded-4 p-4 text-center">No users match these filters.</div>
+        {{end}}
       </div>
-
-      <div class="col-lg-8">
-        <div class="card panel-card">
-          <div class="card-body p-4">
-            <div class="d-flex align-items-center justify-content-between gap-3 mb-3">
-              <div>
-                <h2 class="h4 mb-1">Users</h2>
-                <p class="text-muted small mb-0">Manage account details and permissions.</p>
-              </div>
-              <span class="badge rounded-pill text-bg-light">{{len .Users}} accounts</span>
-            </div>
-            {{$current := .CurrentUser}}
-            {{range .Users}}
-            <details class="user-row overflow-hidden">
-              <summary class="user-summary d-flex flex-wrap align-items-center justify-content-between gap-3 p-3">
-                <span class="d-flex align-items-center gap-3 min-w-0">
-                  <span class="account-avatar account-avatar-large" aria-hidden="true">{{if .Name}}{{initials .Name}}{{else}}U{{end}}</span>
-                  <span class="min-w-0">
-                    <strong class="d-block text-truncate">{{.Name}}</strong>
-                    <small class="text-muted d-block text-truncate">{{.Email}}</small>
-                  </span>
-                </span>
-                <span class="d-flex align-items-center gap-2">
-                  {{if eq .ID $current.ID}}<span class="badge text-bg-dark">You</span>{{end}}
-                  <span class="badge role-badge text-capitalize">{{.Role}}</span>
-                  <span class="btn btn-sm btn-outline-primary">Edit</span>
-                </span>
-              </summary>
-              <div class="user-edit p-3 p-md-4">
-                <form method="post" action="/admin/users/{{.ID}}">
-                  {{$root := $}}
-                  {{$root.CSRFField}}
-                  <div class="row g-3 align-items-end">
-                    <div class="col-md-5">
-                      <label class="form-label" for="user-name-{{.ID}}">Name</label>
-                      <input class="form-control" id="user-name-{{.ID}}" name="name" value="{{.Name}}" minlength="2" maxlength="100" required>
-                    </div>
-                    <div class="col-md-7">
-                      <label class="form-label" for="user-email-{{.ID}}">Email</label>
-                      <input class="form-control" id="user-email-{{.ID}}" type="email" name="email" value="{{.Email}}" maxlength="254" required>
-                    </div>
-                    <div class="col-md-5">
-                      <label class="form-label" for="user-role-{{.ID}}">Role</label>
-                      <select class="form-select" id="user-role-{{.ID}}" name="role" required>
-                        <option value="customer"{{if eq .Role "customer"}} selected{{end}}{{if eq .ID $current.ID}} disabled{{end}}>Customer</option>
-                        <option value="employee"{{if eq .Role "employee"}} selected{{end}}{{if eq .ID $current.ID}} disabled{{end}}>Employee</option>
-                        <option value="admin"{{if eq .Role "admin"}} selected{{end}}>Administrator</option>
-                      </select>
-                      {{if eq .ID $current.ID}}<div class="form-text">You cannot remove your own administrator access.</div>{{end}}
-                    </div>
-                    <div class="col-md-7">
-                      <label class="form-label" for="user-password-{{.ID}}">New password</label>
-                      <input class="form-control" id="user-password-{{.ID}}" type="password" name="password" minlength="12" maxlength="72" autocomplete="new-password" placeholder="Leave blank to keep current password">
-                      <div class="form-text">At least 12 characters. Changing it signs the user out of other sessions.</div>
-                    </div>
-                    <div class="col-12 d-flex justify-content-md-end">
-                      <button type="submit" class="btn btn-primary px-4">Save changes</button>
-                    </div>
-                  </div>
-                </form>
-              </div>
-            </details>
-            {{else}}
-            <div class="text-muted border rounded-4 p-4">No users found.</div>
-            {{end}}
-          </div>
-        </div>
-      </div>
-    </div>
+    </section>
   </main>
   {{template "site-footer" .}}
 </body>
