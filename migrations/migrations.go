@@ -31,6 +31,12 @@ var productImageGallerySchema string
 //go:embed 000008_profile_name_backfill.sql
 var profileNameBackfillSchema string
 
+//go:embed 000009_profile_images.sql
+var profileImagesSchema string
+
+//go:embed 000010_checkout_payments.sql
+var checkoutPaymentsSchema string
+
 type migration struct {
 	version string
 	sql     string
@@ -50,6 +56,8 @@ func Apply(db *gorm.DB) error {
 			{version: "000006_account_email_length", sql: accountEmailLengthSchema},
 			{version: "000007_product_image_gallery", sql: productImageGallerySchema},
 			{version: "000008_profile_name_backfill", sql: profileNameBackfillSchema},
+			{version: "000009_profile_images", sql: profileImagesSchema},
+			{version: "000010_checkout_payments", sql: checkoutPaymentsSchema},
 		} {
 			var count int64
 			if err := tx.Raw("SELECT COUNT(*) FROM schema_migrations WHERE version = ?", migration.version).Scan(&count).Error; err != nil {

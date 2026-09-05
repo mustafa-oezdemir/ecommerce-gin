@@ -17,6 +17,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	_ "golang.org/x/image/webp"
 )
 
 var (
@@ -187,6 +189,10 @@ func imageType(extension string) (format, contentType, canonicalExtension string
 		return "jpeg", "image/jpeg", ".jpg"
 	case ".png":
 		return "png", "image/png", ".png"
+	case ".webp":
+		// WEBP input is decoded and re-encoded as PNG so untrusted container
+		// metadata is never persisted or served.
+		return "webp", "image/webp", ".png"
 	default:
 		return "", "", ""
 	}

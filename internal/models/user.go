@@ -19,6 +19,7 @@ type User struct {
 	Name                 string `gorm:"size:100"`
 	FirstName            string `gorm:"size:100;not null;default:''"`
 	LastName             string `gorm:"size:100;not null;default:''"`
+	ProfileImageFilename string `gorm:"size:64;not null;default:''"`
 	Email                string `gorm:"uniqueIndex;size:254"`
 	Password             string `gorm:"size:255"`
 	Role                 Role   `gorm:"size:20"`

@@ -17,7 +17,7 @@ func TestStaticFSContainsCSPCompatibleScripts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open static filesystem: %v", err)
 	}
-	for _, name := range []string{"account.js", "product-list.js", "product-detail.js", "site.css"} {
+	for _, name := range []string{"account.js", "checkout.js", "product-list.js", "product-detail.js", "site.css"} {
 		contents, err := fs.ReadFile(assets, name)
 		if err != nil {
 			t.Errorf("read %s: %v", name, err)
@@ -57,6 +57,9 @@ func TestAccountTemplateUsesExternalScriptWithoutInlineHandlers(t *testing.T) {
 		`name="first_name" value="Mustafa"`,
 		`name="last_name" value="Özdemir"`,
 		`id="profile-email" type="email" value="customer@example.com" readonly`,
+		`action="/account/profile/image" enctype="multipart/form-data"`,
+		`accept="image/jpeg,image/png,image/webp"`,
+		`class="profile-photo profile-photo-placeholder"`,
 		`action="/account/password"`,
 		`href="/account/two-factor"`,
 		`Status: Not enabled`,
@@ -64,6 +67,32 @@ func TestAccountTemplateUsesExternalScriptWithoutInlineHandlers(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Errorf("account template does not contain %q", want)
 		}
+	}
+}
+
+func TestAccountAndNavbarRenderStoredProfileImage(t *testing.T) {
+	templates, err := ParseTemplates()
+	if err != nil {
+		t.Fatal(err)
+	}
+	user := models.User{Name: "Ada Lovelace", FirstName: "Ada", LastName: "Lovelace", Email: "ada@example.com", Role: models.RoleCustomer, ProfileImageFilename: "0123456789abcdef0123456789abcdef.png"}
+	var output bytes.Buffer
+	if err := templates.ExecuteTemplate(&output, "account.tmpl", map[string]any{"User": &user, "CurrentUser": &user, "CSRFField": template.HTML(`<input name="_csrf">`)}); err != nil {
+		t.Fatal(err)
+	}
+	body := output.String()
+	for _, expected := range []string{
+		`src="/media/profiles/0123456789abcdef0123456789abcdef.png"`,
+		`alt="Current profile photo"`,
+		`action="/account/profile/image/delete"`,
+		`class="account-avatar account-avatar-image"`,
+	} {
+		if !strings.Contains(body, expected) {
+			t.Errorf("profile image template missing %q", expected)
+		}
+	}
+	if strings.Contains(body, `<span class="profile-photo profile-photo-placeholder"`) {
+		t.Fatal("stored image rendered the profile placeholder")
 	}
 }
 
@@ -91,6 +120,37 @@ func TestTwoFactorManagementTemplateShowsEnabledState(t *testing.T) {
 	}
 }
 
+func TestCheckoutTemplateUsesServerSummaryAndSafePaymentOptions(t *testing.T) {
+	templates, err := ParseTemplates()
+	if err != nil {
+		t.Fatal(err)
+	}
+	user := models.User{Name: "Ada Lovelace", Role: models.RoleCustomer}
+	address := models.UserAddress{Model: gorm.Model{ID: 4}, FirstName: "Ada", LastName: "Lovelace", Street: "Main", HouseNumber: "1", PostalCode: "12345", City: "Berlin", CountryCode: "DE", IsDefault: true}
+	product := models.Product{Model: gorm.Model{ID: 8}, Name: "Go Book", PriceCents: 2000, Active: true}
+	summary := struct {
+		Cart          *models.Cart
+		SubtotalCents int64
+		ShippingCents int64
+		TotalCents    int64
+	}{Cart: &models.Cart{Items: []models.CartItem{{Product: product, Quantity: 2}}}, SubtotalCents: 4000, ShippingCents: 499, TotalCents: 4499}
+	var output bytes.Buffer
+	if err := templates.ExecuteTemplate(&output, "checkout.tmpl", map[string]any{"CurrentUser": &user, "Addresses": []models.UserAddress{address}, "Summary": summary, "IdempotencyKey": strings.Repeat("a", 64), "CSRFField": template.HTML("csrf")}); err != nil {
+		t.Fatal(err)
+	}
+	body := output.String()
+	for _, expected := range []string{"action=\"/checkout\"", "name=\"idempotency_key\"", "value=\"debit_card\"", "value=\"credit_card\"", "value=\"paypal\"", "value=\"klarna\"", "Go Book × 2", "44,99 €", "src=\"/static/checkout.js\""} {
+		if !strings.Contains(body, expected) {
+			t.Errorf("checkout template missing %q", expected)
+		}
+	}
+	for _, forbidden := range []string{`name="card_number"`, `name="cvc"`, `name="cvv"`} {
+		if strings.Contains(strings.ToLower(body), forbidden) {
+			t.Errorf("checkout template contains PCI-sensitive field %q", forbidden)
+		}
+	}
+}
+
 func TestSharedShellRendersBrandAndRoleNavigation(t *testing.T) {
 	templates, err := ParseTemplates()
 	if err != nil {
@@ -103,7 +163,7 @@ func TestSharedShellRendersBrandAndRoleNavigation(t *testing.T) {
 		doNotWant []string
 	}{
 		{name: "anonymous", data: map[string]any{}, want: []string{"brand-pehli\">Pehli", "brand-one\">One", `href="/login"`}, doNotWant: []string{`class="account-dropdown"`, `action="/logout"`}},
-		{name: "customer", data: map[string]any{"CurrentUser": &models.User{Name: "Ada Lovelace", Email: "ada@example.com", Role: models.RoleCustomer}, "CSRFField": template.HTML("csrf")}, want: []string{`href="/cart"`, `class="account-dropdown"`, `class="account-avatar"`, `>A</span>`, "Ada Lovelace", "ada@example.com", `href="/account"`, `href="/account/orders"`, `href="/account/lists"`, `action="/logout"`}, doNotWant: []string{`href="/login"`, `aria-hidden="true">⌄`}},
+		{name: "customer", data: map[string]any{"CurrentUser": &models.User{Name: "Ada Lovelace", Email: "ada@example.com", Role: models.RoleCustomer}, "CSRFField": template.HTML("csrf")}, want: []string{`href="/cart"`, `class="account-dropdown"`, `class="account-avatar"`, `>AL</span>`, "Ada Lovelace", "ada@example.com", `href="/account"`, `href="/account/orders"`, `href="/account/lists"`, `action="/logout"`}, doNotWant: []string{`href="/login"`, `aria-hidden="true">⌄`}},
 		{name: "employee", data: map[string]any{"CurrentUser": &models.User{Role: models.RoleEmployee}, "CSRFField": template.HTML("csrf")}, want: []string{`href="/employee/dashboard"`, `href="/employee/products"`, `class="account-dropdown"`, `action="/logout"`}, doNotWant: []string{`href="/login"`}},
 		{name: "admin", data: map[string]any{"CurrentUser": &models.User{Role: models.RoleAdmin}, "CSRFField": template.HTML("csrf")}, want: []string{`href="/admin/dashboard"`, `href="/admin/logs"`, `class="account-dropdown"`, `action="/logout"`}, doNotWant: []string{`href="/login"`}},
 	}

@@ -14,25 +14,31 @@ import (
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/middleware"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/models"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/services"
+	"github.com/mustafa-oezdemir/ecommerce-gin/internal/uploads"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/validation"
 	"github.com/pquerna/otp"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type AccountHandler struct {
 	database           *gorm.DB
 	productListService *services.ProductListService
 	securityService    *services.AccountSecurityService
+	profileImageStore  *uploads.ImageStore
 }
 
-func NewAccountHandler(database *gorm.DB, securityService *services.AccountSecurityService) *AccountHandler {
+func NewAccountHandler(database *gorm.DB, securityService *services.AccountSecurityService, profileImageStore *uploads.ImageStore) *AccountHandler {
 	if database == nil {
 		panic("handlers: database is required")
 	}
 	if securityService == nil {
 		panic("handlers: account security service is required")
 	}
-	return &AccountHandler{database: database, productListService: services.NewProductListService(database), securityService: securityService}
+	if profileImageStore == nil {
+		panic("handlers: profile image store is required")
+	}
+	return &AccountHandler{database: database, productListService: services.NewProductListService(database), securityService: securityService, profileImageStore: profileImageStore}
 }
 
 func (h *AccountHandler) Show(c *gin.Context) {
@@ -60,6 +66,103 @@ func (h *AccountHandler) UpdateProfile(c *gin.Context) {
 		return
 	}
 	c.Redirect(http.StatusSeeOther, "/account?status=profile-updated")
+}
+
+func (h *AccountHandler) UpdateProfileImage(c *gin.Context) {
+	user, ok := middleware.CurrentUser(c)
+	if !ok {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, h.profileImageStore.MaxBytes()+multipartFormOverhead)
+	header, err := c.FormFile("profile_image")
+	if err != nil {
+		h.respondToProfileImageError(c, err)
+		return
+	}
+	file, err := header.Open()
+	if err != nil {
+		h.respondToProfileImageError(c, err)
+		return
+	}
+	filename, saveErr := h.profileImageStore.Save(c.Request.Context(), header.Filename, file, header.Size)
+	closeErr := file.Close()
+	if saveErr != nil {
+		h.respondToProfileImageError(c, saveErr)
+		return
+	}
+	if closeErr != nil {
+		_ = h.profileImageStore.Delete(filename)
+		h.respondToProfileImageError(c, closeErr)
+		return
+	}
+
+	var oldFilename string
+	err = h.database.WithContext(c.Request.Context()).Transaction(func(transaction *gorm.DB) error {
+		var locked models.User
+		if err := transaction.Clauses(clause.Locking{Strength: "UPDATE"}).Select("id", "profile_image_filename").First(&locked, user.ID).Error; err != nil {
+			return err
+		}
+		oldFilename = locked.ProfileImageFilename
+		return transaction.Model(&locked).Update("profile_image_filename", filename).Error
+	})
+	if err != nil {
+		_ = h.profileImageStore.Delete(filename)
+		slog.ErrorContext(c.Request.Context(), "profile image database update failed", "user_id", user.ID, "error", err)
+		c.String(http.StatusInternalServerError, "Could not update profile photo")
+		return
+	}
+	if err := h.profileImageStore.Delete(oldFilename); err != nil {
+		slog.WarnContext(c.Request.Context(), "old profile image cleanup failed", "user_id", user.ID, "error", err)
+	}
+	c.Redirect(http.StatusSeeOther, "/account?status=profile-image-updated")
+}
+
+func (h *AccountHandler) DeleteProfileImage(c *gin.Context) {
+	user, ok := middleware.CurrentUser(c)
+	if !ok {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+	var filename string
+	err := h.database.WithContext(c.Request.Context()).Transaction(func(transaction *gorm.DB) error {
+		var locked models.User
+		if err := transaction.Clauses(clause.Locking{Strength: "UPDATE"}).Select("id", "profile_image_filename").First(&locked, user.ID).Error; err != nil {
+			return err
+		}
+		filename = locked.ProfileImageFilename
+		if filename == "" {
+			return nil
+		}
+		return transaction.Model(&locked).Update("profile_image_filename", "").Error
+	})
+	if err != nil {
+		slog.ErrorContext(c.Request.Context(), "profile image database removal failed", "user_id", user.ID, "error", err)
+		c.String(http.StatusInternalServerError, "Could not remove profile photo")
+		return
+	}
+	if err := h.profileImageStore.Delete(filename); err != nil {
+		slog.WarnContext(c.Request.Context(), "profile image file cleanup failed", "user_id", user.ID, "error", err)
+	}
+	c.Redirect(http.StatusSeeOther, "/account?status=profile-image-removed")
+}
+
+func (h *AccountHandler) respondToProfileImageError(c *gin.Context, err error) {
+	switch {
+	case isUploadTooLarge(err), errors.Is(err, uploads.ErrImageTooLarge):
+		c.String(http.StatusRequestEntityTooLarge, "Profile photo is too large")
+	case errors.Is(err, uploads.ErrScannerUnavailable):
+		slog.ErrorContext(c.Request.Context(), "profile image security scan unavailable", "error", err)
+		c.String(http.StatusServiceUnavailable, "Image security scan is temporarily unavailable")
+	case errors.Is(err, uploads.ErrThreatDetected):
+		slog.WarnContext(c.Request.Context(), "unsafe profile image rejected", "reason", "malware_detected")
+		c.String(http.StatusBadRequest, "Profile photo failed the security check")
+	case errors.Is(err, uploads.ErrUnsupportedImage), errors.Is(err, uploads.ErrInvalidImage), errors.Is(err, uploads.ErrImageDimensions), errors.Is(err, http.ErrMissingFile):
+		c.String(http.StatusBadRequest, "Profile photo must be a valid JPEG, PNG, or WEBP within the allowed dimensions")
+	default:
+		slog.ErrorContext(c.Request.Context(), "profile image processing failed", "error", err)
+		c.String(http.StatusInternalServerError, "Could not process profile photo")
+	}
 }
 
 func (h *AccountHandler) ChangePassword(c *gin.Context) {
@@ -272,6 +375,10 @@ func (h *AccountHandler) renderAccount(c *gin.Context, status int, extra gin.H) 
 		switch c.Query("status") {
 		case "profile-updated":
 			extra["success"] = "Profile updated successfully."
+		case "profile-image-updated":
+			extra["success"] = "Profile photo updated successfully."
+		case "profile-image-removed":
+			extra["success"] = "Profile photo removed successfully."
 		case "password-updated":
 			extra["success"] = "Password updated successfully."
 		case "email-updated":

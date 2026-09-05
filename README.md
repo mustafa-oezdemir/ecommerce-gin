@@ -6,7 +6,7 @@ A secure, server-rendered e-commerce demo built with Go, Gin, GORM, and MySQL. I
 
 - **Customer experience** — browse products, manage a cart, complete checkout, and view orders.
 - **Product engagement** — reusable favorites, personal product lists, 1–10 ratings, and verified-purchase reviews.
-- **Account security** — email verification, TOTP two-factor authentication, single-use recovery codes, and security-versioned sessions.
+- **Account security** — personal profile photos, email verification, TOTP two-factor authentication, single-use recovery codes, and security-versioned sessions.
 - **Operations** — manage products, inventory, and order status as an employee.
 - **Administration** — review dashboards, users, categories, and orders.
 - **Security by default** — signed sessions, RBAC, ownership checks, CSRF protection, secure headers, validated requests, and rate-limited sign-in.
@@ -75,7 +75,8 @@ Never use these seed accounts or their passwords in production. The seed command
 | --- | --- | --- |
 | Shop | `/`, `/products`, `/cart`, `/checkout` | Customer actions require sign-in |
 | Account security | `/account`, `/account/two-factor` | Any signed-in user |
-| Customer account | `/account/orders`, `/account/lists` | Signed-in customer |
+| Customer account | `/account/orders`, `/account/lists`, `/account/addresses` | Signed-in customer |
+| Payment webhooks | `/webhooks/payments/:provider` | Provider HMAC signature required |
 | Product engagement | `/products/:id/favorite`, `/products/:id/lists`, `/products/:id/reviews`, `/reviews/:id` | Signed-in customer; JSON/AJAX |
 | Two-factor challenge | `/auth/two-factor-challenge` | Password-verified session awaiting TOTP/recovery code |
 | Employee | `/employee/*` | Employee or admin |
@@ -103,6 +104,9 @@ Copy `.env.example` and keep `.env` private. Docker passes only application-requ
 | `PRODUCT_IMAGE_DIRECTORY` | Private storage directory for sanitized product images |
 | `PRODUCT_IMAGE_MAX_BYTES` | Maximum uploaded and sanitized image size in bytes |
 | `PRODUCT_IMAGE_MAX_WIDTH`, `PRODUCT_IMAGE_MAX_HEIGHT`, `PRODUCT_IMAGE_MAX_PIXELS` | Decoded-image limits that prevent image bombs |
+| `PROFILE_IMAGE_DIRECTORY` | Private storage directory for sanitized user profile photos |
+| `PROFILE_IMAGE_MAX_BYTES` | Maximum uploaded and sanitized profile-photo size in bytes |
+| `PROFILE_IMAGE_MAX_WIDTH`, `PROFILE_IMAGE_MAX_HEIGHT`, `PROFILE_IMAGE_MAX_PIXELS` | Profile-photo decode limits that prevent image bombs |
 | `CLAMAV_ADDRESS`, `CLAMAV_SCAN_TIMEOUT` | Internal `clamd` endpoint and fail-closed scan timeout |
 | `MYSQL_*` | MySQL connection settings |
 | `DB_MAX_OPEN_CONNS`, `DB_MAX_IDLE_CONNS` | Database connection pool limits |
@@ -110,6 +114,7 @@ Copy `.env.example` and keep `.env` private. Docker passes only application-requ
 | `DB_CONNECT_TIMEOUT`, `DB_READ_TIMEOUT`, `DB_WRITE_TIMEOUT`, `DB_PING_TIMEOUT` | Database network and startup health timeouts |
 | `SESSION_SECRET` | Cookie-session signing secret |
 | `SESSION_SECURE` | Set to `true` in production |
+| `PAYMENT_WEBHOOK_SECRET` | At least 32 random characters used to authenticate payment webhook bodies |
 | `CSRF_SECRET` | Base64-encoded 32-byte CSRF key |
 | `SECURITY_ENCRYPTION_KEY` | Independent base64-encoded 32-byte AES/HMAC key for TOTP secrets and one-time code hashes; mandatory in production |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM` | Outbound email endpoint and sender; Compose points these to MailHog |
@@ -190,7 +195,15 @@ GET /api/v1/products?limit=20&offset=0&category=2&min_price=10&max_price=250&q=p
 
 Account profile changes keep email updates separate. An email change requires the current password, sends a cryptographically random eight-digit code to the new address, stores only its keyed hash, expires after ten minutes, limits attempts, and applies a resend cooldown. Password, email, 2FA, and recovery-code changes increment the account security version so other signed sessions stop working.
 
+Authenticated users can upload or remove their own profile photo from `/account`. JPEG, PNG, and WEBP inputs are size-limited, malware-scanned, content- and decoder-validated, stripped of client filenames and metadata through re-encoding, and stored under random names in a dedicated directory. Database updates always use the authenticated session user ID; failed writes clean up the new file, and a successfully replaced old image is removed afterward.
+
 TOTP setup uses a standards-based authenticator QR code. The secret is encrypted with AES-256-GCM at rest. Enabling 2FA creates eight readable, single-use recovery codes; only their HMAC-SHA-256 hashes are stored. Setup responses are marked `no-store`, login challenges expire after five minutes, and sensitive endpoints are CSRF protected and rate limited. Security logs contain event types and internal user IDs, never codes, secrets, passwords, or email addresses.
+
+## Checkout and payment integrity
+
+`GET /checkout` renders saved user-owned shipping and billing addresses, four explicit payment methods, and a server-calculated EUR summary. `POST /checkout` reloads the cart and current product prices, locks products in ascending ID order, decrements stock with a conditional atomic update, snapshots order items and both addresses, creates the payment and order, and clears the cart in one MySQL transaction. A failure rolls everything back.
+
+Every checkout uses a cryptographically random key backed by unique `(user_id, idempotency_key)` constraints on checkout attempts, orders, and payments. Concurrent repeats return the existing order. Provider requests use the same user-scoped identity, and signed webhook event IDs have their own unique constraint. The bundled reference gateway is deterministic for development/tests and deliberately fails closed in production; production must supply a real hosted-fields/tokenization adapter. Raw card numbers, CVC/CVV, addresses, payment secrets, and session identifiers are never logged or stored as payment input.
 
 Favorites are an idempotent system-backed Product List and cannot be deleted through normal list operations. Favorite, list, and review actions return one JSON envelope and use the existing CSRF header. Reviews are limited to one per customer/product and can be edited or deleted only by their owner. The server derives review eligibility from an order item whose order is `shipped` or `completed`; it never accepts a “verified” flag from the browser. Templates escape review content before rendering.
 

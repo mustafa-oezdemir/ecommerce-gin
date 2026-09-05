@@ -97,22 +97,35 @@ func run() (runErr error) {
 	if err != nil {
 		return fmt.Errorf("configure product image storage: %w", err)
 	}
+	profileImageStore, err := uploads.NewImageStore(uploads.ImageConfig{
+		Directory: cfg.ProfileImageDirectory,
+		MaxBytes:  cfg.ProfileImageMaxBytes,
+		MaxWidth:  cfg.ProfileImageMaxWidth,
+		MaxHeight: cfg.ProfileImageMaxHeight,
+		MaxPixels: cfg.ProfileImageMaxPixels,
+		Scanner:   malwareScanner,
+	})
+	if err != nil {
+		return fmt.Errorf("configure profile image storage: %w", err)
+	}
 	logReader, err := logging.NewReader(logging.ReaderConfig{FilePath: logRuntime.FilePath()})
 	if err != nil {
 		return fmt.Errorf("configure application log reader: %w", err)
 	}
 	applicationHandler, err := appserver.NewRouter(appserver.RouterConfig{
-		Environment:    cfg.AppEnv,
-		TrustedProxies: cfg.TrustedProxies,
-		SessionSecret:  cfg.SessionSecret,
-		SessionSecure:  cfg.SessionSecure,
-		CSRFKey:        cfg.CSRFKey,
-		SecurityKey:    cfg.SecurityEncryptionKey,
-		Database:       database,
-		Metrics:        appMetrics,
-		Logger:         slog.Default(),
-		ImageStore:     imageStore,
-		LogReader:      logReader,
+		Environment:       cfg.AppEnv,
+		TrustedProxies:    cfg.TrustedProxies,
+		SessionSecret:     cfg.SessionSecret,
+		SessionSecure:     cfg.SessionSecure,
+		CSRFKey:           cfg.CSRFKey,
+		SecurityKey:       cfg.SecurityEncryptionKey,
+		WebhookSecret:     cfg.PaymentWebhookSecret,
+		Database:          database,
+		Metrics:           appMetrics,
+		Logger:            slog.Default(),
+		ImageStore:        imageStore,
+		ProfileImageStore: profileImageStore,
+		LogReader:         logReader,
 	})
 	if err != nil {
 		return fmt.Errorf("build application router: %w", err)

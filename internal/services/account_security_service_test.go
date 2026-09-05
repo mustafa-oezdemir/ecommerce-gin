@@ -3,6 +3,7 @@ package services
 import (
 	"bytes"
 	"database/sql/driver"
+	"errors"
 	"regexp"
 	"strings"
 	"testing"
@@ -48,6 +49,25 @@ func TestUpdateProfileUsesAuthenticatedUserID(t *testing.T) {
 	version, err := service.UpdateProfile(t.Context(), 7, "  Mustafa ", " Özdemir ")
 	if err != nil || version != 3 {
 		t.Fatalf("update profile = version %d, error %v", version, err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestUpdateProfileRejectsInvalidNamesBeforeDatabase(t *testing.T) {
+	service, mock := newMockAccountSecurityService(t)
+	for _, test := range []struct {
+		first string
+		last  string
+	}{
+		{first: "", last: "User"},
+		{first: "User", last: "   "},
+		{first: strings.Repeat("a", 101), last: "User"},
+	} {
+		if _, err := service.UpdateProfile(t.Context(), 7, test.first, test.last); !errors.Is(err, ErrSecurityInput) {
+			t.Fatalf("UpdateProfile(%q, %q) error = %v", test.first, test.last, err)
+		}
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)

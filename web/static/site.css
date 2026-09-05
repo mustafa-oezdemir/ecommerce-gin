@@ -135,6 +135,11 @@ body {
   line-height: 1;
 }
 
+.account-avatar-image {
+  display: block;
+  object-fit: cover;
+}
+
 .account-trigger:hover .account-avatar,
 .account-trigger:focus-visible .account-avatar,
 .account-dropdown[open] .account-avatar {

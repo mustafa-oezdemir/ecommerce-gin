@@ -88,10 +88,7 @@
               <span>Total</span>
               <span>{{money .TotalCents}}</span>
             </div>
-            <form method="post" action="/checkout" class="mt-4">
-              {{.CSRFField}}
-              <button type="submit" class="btn btn-primary btn-lg w-100">Proceed to Checkout</button>
-            </form>
+            <a href="/checkout" class="btn btn-primary btn-lg w-100 mt-4">Proceed to Checkout</a>
           </div>
         </div>
       </div>

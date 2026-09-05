@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-contrib/sessions"
@@ -24,17 +25,19 @@ import (
 )
 
 type RouterConfig struct {
-	Environment    string
-	TrustedProxies []string
-	SessionSecret  string
-	SessionSecure  bool
-	CSRFKey        []byte
-	SecurityKey    []byte
-	Database       *gorm.DB
-	Metrics        *metrics.Metrics
-	Logger         *slog.Logger
-	ImageStore     *uploads.ImageStore
-	LogReader      *logging.Reader
+	Environment       string
+	TrustedProxies    []string
+	SessionSecret     string
+	SessionSecure     bool
+	CSRFKey           []byte
+	SecurityKey       []byte
+	WebhookSecret     string
+	Database          *gorm.DB
+	Metrics           *metrics.Metrics
+	Logger            *slog.Logger
+	ImageStore        *uploads.ImageStore
+	ProfileImageStore *uploads.ImageStore
+	LogReader         *logging.Reader
 }
 
 func NewRouter(config RouterConfig) (http.Handler, error) {
@@ -59,6 +62,9 @@ func NewRouter(config RouterConfig) (http.Handler, error) {
 	if config.ImageStore == nil {
 		return nil, errors.New("server: product image store is required")
 	}
+	if config.ProfileImageStore == nil {
+		return nil, errors.New("server: profile image store is required")
+	}
 	if config.LogReader == nil {
 		return nil, errors.New("server: application log reader is required")
 	}
@@ -67,7 +73,7 @@ func NewRouter(config RouterConfig) (http.Handler, error) {
 	}
 
 	router := gin.New()
-	router.MaxMultipartMemory = config.ImageStore.MaxBytes()
+	router.MaxMultipartMemory = max(config.ImageStore.MaxBytes(), config.ProfileImageStore.MaxBytes())
 	if err := router.SetTrustedProxies(config.TrustedProxies); err != nil {
 		return nil, fmt.Errorf("configure trusted proxies: %w", err)
 	}
@@ -93,7 +99,8 @@ func NewRouter(config RouterConfig) (http.Handler, error) {
 	}
 	router.StaticFS("/static", http.FS(staticFiles))
 	router.GET("/media/products/:filename", serveProductImage(config.ImageStore, config.Logger))
-	registerRoutes(router, config.Database, config.Metrics, config.ImageStore, config.LogReader, config.SecurityKey)
+	router.GET("/media/profiles/:filename", serveStoredImage(config.ProfileImageStore))
+	registerRoutes(router, config.Database, config.Metrics, config.ImageStore, config.ProfileImageStore, config.LogReader, config.SecurityKey, config.Environment, config.WebhookSecret)
 	api.RegisterRoutes(router, config.Database)
 
 	csrfMiddleware := csrf.Protect(
@@ -110,15 +117,21 @@ func NewRouter(config RouterConfig) (http.Handler, error) {
 		})),
 	)
 	handler := csrfMiddleware(router)
+	csrfAwareHandler := http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.Method == http.MethodPost && strings.HasPrefix(request.URL.Path, "/webhooks/payments/") {
+			request = csrf.UnsafeSkipCheck(request)
+		}
+		handler.ServeHTTP(writer, request)
+	})
 	if config.Environment != "production" {
 		return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-			handler.ServeHTTP(writer, csrf.PlaintextHTTPRequest(request))
+			csrfAwareHandler.ServeHTTP(writer, csrf.PlaintextHTTPRequest(request))
 		}), nil
 	}
-	return handler, nil
+	return csrfAwareHandler, nil
 }
 
-func registerRoutes(router *gin.Engine, database *gorm.DB, appMetrics *metrics.Metrics, imageStore *uploads.ImageStore, logReader *logging.Reader, securityKey []byte) {
+func registerRoutes(router *gin.Engine, database *gorm.DB, appMetrics *metrics.Metrics, imageStore, profileImageStore *uploads.ImageStore, logReader *logging.Reader, securityKey []byte, environment, webhookSecret string) {
 	health := handlers.NewHealthHandler(database, appMetrics)
 	router.GET("/health/live", health.Live)
 	router.GET("/health/ready", health.Ready)
@@ -126,6 +139,7 @@ func registerRoutes(router *gin.Engine, database *gorm.DB, appMetrics *metrics.M
 	router.GET("/readyz", health.Ready)
 
 	shop := handlers.NewShopHandler(database)
+	checkout := handlers.NewCheckoutHandler(database, environment, webhookSecret)
 	requireAuth := middleware.RequireAuth(database)
 	optionalAuth := middleware.OptionalAuth(database)
 	router.GET("/", optionalAuth, shop.Home)
@@ -142,17 +156,25 @@ func registerRoutes(router *gin.Engine, database *gorm.DB, appMetrics *metrics.M
 	customer.GET("/cart", shop.ViewCart)
 	customer.POST("/cart/items/:id", shop.UpdateCartItem)
 	customer.POST("/cart/items/:id/remove", shop.RemoveCartItem)
-	customer.POST("/checkout", shop.Checkout)
+	customer.GET("/checkout", checkout.Show)
+	customer.POST("/checkout", checkout.Place)
+	customer.GET("/checkout/success", checkout.Success)
+	customer.GET("/account/addresses", checkout.ListAddresses)
+	customer.POST("/account/addresses", checkout.CreateAddress)
+	customer.POST("/account/addresses/:id", checkout.UpdateAddress)
+	customer.POST("/account/addresses/:id/delete", checkout.DeleteAddress)
 	customer.GET("/account/orders", shop.ListOrders)
 	customer.GET("/account/orders/:id", shop.OrderDetail)
 	customer.GET("/account/purchases", shop.ListOrders)
-	account := handlers.NewAccountHandler(database, securityService)
+	account := handlers.NewAccountHandler(database, securityService, profileImageStore)
 	securityLimiter := middleware.NewLoginRateLimiter(20, time.Minute)
 	accountGroup := router.Group("/account")
 	accountGroup.Use(requireAuth)
 	accountGroup.GET("", account.Show)
 	accountGroup.GET("/profile", account.Show)
 	accountGroup.POST("/profile", account.UpdateProfile)
+	accountGroup.POST("/profile/image", account.UpdateProfileImage)
+	accountGroup.POST("/profile/image/delete", account.DeleteProfileImage)
 	accountGroup.POST("/password", securityLimiter.Middleware(), account.ChangePassword)
 	accountGroup.POST("/email", securityLimiter.Middleware(), account.RequestEmailChange)
 	accountGroup.POST("/email/confirm", securityLimiter.Middleware(), account.ConfirmEmailChange)
@@ -185,6 +207,7 @@ func registerRoutes(router *gin.Engine, database *gorm.DB, appMetrics *metrics.M
 	router.GET("/auth/two-factor-challenge", auth.ShowTwoFactorChallenge)
 	router.POST("/auth/two-factor-challenge", twoFactorLimiter.Middleware(), auth.VerifyTwoFactorChallenge)
 	router.POST("/logout", requireAuth, auth.Logout)
+	router.POST("/webhooks/payments/:provider", checkout.Webhook)
 
 	admin := handlers.NewAdminHandler(database, logReader)
 	adminGroup := router.Group("/admin")
@@ -233,6 +256,27 @@ func serveProductImage(imageStore *uploads.ImageStore, logger *slog.Logger) gin.
 		}
 		c.Header("Cache-Control", "public, max-age=31536000, immutable")
 		c.Header("Content-Type", uploads.ContentType(filename))
+		http.ServeContent(c.Writer, c.Request, filename, info.ModTime(), file)
+	}
+}
+
+func serveStoredImage(imageStore *uploads.ImageStore) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		filename := c.Param("filename")
+		file, err := imageStore.Open(filename)
+		if err != nil {
+			c.AbortWithStatus(http.StatusNotFound)
+			return
+		}
+		defer file.Close()
+		info, err := file.Stat()
+		if err != nil || !info.Mode().IsRegular() {
+			c.AbortWithStatus(http.StatusNotFound)
+			return
+		}
+		c.Header("Cache-Control", "public, max-age=31536000, immutable")
+		c.Header("Content-Type", uploads.ContentType(filename))
+		c.Header("X-Content-Type-Options", "nosniff")
 		http.ServeContent(c.Writer, c.Request, filename, info.ModTime(), file)
 	}
 }

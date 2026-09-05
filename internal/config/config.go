@@ -39,6 +39,11 @@ type Config struct {
 	ProductImageMaxWidth  int
 	ProductImageMaxHeight int
 	ProductImageMaxPixels int64
+	ProfileImageDirectory string
+	ProfileImageMaxBytes  int64
+	ProfileImageMaxWidth  int
+	ProfileImageMaxHeight int
+	ProfileImageMaxPixels int64
 	ClamAVAddress         string
 	ClamAVScanTimeout     time.Duration
 	MySQLHost             string
@@ -58,6 +63,7 @@ type Config struct {
 	SessionSecure         bool
 	CSRFKey               []byte
 	SecurityEncryptionKey []byte
+	PaymentWebhookSecret  string
 	DSN                   string
 }
 
@@ -90,6 +96,11 @@ func Load() *Config {
 	productImageMaxWidth := envInt("PRODUCT_IMAGE_MAX_WIDTH", 6000)
 	productImageMaxHeight := envInt("PRODUCT_IMAGE_MAX_HEIGHT", 6000)
 	productImageMaxPixels := envInt64("PRODUCT_IMAGE_MAX_PIXELS", 25_000_000)
+	profileImageDirectory := strings.TrimSpace(os.Getenv("PROFILE_IMAGE_DIRECTORY"))
+	profileImageMaxBytes := envInt64("PROFILE_IMAGE_MAX_BYTES", 5<<20)
+	profileImageMaxWidth := envInt("PROFILE_IMAGE_MAX_WIDTH", 4096)
+	profileImageMaxHeight := envInt("PROFILE_IMAGE_MAX_HEIGHT", 4096)
+	profileImageMaxPixels := envInt64("PROFILE_IMAGE_MAX_PIXELS", 16_000_000)
 	clamAVAddress := strings.TrimSpace(os.Getenv("CLAMAV_ADDRESS"))
 	clamAVScanTimeout := envDuration("CLAMAV_SCAN_TIMEOUT", 15*time.Second)
 	mysqlHost := strings.TrimSpace(os.Getenv("MYSQL_HOST"))
@@ -109,6 +120,7 @@ func Load() *Config {
 	sessionSecureValue := strings.TrimSpace(os.Getenv("SESSION_SECURE"))
 	csrfSecret := strings.TrimSpace(os.Getenv("CSRF_SECRET"))
 	securitySecret := strings.TrimSpace(os.Getenv("SECURITY_ENCRYPTION_KEY"))
+	paymentWebhookSecret := strings.TrimSpace(os.Getenv("PAYMENT_WEBHOOK_SECRET"))
 
 	if appEnv == "" {
 		log.Fatal("APP_ENV is required (development, test, or production)")
@@ -165,6 +177,12 @@ func Load() *Config {
 	}
 	if productImageMaxBytes < 1024 || productImageMaxWidth < 1 || productImageMaxHeight < 1 || productImageMaxPixels < 1 {
 		log.Fatal("product image size and dimension limits must be positive")
+	}
+	if profileImageDirectory == "" {
+		profileImageDirectory = "uploads/profiles"
+	}
+	if profileImageMaxBytes < 1024 || profileImageMaxWidth < 1 || profileImageMaxHeight < 1 || profileImageMaxPixels < 1 {
+		log.Fatal("profile image size and dimension limits must be positive")
 	}
 	if clamAVAddress == "" {
 		clamAVAddress = "127.0.0.1:3310"
@@ -251,6 +269,11 @@ func Load() *Config {
 		ProductImageMaxWidth:  productImageMaxWidth,
 		ProductImageMaxHeight: productImageMaxHeight,
 		ProductImageMaxPixels: productImageMaxPixels,
+		ProfileImageDirectory: profileImageDirectory,
+		ProfileImageMaxBytes:  profileImageMaxBytes,
+		ProfileImageMaxWidth:  profileImageMaxWidth,
+		ProfileImageMaxHeight: profileImageMaxHeight,
+		ProfileImageMaxPixels: profileImageMaxPixels,
 		ClamAVAddress:         clamAVAddress,
 		ClamAVScanTimeout:     clamAVScanTimeout,
 		MySQLHost:             mysqlHost,
@@ -270,6 +293,7 @@ func Load() *Config {
 		SessionSecure:         sessionSecure,
 		CSRFKey:               csrfKey,
 		SecurityEncryptionKey: securityKey,
+		PaymentWebhookSecret:  paymentWebhookSecret,
 		DSN:                   dsn,
 	}
 }

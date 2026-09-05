@@ -23,15 +23,16 @@ import (
 func TestNewRouterBuildsApplicationRoutes(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	handler, err := NewRouter(RouterConfig{
-		Environment:   "test",
-		SessionSecret: "a-session-secret-that-is-long-enough",
-		CSRFKey:       []byte("12345678901234567890123456789012"),
-		SecurityKey:   []byte("abcdefghijklmnopqrstuvwx12345678"),
-		Database:      &gorm.DB{},
-		Metrics:       metrics.New(prometheus.NewRegistry()),
-		Logger:        slog.New(slog.NewTextHandler(io.Discard, nil)),
-		ImageStore:    testImageStore(t),
-		LogReader:     testLogReader(t),
+		Environment:       "test",
+		SessionSecret:     "a-session-secret-that-is-long-enough",
+		CSRFKey:           []byte("12345678901234567890123456789012"),
+		SecurityKey:       []byte("abcdefghijklmnopqrstuvwx12345678"),
+		Database:          &gorm.DB{},
+		Metrics:           metrics.New(prometheus.NewRegistry()),
+		Logger:            slog.New(slog.NewTextHandler(io.Discard, nil)),
+		ImageStore:        testImageStore(t),
+		ProfileImageStore: testImageStore(t),
+		LogReader:         testLogReader(t),
 	})
 	if err != nil {
 		t.Fatalf("build router: %v", err)
@@ -56,21 +57,22 @@ func TestNewRouterBuildsApplicationRoutes(t *testing.T) {
 func TestAccountRoutesRequireAuthenticationAndCSRF(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	handler, err := NewRouter(RouterConfig{
-		Environment:   "test",
-		SessionSecret: "a-session-secret-that-is-long-enough",
-		CSRFKey:       []byte("12345678901234567890123456789012"),
-		SecurityKey:   []byte("abcdefghijklmnopqrstuvwx12345678"),
-		Database:      &gorm.DB{},
-		Metrics:       metrics.New(prometheus.NewRegistry()),
-		Logger:        slog.New(slog.NewTextHandler(io.Discard, nil)),
-		ImageStore:    testImageStore(t),
-		LogReader:     testLogReader(t),
+		Environment:       "test",
+		SessionSecret:     "a-session-secret-that-is-long-enough",
+		CSRFKey:           []byte("12345678901234567890123456789012"),
+		SecurityKey:       []byte("abcdefghijklmnopqrstuvwx12345678"),
+		Database:          &gorm.DB{},
+		Metrics:           metrics.New(prometheus.NewRegistry()),
+		Logger:            slog.New(slog.NewTextHandler(io.Discard, nil)),
+		ImageStore:        testImageStore(t),
+		ProfileImageStore: testImageStore(t),
+		LogReader:         testLogReader(t),
 	})
 	if err != nil {
 		t.Fatalf("build router: %v", err)
 	}
 
-	for _, path := range []string{"/account", "/account/profile", "/account/two-factor"} {
+	for _, path := range []string{"/account", "/account/profile", "/account/two-factor", "/account/addresses", "/checkout"} {
 		response := httptest.NewRecorder()
 		handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
 		if response.Code != http.StatusFound || response.Header().Get("Location") != "/login" {
@@ -78,27 +80,49 @@ func TestAccountRoutesRequireAuthenticationAndCSRF(t *testing.T) {
 		}
 	}
 
-	request := httptest.NewRequest(http.MethodPost, "/account/profile", strings.NewReader("first_name=Other&last_name=User&user_id=99"))
-	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	response := httptest.NewRecorder()
-	handler.ServeHTTP(response, request)
-	if response.Code != http.StatusForbidden {
-		t.Fatalf("profile update without CSRF token = %d, want %d", response.Code, http.StatusForbidden)
+	for _, path := range []string{
+		"/account/profile",
+		"/account/profile/image",
+		"/account/profile/image/delete",
+		"/account/password",
+		"/account/two-factor",
+		"/account/two-factor/confirm",
+		"/account/two-factor/disable",
+		"/account/addresses",
+		"/account/addresses/1",
+		"/account/addresses/1/delete",
+		"/checkout",
+	} {
+		request := httptest.NewRequest(http.MethodPost, path, strings.NewReader("first_name=Other&last_name=User&user_id=99"))
+		request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		if response.Code != http.StatusForbidden {
+			t.Errorf("POST %s without CSRF token = %d, want %d", path, response.Code, http.StatusForbidden)
+		}
+	}
+
+	webhookRequest := httptest.NewRequest(http.MethodPost, "/webhooks/payments/paypal", strings.NewReader(`{"event_id":"evt","provider_payment_id":"pay","status":"paid"}`))
+	webhookResponse := httptest.NewRecorder()
+	handler.ServeHTTP(webhookResponse, webhookRequest)
+	if webhookResponse.Code != http.StatusUnauthorized {
+		t.Fatalf("unsigned webhook = %d, want %d (signature check, not CSRF)", webhookResponse.Code, http.StatusUnauthorized)
 	}
 }
 
 func TestNewRouterRegistersVersionedProductAPI(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	handler, err := NewRouter(RouterConfig{
-		Environment:   "test",
-		SessionSecret: "a-session-secret-that-is-long-enough",
-		CSRFKey:       []byte("12345678901234567890123456789012"),
-		SecurityKey:   []byte("abcdefghijklmnopqrstuvwx12345678"),
-		Database:      &gorm.DB{},
-		Metrics:       metrics.New(prometheus.NewRegistry()),
-		Logger:        slog.New(slog.NewTextHandler(io.Discard, nil)),
-		ImageStore:    testImageStore(t),
-		LogReader:     testLogReader(t),
+		Environment:       "test",
+		SessionSecret:     "a-session-secret-that-is-long-enough",
+		CSRFKey:           []byte("12345678901234567890123456789012"),
+		SecurityKey:       []byte("abcdefghijklmnopqrstuvwx12345678"),
+		Database:          &gorm.DB{},
+		Metrics:           metrics.New(prometheus.NewRegistry()),
+		Logger:            slog.New(slog.NewTextHandler(io.Discard, nil)),
+		ImageStore:        testImageStore(t),
+		ProfileImageStore: testImageStore(t),
+		LogReader:         testLogReader(t),
 	})
 	if err != nil {
 		t.Fatalf("build router: %v", err)

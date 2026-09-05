@@ -109,6 +109,35 @@ type UpdateQuantityRequest struct {
 	Quantity int `form:"quantity" binding:"gte=1,lte=100"`
 }
 
+type CheckoutRequest struct {
+	ShippingAddressID     uint   `form:"shipping_address_id" binding:"required,gt=0"`
+	BillingAddressID      uint   `form:"billing_address_id" binding:"omitempty,gt=0"`
+	BillingSameAsShipping bool   `form:"billing_same_as_shipping"`
+	PaymentMethod         string `form:"payment_method" binding:"required,oneof=debit_card credit_card paypal klarna"`
+	IdempotencyKey        string `form:"idempotency_key" binding:"required,min=32,max=64"`
+	ProviderToken         string `form:"provider_token" binding:"omitempty,max=255"`
+}
+
+type AddressRequest struct {
+	FirstName    string `form:"first_name" binding:"required,max=100"`
+	LastName     string `form:"last_name" binding:"required,max=100"`
+	Company      string `form:"company" binding:"max=150"`
+	Street       string `form:"street" binding:"required,max=150"`
+	HouseNumber  string `form:"house_number" binding:"required,max=30"`
+	AddressLine2 string `form:"address_line_2" binding:"max=150"`
+	PostalCode   string `form:"postal_code" binding:"required,max=20"`
+	City         string `form:"city" binding:"required,max=100"`
+	State        string `form:"state" binding:"max=100"`
+	CountryCode  string `form:"country_code" binding:"required,len=2"`
+	Phone        string `form:"phone" binding:"required,max=32"`
+	IsDefault    bool   `form:"is_default"`
+	ReturnTo     string `form:"return_to" binding:"omitempty,max=64"`
+}
+
+type AddressIDURI struct {
+	ID uint `uri:"id" binding:"required,gt=0"`
+}
+
 type UpdateOrderStatusRequest struct {
 	Status string `form:"status" binding:"required,oneof=processing shipped completed cancelled"`
 }

@@ -6,7 +6,7 @@ import (
 )
 
 func TestOrderStatusTransitions(t *testing.T) {
-	valid := []struct{ from, to models.OrderStatus }{{models.OrderStatusPending, models.OrderStatusProcessing}, {models.OrderStatusPending, models.OrderStatusCancelled}, {models.OrderStatusProcessing, models.OrderStatusShipped}, {models.OrderStatusProcessing, models.OrderStatusCancelled}, {models.OrderStatusShipped, models.OrderStatusCompleted}}
+	valid := []struct{ from, to models.OrderStatus }{{models.OrderStatusPendingPayment, models.OrderStatusPaid}, {models.OrderStatusPaid, models.OrderStatusProcessing}, {models.OrderStatusPending, models.OrderStatusProcessing}, {models.OrderStatusPending, models.OrderStatusCancelled}, {models.OrderStatusProcessing, models.OrderStatusShipped}, {models.OrderStatusProcessing, models.OrderStatusCancelled}, {models.OrderStatusShipped, models.OrderStatusCompleted}}
 	for _, tt := range valid {
 		if !CanTransitionOrderStatus(tt.from, tt.to) {
 			t.Fatalf("expected %s -> %s to be valid", tt.from, tt.to)

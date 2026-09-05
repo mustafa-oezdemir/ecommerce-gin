@@ -39,6 +39,14 @@ func orderStatusLabel(status models.OrderStatus) string {
 	switch status {
 	case models.OrderStatusPending:
 		return "Pending"
+	case models.OrderStatusPendingPayment:
+		return "Pending payment"
+	case models.OrderStatusPaid:
+		return "Paid"
+	case models.OrderStatusPaymentFailed:
+		return "Payment failed"
+	case models.OrderStatusRefunded:
+		return "Refunded"
 	case models.OrderStatusProcessing:
 		return "Processing"
 	case models.OrderStatusShipped:
@@ -75,9 +83,17 @@ func initials(value string) string {
 	if trimmed == "" {
 		return ""
 	}
-	first, _ := utf8.DecodeRuneInString(trimmed)
+	parts := strings.Fields(trimmed)
+	first, _ := utf8.DecodeRuneInString(parts[0])
 	if first == utf8.RuneError {
 		return ""
 	}
-	return strings.ToUpper(string(first))
+	result := string(first)
+	if len(parts) > 1 {
+		last, _ := utf8.DecodeRuneInString(parts[len(parts)-1])
+		if last != utf8.RuneError {
+			result += string(last)
+		}
+	}
+	return strings.ToUpper(result)
 }
