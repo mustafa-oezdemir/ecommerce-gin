@@ -145,7 +145,19 @@ curl http://localhost:8080/health/ready
 
 ## Monitoring
 
-The application exposes Prometheus metrics only on its internal Docker port `9091`; it is scraped by Prometheus as `app:9091` and is not published by Compose. Grafana is provisioned automatically with the Prometheus datasource and an **Ecommerce Overview** dashboard. Metric labels use Gin route templates rather than raw URLs and never include customer or secret values.
+The application exposes Prometheus metrics only on its internal Docker port `9091`; it is scraped by Prometheus as `app:9091` and is not published by Compose. The same Prometheus instance also scrapes Shipping privately at `shipping-app:9092` over `pehlione-backend`; Shipping does not create a second Prometheus/Grafana stack. Grafana is provisioned automatically with one Prometheus datasource and the **Ecommerce Overview**, **Shipping Service Overview**, and **E-Commerce + Shipping Overview** dashboards. Metric labels use Gin route templates rather than raw URLs and never include customer or secret values.
+
+```mermaid
+flowchart TD
+    P["Shared Prometheus"] -->|"app:9091"| E["E-Commerce metrics"]
+    P -->|"shipping-app:9092"| S["Shipping metrics"]
+    P --> G["Shared Grafana"]
+    G --> ED["E-Commerce dashboard"]
+    G --> SD["Shipping dashboard"]
+    G --> CD["Combined integration dashboard"]
+```
+
+Shipping scrape and alert configuration is version-controlled in `monitoring/prometheus.yml` and `monitoring/rules/shipping-alerts.yml`. The provisioned Shipping dashboards are under `monitoring/grafana/dashboards/`. Prometheus and Grafana host ports are intended for local development; production monitoring should remain internal, VPN-only, or otherwise access-controlled.
 
 ## Middleware
 
