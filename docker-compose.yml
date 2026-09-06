@@ -47,7 +47,8 @@ services:
 
     environment:
       APP_ENV: ${APP_ENV}
-      APP_PORT: ${APP_PORT}
+      # Container port is fixed; customize only the published host port below.
+      APP_PORT: 8080
       METRICS_PORT: ${METRICS_PORT}
       GIN_MODE: ${GIN_MODE}
       TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}

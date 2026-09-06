@@ -92,6 +92,7 @@ Copy `.env.example` and keep `.env` private. Docker passes only application-requ
 | `APP_ENV` | `development`, `test`, or `production` |
 | `TRUSTED_PROXIES` | Comma-separated proxy IPs/CIDRs; leave empty for direct traffic |
 | `APP_PORT` | Application HTTP port |
+| `ECOMMERCE_HOST_PORT` | Docker host port for the main application (default `8080`) |
 | `METRICS_PORT` | Internal Prometheus metrics port |
 | `LOG_LEVEL` | Minimum log level: `debug`, `info`, `warn`, or `error` |
 | `LOG_CONSOLE_FORMAT` | Console output format: `text` or `json` |
