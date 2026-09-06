@@ -244,6 +244,7 @@ func (h *ShopHandler) OrderDetail(c *gin.Context) {
 		return
 	}
 	data := gin.H{"Order": order}
+	canCancel := order.Status == models.OrderStatusPaid || order.Status == models.OrderStatusPreparing || order.Status == models.OrderStatusReadyForShipping || order.Status == models.OrderStatusProcessing
 	if h.shipping.Enabled() {
 		shipment, shippingErr := h.shipping.RefreshOrderShipment(c.Request.Context(), order.ID, c.GetString(middleware.RequestIDKey))
 		if shippingErr != nil && !errors.Is(shippingErr, shippingapi.ErrNotFound) {
@@ -258,6 +259,10 @@ func (h *ShopHandler) OrderDetail(c *gin.Context) {
 		} else if shipment != nil {
 			data["Shipment"] = shipment
 			data["ShipmentTrackingURL"] = h.shipping.TrackingURL(shipment.TrackingNumber)
+			data["ShipmentQRCodeURL"] = h.shipping.QRCodeURL(shipment.TrackingNumber)
+			if order.Status == models.OrderStatusShipped && shipment.Status != "delivered" && shipment.Status != "cancelled" {
+				canCancel = true
+			}
 			if timeline, timelineErr := h.shipping.Timeline(c.Request.Context(), shipment.TrackingNumber, c.GetString(middleware.RequestIDKey)); timelineErr == nil {
 				data["ShipmentTimeline"] = timeline
 			} else {
@@ -277,6 +282,7 @@ func (h *ShopHandler) OrderDetail(c *gin.Context) {
 		data["ReturnTrackingURL"] = h.shipping.TrackingURL(returnShipment.TrackingNumber)
 		data["ReturnQRCodeURL"] = h.shipping.QRCodeURL(returnShipment.TrackingNumber)
 	}
+	data["CanCancelOrder"] = canCancel
 	c.HTML(http.StatusOK, "order_detail.tmpl", viewData(c, data))
 }
 
@@ -343,6 +349,33 @@ func (h *ShopHandler) RequestReturn(c *gin.Context) {
 		return
 	}
 	c.Redirect(http.StatusSeeOther, "/account/orders/"+strconv.FormatUint(uint64(request.OrderID), 10))
+}
+
+func (h *ShopHandler) CancelOrder(c *gin.Context) {
+	user, ok := middleware.CurrentUser(c)
+	if !ok {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+	orderID, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || orderID == 0 {
+		c.AbortWithStatus(http.StatusNotFound)
+		return
+	}
+	if err := h.shipping.CancelOrder(c.Request.Context(), user.ID, uint(orderID), c.GetString(middleware.RequestIDKey)); err != nil {
+		switch {
+		case errors.Is(err, gorm.ErrRecordNotFound):
+			c.AbortWithStatus(http.StatusNotFound)
+		case errors.Is(err, services.ErrInvalidTransition):
+			c.String(http.StatusConflict, "This order can no longer be cancelled")
+		case errors.Is(err, services.ErrShippingDisabled), errors.Is(err, shippingapi.ErrUnavailable), errors.Is(err, shippingapi.ErrTimeout):
+			c.String(http.StatusServiceUnavailable, "Shipping service is temporarily unavailable")
+		default:
+			c.String(http.StatusInternalServerError, "Could not cancel order")
+		}
+		return
+	}
+	c.Redirect(http.StatusSeeOther, "/account/orders/"+strconv.FormatUint(orderID, 10))
 }
 
 func returnItemInputs(c *gin.Context) ([]services.ReturnItemInput, error) {

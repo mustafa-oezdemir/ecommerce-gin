@@ -12,8 +12,11 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
+
+	appmetrics "github.com/mustafa-oezdemir/ecommerce-gin/internal/metrics"
 )
 
 var (
@@ -92,6 +95,7 @@ type Shipment struct {
 	Status            string             `json:"status"`
 	StatusLabel       string             `json:"status_label"`
 	RemainingStops    *int               `json:"remaining_stops,omitempty"`
+	DeliveredAt       *time.Time         `json:"delivered_at,omitempty"`
 	EstimatedDelivery *EstimatedDelivery `json:"estimated_delivery,omitempty"`
 	IdempotentReplay  bool               `json:"idempotent_replay"`
 }
@@ -110,6 +114,7 @@ type ShipmentEvent struct {
 type Client interface {
 	CreateShipment(context.Context, CreateShipmentRequest, string, string) (*Shipment, error)
 	CreateReturn(context.Context, CreateReturnRequest, string, string) (*Shipment, error)
+	CancelShipment(context.Context, string, string, string) (*Shipment, error)
 	GetShipmentByOrder(context.Context, uint, string) (*Shipment, error)
 	GetTimeline(context.Context, string, string) ([]ShipmentEvent, error)
 	TrackingURL(string) string
@@ -165,6 +170,17 @@ func (client *HTTPClient) CreateReturn(ctx context.Context, shipment CreateRetur
 	}
 	var response Shipment
 	if err := client.doJSON(ctx, http.MethodPost, "/api/v1/returns", shipment, &response, idempotencyKey, requestID, true); err != nil {
+		return nil, err
+	}
+	return &response, nil
+}
+
+func (client *HTTPClient) CancelShipment(ctx context.Context, shipmentID, idempotencyKey, requestID string) (*Shipment, error) {
+	if strings.TrimSpace(shipmentID) == "" || strings.TrimSpace(idempotencyKey) == "" {
+		return nil, fmt.Errorf("shipment id and idempotency key are required")
+	}
+	var response Shipment
+	if err := client.doJSON(ctx, http.MethodPost, "/api/v1/shipments/"+url.PathEscape(shipmentID)+"/cancel", nil, &response, idempotencyKey, requestID, true); err != nil {
 		return nil, err
 	}
 	return &response, nil
@@ -230,7 +246,9 @@ func (client *HTTPClient) doJSON(ctx context.Context, method, path string, input
 			request.Header.Set("Content-Type", "application/json")
 		}
 
+		startedAt := time.Now()
 		response, err := client.httpClient.Do(request)
+		observeShippingRequest(method, path, response, err, time.Since(startedAt))
 		if err != nil {
 			if retryable && attempt < 2 && isTemporary(err) && ctx.Err() == nil {
 				if err := waitForRetry(ctx, attempt); err != nil {
@@ -255,6 +273,44 @@ func (client *HTTPClient) doJSON(ctx context.Context, method, path string, input
 		}
 	}
 	return ErrUnavailable
+}
+
+func observeShippingRequest(method, path string, response *http.Response, requestErr error, duration time.Duration) {
+	appMetrics := appmetrics.Default()
+	if appMetrics == nil {
+		return
+	}
+	route := shippingMetricRoute(path)
+	status := "transport_error"
+	if response != nil {
+		status = strconv.Itoa(response.StatusCode)
+	}
+	appMetrics.ShippingAPIRequests.WithLabelValues(method, route, status).Inc()
+	appMetrics.ShippingAPIDuration.WithLabelValues(method, route).Observe(duration.Seconds())
+	if requestErr != nil || response == nil || response.StatusCode >= http.StatusBadRequest {
+		kind := "http"
+		if requestErr != nil || response == nil {
+			kind = "transport"
+		}
+		appMetrics.ShippingAPIErrors.WithLabelValues(method, route, kind).Inc()
+	}
+}
+
+func shippingMetricRoute(path string) string {
+	switch {
+	case strings.HasSuffix(path, "/events"):
+		return "/api/v1/shipments/:trackingNumber/events"
+	case strings.HasPrefix(path, "/api/v1/shipments/order/"):
+		return "/api/v1/shipments/order/:orderID"
+	case strings.HasSuffix(path, "/cancel"):
+		return "/api/v1/shipments/:id/cancel"
+	case strings.HasPrefix(path, "/api/v1/shipments/"):
+		return "/api/v1/shipments/:trackingNumber"
+	case strings.HasPrefix(path, "/api/v1/returns/"):
+		return "/api/v1/returns/:trackingNumber"
+	default:
+		return path
+	}
 }
 
 func decodeResponse(response *http.Response, output any) error {

@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	appmetrics "github.com/mustafa-oezdemir/ecommerce-gin/internal/metrics"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/middleware"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/models"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/services"
@@ -68,6 +69,15 @@ func (handler *ShippingHandler) Handover(c *gin.Context) {
 }
 
 func (handler *ShippingHandler) Callback(c *gin.Context) {
+	succeeded := false
+	defer func() {
+		if appMetrics := appmetrics.Default(); appMetrics != nil {
+			appMetrics.ShippingCallbacks.Inc()
+			if !succeeded {
+				appMetrics.ShippingCallbackFailures.Inc()
+			}
+		}
+	}()
 	authorization := []byte(c.GetHeader("Authorization"))
 	authenticated := 0
 	for _, token := range handler.callbackTokens {
@@ -98,6 +108,7 @@ func (handler *ShippingHandler) Callback(c *gin.Context) {
 		shippingCallbackError(c, http.StatusInternalServerError, "CALLBACK_FAILED", "Could not record shipping callback")
 		return
 	}
+	succeeded = true
 	c.Status(http.StatusNoContent)
 }
 

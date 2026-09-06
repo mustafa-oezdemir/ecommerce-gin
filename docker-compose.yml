@@ -122,6 +122,12 @@ services:
       clamav:
         condition: service_healthy
 
+    networks:
+      default:
+      pehlione-backend:
+        aliases:
+          - ecommerce-app
+
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:8080/health/ready"]
       interval: 10s
@@ -168,3 +174,8 @@ volumes:
   app_logs:
   app_uploads:
   clamav_data:
+
+networks:
+  pehlione-backend:
+    external: true
+    name: pehlione-backend

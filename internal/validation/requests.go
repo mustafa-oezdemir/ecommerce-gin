@@ -139,7 +139,7 @@ type AddressIDURI struct {
 }
 
 type UpdateOrderStatusRequest struct {
-	Status string `form:"status" binding:"required,oneof=processing shipped completed cancelled"`
+	Status string `form:"status" binding:"required,oneof=preparing ready_for_shipping cancelled"`
 }
 
 type CreateCategoryRequest struct {

@@ -176,6 +176,7 @@ func registerRoutes(router *gin.Engine, database *gorm.DB, appMetrics *metrics.M
 	customer.GET("/account/orders/:id", shop.OrderDetail)
 	customer.POST("/account/orders/:id/confirm-delivery", shop.ConfirmDelivery)
 	customer.POST("/account/orders/:id/return", shop.RequestReturn)
+	customer.POST("/account/orders/:id/cancel", shop.CancelOrder)
 	customer.GET("/account/purchases", shop.ListOrders)
 	notifications := handlers.NewNotificationHandler(database)
 	customer.GET("/account/notifications", notifications.List)

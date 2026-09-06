@@ -392,7 +392,13 @@ func TestEmployeeOrdersShowsOnlyAllowedTransitions(t *testing.T) {
 		{
 			name:      "pending",
 			status:    models.OrderStatusPending,
-			want:      []string{`value="processing"`, `value="cancelled"`},
+			want:      []string{`value="preparing"`, `value="cancelled"`},
+			doNotWant: []string{`value="shipped"`, `value="completed"`},
+		},
+		{
+			name:      "ready for shipping",
+			status:    models.OrderStatusReadyForShipping,
+			want:      []string{"Hand over to shipping", `action="/employee/orders/7/shipment"`},
 			doNotWant: []string{`value="shipped"`, `value="completed"`},
 		},
 		{

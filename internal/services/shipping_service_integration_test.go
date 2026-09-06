@@ -30,6 +30,9 @@ func (stub *shippingClientStub) CreateReturn(_ context.Context, request shipping
 	stub.returnRequest, stub.idempotencyKey, stub.requestID = request, key, requestID
 	return stub.returnShipment, stub.err
 }
+func (stub *shippingClientStub) CancelShipment(context.Context, string, string, string) (*shippingapi.Shipment, error) {
+	return stub.shipment, stub.err
+}
 func (stub *shippingClientStub) GetShipmentByOrder(context.Context, uint, string) (*shippingapi.Shipment, error) {
 	return stub.shipment, stub.err
 }
@@ -79,10 +82,11 @@ func TestShippingHandoverUsesSnapshotsAndUpdatesOrderAtomically(t *testing.T) {
 		t.Fatalf("order was not marked shipped: %v %s", err, order.Status)
 	}
 
-	// A retry after the successful handover must not call Shipping again.
-	_, err = service.Handover(t.Context(), order.ID, "request-retry")
-	if !errors.Is(err, ErrInvalidTransition) {
-		t.Fatalf("duplicate handover was not rejected: %v", err)
+	// A retry after the successful handover returns the same cached shipment
+	// without creating another shipment in Shipping Service.
+	replayed, err := service.Handover(t.Context(), order.ID, "request-retry")
+	if err != nil || replayed == nil || replayed.ShipmentID != cache.ShipmentID {
+		t.Fatalf("duplicate handover was not replayed safely: shipment=%+v err=%v", replayed, err)
 	}
 }
 
@@ -95,7 +99,7 @@ func TestShippingHandoverFailureLeavesOrderAndCacheUnchanged(t *testing.T) {
 	if _, err := service.Handover(t.Context(), order.ID, "request-failure"); !errors.Is(err, shippingapi.ErrUnavailable) {
 		t.Fatalf("unexpected handover error: %v", err)
 	}
-	if err := database.First(&order, order.ID).Error; err != nil || order.Status != models.OrderStatusProcessing {
+	if err := database.First(&order, order.ID).Error; err != nil || order.Status != models.OrderStatusReadyForShipping {
 		t.Fatalf("failed handover changed order: %v %s", err, order.Status)
 	}
 	var count int64
@@ -209,7 +213,7 @@ func TestCustomerDeliveryConfirmationAndReturnAreIdempotent(t *testing.T) {
 
 func createShippingOrderFixture(t *testing.T, database *gorm.DB, fixture checkoutFixture) models.Order {
 	t.Helper()
-	order := models.Order{UserID: fixture.users[0].ID, Status: models.OrderStatusProcessing, OrderNumber: fmt.Sprintf("SHIP-%d", time.Now().UnixNano()), IdempotencyKey: fmt.Sprintf("%064x", time.Now().UnixNano()), PaymentMethod: models.PaymentMethodCreditCard, Currency: "EUR", TotalCents: fixture.products[0].PriceCents}
+	order := models.Order{UserID: fixture.users[0].ID, Status: models.OrderStatusReadyForShipping, OrderNumber: fmt.Sprintf("SHIP-%d", time.Now().UnixNano()), IdempotencyKey: fmt.Sprintf("%064x", time.Now().UnixNano()), PaymentMethod: models.PaymentMethodCreditCard, Currency: "EUR", TotalCents: fixture.products[0].PriceCents}
 	if err := database.Create(&order).Error; err != nil {
 		t.Fatal(err)
 	}

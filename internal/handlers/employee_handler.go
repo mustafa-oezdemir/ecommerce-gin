@@ -264,6 +264,9 @@ func (h *EmployeeHandler) ListOrders(c *gin.Context) {
 	selectedStatus := models.OrderStatus(strings.ToLower(strings.TrimSpace(c.Query("status"))))
 	validStatuses := []models.OrderStatus{
 		models.OrderStatusPending,
+		models.OrderStatusPaid,
+		models.OrderStatusPreparing,
+		models.OrderStatusReadyForShipping,
 		models.OrderStatusProcessing,
 		models.OrderStatusShipped,
 		models.OrderStatusCompleted,
@@ -288,7 +291,7 @@ func (h *EmployeeHandler) ListOrders(c *gin.Context) {
 	}
 
 	var orders []models.Order
-	query := h.database.WithContext(c.Request.Context()).Preload("Items").Preload("User").Joins("JOIN users ON users.id = orders.user_id").Order(orderBy)
+	query := h.database.WithContext(c.Request.Context()).Preload("Items").Preload("User").Preload("Shipment").Joins("JOIN users ON users.id = orders.user_id").Order(orderBy)
 	if userSearch != "" {
 		like := "%" + userSearch + "%"
 		query = query.Where("(users.name LIKE ? OR users.email LIKE ?)", like, like)

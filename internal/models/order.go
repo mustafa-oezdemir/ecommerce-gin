@@ -9,15 +9,17 @@ import (
 type OrderStatus string
 
 const (
-	OrderStatusPending        OrderStatus = "pending"
-	OrderStatusPendingPayment OrderStatus = "pending_payment"
-	OrderStatusPaid           OrderStatus = "paid"
-	OrderStatusPaymentFailed  OrderStatus = "payment_failed"
-	OrderStatusRefunded       OrderStatus = "refunded"
-	OrderStatusProcessing     OrderStatus = "processing"
-	OrderStatusShipped        OrderStatus = "shipped"
-	OrderStatusCompleted      OrderStatus = "completed"
-	OrderStatusCancelled      OrderStatus = "cancelled"
+	OrderStatusPending          OrderStatus = "pending"
+	OrderStatusPendingPayment   OrderStatus = "pending_payment"
+	OrderStatusPaid             OrderStatus = "paid"
+	OrderStatusPaymentFailed    OrderStatus = "payment_failed"
+	OrderStatusRefunded         OrderStatus = "refunded"
+	OrderStatusPreparing        OrderStatus = "preparing"
+	OrderStatusReadyForShipping OrderStatus = "ready_for_shipping"
+	OrderStatusProcessing       OrderStatus = "processing"
+	OrderStatusShipped          OrderStatus = "shipped"
+	OrderStatusCompleted        OrderStatus = "completed"
+	OrderStatusCancelled        OrderStatus = "cancelled"
 )
 
 func AllowedOrderStatusTransitions(from OrderStatus) []OrderStatus {
@@ -25,12 +27,17 @@ func AllowedOrderStatusTransitions(from OrderStatus) []OrderStatus {
 	case OrderStatusPendingPayment:
 		return []OrderStatus{OrderStatusPaid, OrderStatusPaymentFailed, OrderStatusCancelled}
 	case OrderStatusPaid:
-		return []OrderStatus{OrderStatusProcessing, OrderStatusCancelled, OrderStatusRefunded}
+		return []OrderStatus{OrderStatusPreparing, OrderStatusCancelled, OrderStatusRefunded}
 	case OrderStatusPending:
-		return []OrderStatus{OrderStatusProcessing, OrderStatusCancelled}
-	case OrderStatusProcessing:
+		return []OrderStatus{OrderStatusPreparing, OrderStatusCancelled}
+	case OrderStatusPreparing, OrderStatusProcessing:
+		return []OrderStatus{OrderStatusReadyForShipping, OrderStatusCancelled}
+	case OrderStatusReadyForShipping:
 		// Shipping handover is performed only through ShippingService.Handover.
 		// Logistics lifecycle statuses are owned by shipping-service.
+		return []OrderStatus{OrderStatusCancelled}
+	case OrderStatusShipped:
+		// A shipment can only be cancelled before shipping-service receives it.
 		return []OrderStatus{OrderStatusCancelled}
 	default:
 		return nil
@@ -72,7 +79,7 @@ type OrderShipment struct {
 	gorm.Model
 	OrderID           uint   `gorm:"not null;uniqueIndex:idx_order_shipments_order_type,priority:1"`
 	ShipmentID        string `gorm:"size:64;not null;uniqueIndex"`
-	HandoverCode      string `gorm:"size:64;not null"`
+	HandoverCode      string `gorm:"size:64;not null;index"`
 	TrackingNumber    string `gorm:"size:64;not null;uniqueIndex"`
 	ShipmentType      string `gorm:"size:16;not null;uniqueIndex:idx_order_shipments_order_type,priority:2"`
 	Status            string `gorm:"size:50;not null"`

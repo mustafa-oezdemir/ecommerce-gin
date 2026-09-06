@@ -251,6 +251,9 @@ func (h *AdminHandler) ListOrders(c *gin.Context) {
 	selectedStatus := models.OrderStatus(strings.ToLower(strings.TrimSpace(c.Query("status"))))
 	validStatuses := []models.OrderStatus{
 		models.OrderStatusPending,
+		models.OrderStatusPaid,
+		models.OrderStatusPreparing,
+		models.OrderStatusReadyForShipping,
 		models.OrderStatusProcessing,
 		models.OrderStatusShipped,
 		models.OrderStatusCompleted,

@@ -41,6 +41,7 @@
 								{{ if .Shipment.EstimatedFrom }}<div class="small text-muted">Estimated: {{ .Shipment.EstimatedFrom.Format "02 Jan 15:04" }}</div>{{ end }}
 							</div>
 							{{ if .ShipmentTrackingURL }}<a class="btn btn-outline-primary" href="{{ .ShipmentTrackingURL }}">Track shipment</a>{{ end }}
+							{{ if .ShipmentQRCodeURL }}<img src="{{ .ShipmentQRCodeURL }}" alt="Shipment QR code" width="128" height="128" loading="lazy">{{ end }}
 						</div>
 					</div>
 				{{ end }}
@@ -135,6 +136,14 @@
 							{{ if .ReturnTrackingURL }}<a class="btn btn-outline-primary" href="{{ .ReturnTrackingURL }}">Track return</a>{{ end }}
 						</div>
 					</div>
+				</div>
+			{{ end }}
+			{{ if .CanCancelOrder }}
+				<div class="mb-4">
+					<form method="post" action="/account/orders/{{ .Order.ID }}/cancel">
+						{{ .CSRFField }}
+						<button class="btn btn-outline-danger" type="submit">Cancel order</button>
+					</form>
 				</div>
 			{{ end }}
 

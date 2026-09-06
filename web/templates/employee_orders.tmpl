@@ -82,11 +82,14 @@
                   {{else}}
                   <span class="text-muted small">No further actions</span>
                   {{end}}
-                  {{if eq .Status "processing"}}
+                  {{if eq .Status "ready_for_shipping"}}
                   <form method="post" action="/employee/orders/{{.ID}}/shipment" class="mt-2">
                     {{$.CSRFField}}
                     <button type="submit" class="btn btn-outline-primary btn-sm">Hand over to shipping</button>
                   </form>
+                  {{end}}
+                  {{if .Shipment.ID}}
+                  <div class="small mt-2"><span class="text-muted">Tracking:</span> <span class="font-monospace">{{.Shipment.TrackingNumber}}</span><br><span class="text-muted">Managed by Shipping Service</span></div>
                   {{end}}
                 </td>
               </tr>

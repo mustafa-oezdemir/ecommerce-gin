@@ -52,6 +52,15 @@ var shipmentHandoverCodeSchema string
 //go:embed 000015_customer_delivery_returns.sql
 var customerDeliveryReturnsSchema string
 
+//go:embed 000016_unique_handover_code.sql
+var uniqueHandoverCodeSchema string
+
+//go:embed 000017_ensure_return_items.sql
+var ensureReturnItemsSchema string
+
+//go:embed 000018_allow_empty_return_handover_codes.sql
+var allowEmptyReturnHandoverCodesSchema string
+
 type migration struct {
 	version string
 	sql     string
@@ -78,6 +87,9 @@ func Apply(db *gorm.DB) error {
 			{version: "000013_notifications", sql: notificationsSchema},
 			{version: "000014_shipment_handover_code", sql: shipmentHandoverCodeSchema},
 			{version: "000015_customer_delivery_returns", sql: customerDeliveryReturnsSchema},
+			{version: "000016_unique_handover_code", sql: uniqueHandoverCodeSchema},
+			{version: "000017_ensure_return_items", sql: ensureReturnItemsSchema},
+			{version: "000018_allow_empty_return_handover_codes", sql: allowEmptyReturnHandoverCodesSchema},
 		} {
 			var count int64
 			if err := tx.Raw("SELECT COUNT(*) FROM schema_migrations WHERE version = ?", migration.version).Scan(&count).Error; err != nil {

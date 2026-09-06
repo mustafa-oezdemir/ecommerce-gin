@@ -91,7 +91,12 @@ func (service *ShippingService) Handover(ctx context.Context, orderID uint, requ
 	if err := service.database.WithContext(ctx).Preload("Items").Preload("Addresses").Preload("Payment").First(&order, orderID).Error; err != nil {
 		return nil, err
 	}
-	if order.Status != models.OrderStatusProcessing {
+	if order.Status == models.OrderStatusShipped {
+		if cached, err := service.CachedOrderShipment(ctx, orderID); err != nil || cached != nil {
+			return cached, err
+		}
+	}
+	if order.Status != models.OrderStatusReadyForShipping {
 		return nil, ErrInvalidTransition
 	}
 	if order.Payment.ID == 0 || (order.Payment.Status != models.PaymentStatusPaid && order.Payment.Status != models.PaymentStatusAuthorized) {
@@ -127,7 +132,7 @@ func (service *ShippingService) Handover(ctx context.Context, orderID uint, requ
 		if err := upsertShipment(transaction, cache); err != nil {
 			return err
 		}
-		result := transaction.Model(&models.Order{}).Where("id = ? AND status = ?", order.ID, models.OrderStatusProcessing).Update("status", models.OrderStatusShipped)
+		result := transaction.Model(&models.Order{}).Where("id = ? AND status = ?", order.ID, models.OrderStatusReadyForShipping).Update("status", models.OrderStatusShipped)
 		if result.Error != nil {
 			return result.Error
 		}
@@ -169,6 +174,10 @@ func (service *ShippingService) ConfirmDelivery(ctx context.Context, userID, ord
 	}
 	if userID == 0 || orderID == 0 {
 		return ErrInvalidReturnRequest
+	}
+	var owned models.Order
+	if err := service.database.WithContext(ctx).Select("id").Where("id = ? AND user_id = ?", orderID, userID).First(&owned).Error; err != nil {
+		return err
 	}
 	shipment, err := service.client.GetShipmentByOrder(ctx, orderID, requestID)
 	if err != nil {
@@ -216,6 +225,9 @@ func (service *ShippingService) RequestReturn(ctx context.Context, userID, order
 	}
 	if outbound == nil || outbound.Status != "delivered" {
 		return nil, ErrDeliveryNotConfirmed
+	}
+	if outbound.DeliveredAt != nil && time.Since(outbound.DeliveredAt.UTC()) > 30*24*time.Hour {
+		return nil, ErrInvalidReturnRequest
 	}
 	address, ok := orderShippingAddress(order.Addresses)
 	if !ok {
@@ -280,6 +292,64 @@ func (service *ShippingService) RequestReturn(ctx context.Context, userID, order
 		return nil, err
 	}
 	return &returnRequest, nil
+}
+
+func (service *ShippingService) CancelOrder(ctx context.Context, userID, orderID uint, requestID string) error {
+	if userID == 0 || orderID == 0 {
+		return ErrInvalidTransition
+	}
+	var order models.Order
+	if err := service.database.WithContext(ctx).First(&order, "id = ? AND user_id = ?", orderID, userID).Error; err != nil {
+		return err
+	}
+	switch order.Status {
+	case models.OrderStatusCancelled:
+		return nil
+	case models.OrderStatusPaid, models.OrderStatusPreparing, models.OrderStatusReadyForShipping, models.OrderStatusProcessing:
+		return service.database.WithContext(ctx).Model(&models.Order{}).Where("id = ? AND user_id = ? AND status IN ?", orderID, userID, []models.OrderStatus{models.OrderStatusPaid, models.OrderStatusPreparing, models.OrderStatusReadyForShipping, models.OrderStatusProcessing}).Update("status", models.OrderStatusCancelled).Error
+	case models.OrderStatusShipped:
+		if service.client == nil {
+			return ErrShippingDisabled
+		}
+		shipment, err := service.client.GetShipmentByOrder(ctx, orderID, requestID)
+		if err != nil {
+			return err
+		}
+		if shipment == nil || shipment.Status == "delivered" {
+			return ErrInvalidTransition
+		}
+		cancelledShipment, err := service.client.CancelShipment(ctx, shipment.ShipmentID, "cancel-shipment-order-"+strconv.FormatUint(uint64(orderID), 10), requestID)
+		if err != nil {
+			return err
+		}
+		if cancelledShipment == nil {
+			return ErrInvalidTransition
+		}
+		if err := upsertShipment(service.database.WithContext(ctx), shipmentCache(orderID, cancelledShipment, "")); err != nil {
+			return err
+		}
+		// Once logistics has received the parcel, Shipping owns the return-to-sender
+		// lifecycle. The commerce order remains shipped and exposes that read-only state.
+		if cancelledShipment.Status != "cancelled" {
+			return nil
+		}
+		result := service.database.WithContext(ctx).Model(&models.Order{}).Where("id = ? AND user_id = ? AND status = ?", orderID, userID, models.OrderStatusShipped).Update("status", models.OrderStatusCancelled)
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			var current models.Order
+			if err := service.database.WithContext(ctx).Select("status").First(&current, "id = ? AND user_id = ?", orderID, userID).Error; err != nil {
+				return err
+			}
+			if current.Status != models.OrderStatusCancelled {
+				return ErrInvalidTransition
+			}
+		}
+		return nil
+	default:
+		return ErrInvalidTransition
+	}
 }
 
 func (service *ShippingService) ApplyCallback(ctx context.Context, callback ShippingCallback) error {
@@ -351,13 +421,17 @@ func shippingNotification(callback ShippingCallback, orderID uint) (models.Notif
 		return models.Notification{}, false
 	}
 	titles := map[string]string{
-		"received_at_origin": "Shipment received by logistics",
-		"in_transit":         "Your shipment is on the way",
-		"out_for_delivery":   "Out for delivery",
-		"delivered":          "Your order has been delivered",
-		"delivery_failed":    "Delivery attempt failed",
-		"return_received":    "Return received",
-		"return_completed":   "Return completed",
+		"awaiting_receipt":             "Your order was handed to shipping",
+		"received_by_shipping":         "Shipment received by logistics",
+		"shipment_prepared":            "Your shipment was prepared",
+		"in_transit":                   "Your shipment is on the way",
+		"out_for_delivery":             "Out for delivery",
+		"delivered":                    "Your order has been delivered",
+		"delivery_failed":              "Delivery attempt failed",
+		"return_authorized":            "Your return was authorized",
+		"return_in_transit":            "Your return is on the way",
+		"return_received_at_warehouse": "Return received at warehouse",
+		"return_completed":             "Return completed",
 	}
 	title, ok := titles[callback.Status]
 	if !ok {

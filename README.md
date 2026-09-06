@@ -228,6 +228,8 @@ sequenceDiagram
 
 Shipping configuration uses `SHIPPING_API_URL` for the backend-only service address, `SHIPPING_PUBLIC_URL` for the browser-reachable tracking origin, `SHIPPING_API_TOKEN` for E-Commerce → Shipping authentication, `SHIPPING_TO_ECOMMERCE_TOKEN` for callbacks, optional `SHIPPING_TO_ECOMMERCE_PREVIOUS_TOKEN` during rotation, and `SHIPPING_API_TIMEOUT` for the bounded HTTP client timeout.
 
+When the repositories are started with their separate development Compose files, create the shared private network once with `docker network create pehlione-backend`. The ignored `docker-compose.override.yml` attaches the application as `ecommerce-app` and configures Shipping at `http://shipping-app:8090`; browser links continue to use `http://localhost:8090`.
+
 Employee handover calls `POST /api/v1/shipments` with a stable per-order idempotency key. Customer order details refresh through `GET /api/v1/shipments/order/:orderID` and load `GET /api/v1/shipments/:trackingNumber/events`. Cached shipment data keeps the order page available during a Shipping outage. Callbacks arrive at `POST /api/v1/internal/shipping/events`, use timing-safe bearer-token authentication, and are deduplicated by a database-unique `event_id`.
 
 Important lifecycle callbacks create one customer-owned notification at `/account/notifications` and can send an SMTP email linking back to the order. ETA and remaining-stop callbacks refresh tracking data without producing notification noise. E-Commerce employees can prepare and hand over an order, but generic order-status controls cannot set Shipping-owned lifecycle states.
