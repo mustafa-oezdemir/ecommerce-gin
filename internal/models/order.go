@@ -70,6 +70,7 @@ type OrderShipment struct {
 	gorm.Model
 	OrderID           uint   `gorm:"not null;uniqueIndex:idx_order_shipments_order_type,priority:1"`
 	ShipmentID        string `gorm:"size:64;not null;uniqueIndex"`
+	HandoverCode      string `gorm:"size:64;not null"`
 	TrackingNumber    string `gorm:"size:64;not null;uniqueIndex"`
 	ShipmentType      string `gorm:"size:16;not null;uniqueIndex:idx_order_shipments_order_type,priority:2"`
 	Status            string `gorm:"size:50;not null"`

@@ -63,6 +63,7 @@ type Item struct {
 type CreateShipmentRequest struct {
 	OrderID      string  `json:"order_id"`
 	CustomerID   string  `json:"customer_id"`
+	HandoverCode string  `json:"handover_code"`
 	Recipient    Address `json:"recipient"`
 	Items        []Item  `json:"items"`
 	Carrier      string  `json:"carrier"`
@@ -76,6 +77,7 @@ type EstimatedDelivery struct {
 
 type Shipment struct {
 	ShipmentID        string             `json:"shipment_id"`
+	HandoverCode      string             `json:"handover_code"`
 	OrderID           string             `json:"order_id"`
 	TrackingNumber    string             `json:"tracking_number"`
 	ShipmentType      string             `json:"shipment_type"`

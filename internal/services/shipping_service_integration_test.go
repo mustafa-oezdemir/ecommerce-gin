@@ -38,7 +38,7 @@ func TestShippingHandoverUsesSnapshotsAndUpdatesOrderAtomically(t *testing.T) {
 	database := checkoutIntegrationDatabase(t)
 	fixture := newCheckoutFixture(t, database, 1, 1)
 	order := createShippingOrderFixture(t, database, fixture)
-	stub := &shippingClientStub{shipment: &shippingapi.Shipment{ShipmentID: "shp_gate", OrderID: fmt.Sprint(order.ID), TrackingNumber: "TRK-GATE", ShipmentType: "outbound", Status: "created", StatusLabel: "Created"}}
+	stub := &shippingClientStub{shipment: &shippingapi.Shipment{ShipmentID: "shp_gate", HandoverCode: handoverCode(order), OrderID: fmt.Sprint(order.ID), TrackingNumber: "TRK-GATE", ShipmentType: "outbound", Status: "created", StatusLabel: "Created"}}
 	service := NewShippingService(database, stub)
 
 	cache, err := service.Handover(t.Context(), order.ID, "request-gate")
@@ -48,11 +48,23 @@ func TestShippingHandoverUsesSnapshotsAndUpdatesOrderAtomically(t *testing.T) {
 	if stub.idempotencyKey != "shipment-order-"+fmt.Sprint(order.ID) || stub.requestID != "request-gate" {
 		t.Fatalf("integration headers were not propagated: %q %q", stub.idempotencyKey, stub.requestID)
 	}
-	if stub.createdRequest.OrderID != fmt.Sprint(order.ID) || stub.createdRequest.CustomerID != fmt.Sprint(order.UserID) || stub.createdRequest.Recipient.Street != "Snapshot Street" || len(stub.createdRequest.Items) != 1 {
+	if stub.createdRequest.OrderID != fmt.Sprint(order.ID) || stub.createdRequest.CustomerID != fmt.Sprint(order.UserID) || stub.createdRequest.HandoverCode != handoverCode(order) || stub.createdRequest.Recipient.Street != "Snapshot Street" || len(stub.createdRequest.Items) != 1 {
 		t.Fatalf("shipment request did not use immutable order snapshots: %+v", stub.createdRequest)
 	}
-	if cache.TrackingNumber != "TRK-GATE" {
+	if cache.TrackingNumber != "TRK-GATE" || cache.HandoverCode != handoverCode(order) {
 		t.Fatalf("shipment cache missing: %+v", cache)
+	}
+	callback := ShippingCallback{
+		EventID:    "handover-cache-callback",
+		ShipmentID: "shp_gate", OrderID: fmt.Sprint(order.ID), TrackingNumber: "TRK-GATE",
+		ShipmentType: "outbound", Status: "in_transit", StatusLabel: "In transit", OccurredAt: time.Now().UTC(),
+	}
+	if err := service.ApplyCallback(t.Context(), callback); err != nil {
+		t.Fatalf("apply shipping callback: %v", err)
+	}
+	cache, err = service.CachedOrderShipment(t.Context(), order.ID)
+	if err != nil || cache == nil || cache.HandoverCode != handoverCode(order) {
+		t.Fatalf("callback must preserve the handover code: cache=%+v err=%v", cache, err)
 	}
 	if err := database.First(&order, order.ID).Error; err != nil || order.Status != models.OrderStatusShipped {
 		t.Fatalf("order was not marked shipped: %v %s", err, order.Status)

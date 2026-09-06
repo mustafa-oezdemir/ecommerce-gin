@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"strconv"
@@ -97,6 +98,7 @@ func (service *ShippingService) Handover(ctx context.Context, orderID uint, requ
 	shipment, err := service.client.CreateShipment(ctx, shippingapi.CreateShipmentRequest{
 		OrderID:      strconv.FormatUint(uint64(order.ID), 10),
 		CustomerID:   strconv.FormatUint(uint64(order.UserID), 10),
+		HandoverCode: handoverCode(order),
 		Recipient:    shippingAddress(address),
 		Items:        items,
 		Carrier:      "NordShip",
@@ -259,7 +261,7 @@ func shippingAddress(address models.OrderAddress) shippingapi.Address {
 
 func shipmentCache(orderID uint, shipment *shippingapi.Shipment, eventID string) models.OrderShipment {
 	cache := models.OrderShipment{
-		OrderID: orderID, ShipmentID: shipment.ShipmentID, TrackingNumber: shipment.TrackingNumber, ShipmentType: shipment.ShipmentType,
+		OrderID: orderID, ShipmentID: shipment.ShipmentID, HandoverCode: shipment.HandoverCode, TrackingNumber: shipment.TrackingNumber, ShipmentType: shipment.ShipmentType,
 		Status: shipment.Status, StatusLabel: shipment.StatusLabel, RemainingStops: shipment.RemainingStops, LastShippingEvent: eventID,
 	}
 	if shipment.EstimatedDelivery != nil {
@@ -276,4 +278,11 @@ func upsertShipment(database *gorm.DB, shipment models.OrderShipment) error {
 			"estimated_from", "estimated_until", "last_shipping_event", "updated_at",
 		}),
 	}).Create(&shipment).Error
+}
+
+// handoverCode derives a stable opaque code from the checkout idempotency key.
+// That keeps a retry byte-for-byte equivalent without exposing sequential order IDs.
+func handoverCode(order models.Order) string {
+	sum := sha256.Sum256([]byte("shipment-handover:" + order.IdempotencyKey))
+	return fmt.Sprintf("PHE-HO-DE-%s-%X", order.CreatedAt.UTC().Format("20060102"), sum[:8])
 }
