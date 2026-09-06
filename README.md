@@ -230,6 +230,8 @@ Shipping configuration uses `SHIPPING_API_URL` for the backend-only service addr
 
 Employee handover calls `POST /api/v1/shipments` with a stable per-order idempotency key. Customer order details refresh through `GET /api/v1/shipments/order/:orderID` and load `GET /api/v1/shipments/:trackingNumber/events`. Cached shipment data keeps the order page available during a Shipping outage. Callbacks arrive at `POST /api/v1/internal/shipping/events`, use timing-safe bearer-token authentication, and are deduplicated by a database-unique `event_id`.
 
+Important lifecycle callbacks create one customer-owned notification at `/account/notifications` and can send an SMTP email linking back to the order. ETA and remaining-stop callbacks refresh tracking data without producing notification noise. E-Commerce employees can prepare and hand over an order, but generic order-status controls cannot set Shipping-owned lifecycle states.
+
 For a shared development network, set `SHIPPING_API_TOKEN`, `SHIPPING_TO_ECOMMERCE_TOKEN`, `SHIPPING_MYSQL_PASSWORD`, `SHIPPING_MYSQL_ROOT_PASSWORD`, and `INTERNAL_QR_SECRET` in the E-Commerce Compose environment, then run from this repository:
 
 ```bash

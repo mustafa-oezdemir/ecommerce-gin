@@ -84,6 +84,19 @@ func TestShippingHandoverFailureLeavesOrderAndCacheUnchanged(t *testing.T) {
 	}
 }
 
+func TestShippingHandoverRejectsUnpaidOrder(t *testing.T) {
+	database := checkoutIntegrationDatabase(t)
+	fixture := newCheckoutFixture(t, database, 1, 1)
+	order := createShippingOrderFixture(t, database, fixture)
+	if err := database.Model(&models.Payment{}).Where("order_id = ?", order.ID).Update("status", models.PaymentStatusFailed).Error; err != nil {
+		t.Fatal(err)
+	}
+	service := NewShippingService(database, &shippingClientStub{})
+	if _, err := service.Handover(t.Context(), order.ID, "request-unpaid"); !errors.Is(err, ErrShippingPaymentNotReady) {
+		t.Fatalf("expected unpaid order to be rejected, got %v", err)
+	}
+}
+
 func TestShippingCallbackIsIdempotentAndUpdatesCache(t *testing.T) {
 	database := checkoutIntegrationDatabase(t)
 	fixture := newCheckoutFixture(t, database, 1, 1)
@@ -102,9 +115,30 @@ func TestShippingCallbackIsIdempotentAndUpdatesCache(t *testing.T) {
 	}
 	var receipts int64
 	database.Model(&models.ShippingEventReceipt{}).Where("event_id = ?", eventID).Count(&receipts)
+	var notifications int64
+	database.Model(&models.Notification{}).Where("shipping_event_id = ?", eventID).Count(&notifications)
 	cache, err := service.CachedOrderShipment(t.Context(), order.ID)
-	if err != nil || receipts != 1 || cache == nil || cache.Status != "out_for_delivery" || cache.RemainingStops == nil || *cache.RemainingStops != 4 {
-		t.Fatalf("callback was not idempotently cached: receipts=%d cache=%+v err=%v", receipts, cache, err)
+	if err != nil || receipts != 1 || notifications != 1 || cache == nil || cache.Status != "out_for_delivery" || cache.RemainingStops == nil || *cache.RemainingStops != 4 {
+		t.Fatalf("callback was not idempotently cached/notified: receipts=%d notifications=%d cache=%+v err=%v", receipts, notifications, cache, err)
+	}
+}
+
+func TestShippingStopsCallbackUpdatesCacheWithoutNotification(t *testing.T) {
+	database := checkoutIntegrationDatabase(t)
+	fixture := newCheckoutFixture(t, database, 1, 1)
+	order := createShippingOrderFixture(t, database, fixture)
+	eventID := fmt.Sprintf("shipping-stops-%d-%d", order.ID, time.Now().UnixNano())
+	stops := 10
+	callback := ShippingCallback{EventID: eventID, EventType: "stops_updated", ShipmentID: "shp_stops", OrderID: fmt.Sprint(order.ID), TrackingNumber: "TRK-STOPS", ShipmentType: "outbound", Status: "out_for_delivery", StatusLabel: "Out for delivery", RemainingStops: &stops, OccurredAt: time.Now().UTC()}
+	service := NewShippingService(database, &shippingClientStub{})
+	if err := service.ApplyCallback(t.Context(), callback); err != nil {
+		t.Fatal(err)
+	}
+	var notifications int64
+	database.Model(&models.Notification{}).Where("shipping_event_id = ?", eventID).Count(&notifications)
+	cache, err := service.CachedOrderShipment(t.Context(), order.ID)
+	if err != nil || notifications != 0 || cache == nil || cache.RemainingStops == nil || *cache.RemainingStops != 10 {
+		t.Fatalf("stops callback result: notifications=%d cache=%+v err=%v", notifications, cache, err)
 	}
 }
 
@@ -120,6 +154,10 @@ func createShippingOrderFixture(t *testing.T, database *gorm.DB, fixture checkou
 		t.Fatal(err)
 	}
 	if err := database.Create(&item).Error; err != nil {
+		t.Fatal(err)
+	}
+	payment := models.Payment{OrderID: order.ID, UserID: order.UserID, Provider: "card", Method: models.PaymentMethodCreditCard, ProviderPaymentID: fmt.Sprintf("ship-pay-%d", time.Now().UnixNano()), Status: models.PaymentStatusPaid, AmountCents: order.TotalCents, Currency: "EUR", IdempotencyKey: fmt.Sprintf("%064x", time.Now().UnixNano()+1)}
+	if err := database.Create(&payment).Error; err != nil {
 		t.Fatal(err)
 	}
 	return order

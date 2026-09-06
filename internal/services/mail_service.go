@@ -53,6 +53,23 @@ func (s *MailService) SendOrderStatusChanged(user models.User, order models.Orde
 	_ = s.send(user.Email, fmt.Sprintf("Order #%d: status updated", order.ID), fmt.Sprintf("Hello %s,\n\nthe status of your order #%d is now: %s.\nView order: %s\n", user.Name, order.ID, order.Status, s.orderURL(order.ID)))
 }
 
+func (s *MailService) SendShipmentUpdate(user models.User, orderID uint, status, statusLabel string) {
+	subjects := map[string]string{
+		"received_at_origin": "Your shipment was received",
+		"in_transit":         "Your order is on the way",
+		"out_for_delivery":   "Your order is out for delivery",
+		"delivered":          "Your order has been delivered",
+		"delivery_failed":    "Delivery attempt failed",
+		"return_received":    "Your return was received",
+		"return_completed":   "Your return is complete",
+	}
+	subject, ok := subjects[status]
+	if !ok {
+		return
+	}
+	_ = s.send(user.Email, subject, fmt.Sprintf("Hello %s,\n\norder #%d shipping status is now: %s.\nView tracking: %s\n", user.Name, orderID, statusLabel, s.orderURL(orderID)))
+}
+
 func (s *MailService) orderURL(orderID uint) string {
 	return fmt.Sprintf("%s/account/orders/%d", s.appURL, orderID)
 }

@@ -247,6 +247,7 @@ func (h *ShopHandler) OrderDetail(c *gin.Context) {
 	if h.shipping.Enabled() {
 		shipment, shippingErr := h.shipping.RefreshOrderShipment(c.Request.Context(), order.ID, c.GetString(middleware.RequestIDKey))
 		if shippingErr != nil && !errors.Is(shippingErr, shippingapi.ErrNotFound) {
+			data["ShippingUnavailable"] = true
 			slog.WarnContext(c.Request.Context(), "shipping status refresh failed; using cached status", "order_id", order.ID, "error", shippingErr)
 		}
 		if shipment == nil {
@@ -260,6 +261,7 @@ func (h *ShopHandler) OrderDetail(c *gin.Context) {
 			if timeline, timelineErr := h.shipping.Timeline(c.Request.Context(), shipment.TrackingNumber, c.GetString(middleware.RequestIDKey)); timelineErr == nil {
 				data["ShipmentTimeline"] = timeline
 			} else {
+				data["ShippingUnavailable"] = true
 				slog.WarnContext(c.Request.Context(), "shipping timeline unavailable", "order_id", order.ID, "error", timelineErr)
 			}
 		}

@@ -18,6 +18,7 @@
           {{else}}
             <a class="site-nav-link" href="/">Products</a>
             <a class="site-nav-link" href="/cart">Cart</a>
+            <a class="site-nav-link" href="/account/notifications" aria-label="Notifications">Notifications{{with .UnreadNotificationCount}}{{if gt . 0}} <span class="badge text-bg-danger">{{.}}</span>{{end}}{{end}}</a>
           {{end}}
           <details class="account-dropdown">
             <summary class="account-trigger">
@@ -44,6 +45,7 @@
                 <a class="account-dropdown-link" href="/account">Profile & security</a>
                 <a class="account-dropdown-link" href="/account/addresses">Addresses</a>
                 <a class="account-dropdown-link" href="/account/orders">Orders</a>
+                <a class="account-dropdown-link" href="/account/notifications">Notifications{{with .UnreadNotificationCount}}{{if gt . 0}} ({{.}}){{end}}{{end}}</a>
                 <a class="account-dropdown-link" href="/account/lists">Lists</a>
               {{end}}
               <div class="account-dropdown-divider"></div>

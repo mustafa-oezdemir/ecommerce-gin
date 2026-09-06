@@ -43,6 +43,9 @@ var shippingIntegrationSchema string
 //go:embed 000012_shipping_order_type.sql
 var shippingOrderTypeSchema string
 
+//go:embed 000013_notifications.sql
+var notificationsSchema string
+
 type migration struct {
 	version string
 	sql     string
@@ -66,6 +69,7 @@ func Apply(db *gorm.DB) error {
 			{version: "000010_checkout_payments", sql: checkoutPaymentsSchema},
 			{version: "000011_shipping_integration", sql: shippingIntegrationSchema},
 			{version: "000012_shipping_order_type", sql: shippingOrderTypeSchema},
+			{version: "000013_notifications", sql: notificationsSchema},
 		} {
 			var count int64
 			if err := tx.Raw("SELECT COUNT(*) FROM schema_migrations WHERE version = ?", migration.version).Scan(&count).Error; err != nil {

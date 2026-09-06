@@ -55,7 +55,7 @@ func (handler *ShippingHandler) Handover(c *gin.Context) {
 	shipment, err := handler.service.Handover(c.Request.Context(), uri.ID, c.GetString("request_id"))
 	if err != nil {
 		switch {
-		case errors.Is(err, services.ErrShippingAddressAbsent), errors.Is(err, services.ErrInvalidTransition):
+		case errors.Is(err, services.ErrShippingAddressAbsent), errors.Is(err, services.ErrShippingPaymentNotReady), errors.Is(err, services.ErrInvalidTransition):
 			c.String(http.StatusConflict, "Order is not ready to hand over to shipping")
 		case errors.Is(err, services.ErrShippingDisabled), errors.Is(err, shippingapi.ErrUnavailable):
 			c.String(http.StatusServiceUnavailable, "Shipping service is temporarily unavailable")

@@ -1,0 +1,21 @@
+CREATE TABLE IF NOT EXISTS notifications (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  created_at DATETIME(3) NULL,
+  updated_at DATETIME(3) NULL,
+  deleted_at DATETIME(3) NULL,
+  user_id BIGINT UNSIGNED NOT NULL,
+  type VARCHAR(64) NOT NULL,
+  title VARCHAR(160) NOT NULL,
+  message VARCHAR(500) NOT NULL,
+  related_order_id BIGINT UNSIGNED NOT NULL,
+  shipping_event_id VARCHAR(64) NOT NULL,
+  is_read BOOLEAN NOT NULL DEFAULT FALSE,
+  read_at DATETIME(3) NULL,
+  UNIQUE KEY idx_notifications_shipping_event_id (shipping_event_id),
+  KEY idx_notifications_user_read (user_id, is_read),
+  KEY idx_notifications_type (type),
+  KEY idx_notifications_related_order_id (related_order_id),
+  KEY idx_notifications_deleted_at (deleted_at),
+  CONSTRAINT fk_notifications_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  CONSTRAINT fk_notifications_order FOREIGN KEY (related_order_id) REFERENCES orders(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

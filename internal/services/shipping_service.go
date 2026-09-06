@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strconv"
 	"time"
 
@@ -15,16 +16,19 @@ import (
 var (
 	ErrShippingDisabled        = errors.New("shipping integration is not configured")
 	ErrShippingAddressAbsent   = errors.New("order shipping address is unavailable")
+	ErrShippingPaymentNotReady = errors.New("order payment is not ready for shipping")
 	ErrInvalidShippingCallback = errors.New("invalid shipping callback")
 )
 
 type ShippingService struct {
 	database *gorm.DB
 	client   shippingapi.Client
+	mailer   *MailService
 }
 
 type ShippingCallback struct {
 	EventID           string                         `json:"event_id"`
+	EventType         string                         `json:"event_type,omitempty"`
 	ShipmentID        string                         `json:"shipment_id"`
 	OrderID           string                         `json:"order_id"`
 	TrackingNumber    string                         `json:"tracking_number"`
@@ -36,11 +40,15 @@ type ShippingCallback struct {
 	OccurredAt        time.Time                      `json:"occurred_at"`
 }
 
-func NewShippingService(database *gorm.DB, client shippingapi.Client) *ShippingService {
+func NewShippingService(database *gorm.DB, client shippingapi.Client, mailers ...*MailService) *ShippingService {
 	if database == nil {
 		panic("services: database is required")
 	}
-	return &ShippingService{database: database, client: client}
+	var mailer *MailService
+	if len(mailers) > 0 {
+		mailer = mailers[0]
+	}
+	return &ShippingService{database: database, client: client, mailer: mailer}
 }
 
 func (service *ShippingService) Enabled() bool { return service.client != nil }
@@ -64,11 +72,14 @@ func (service *ShippingService) Handover(ctx context.Context, orderID uint, requ
 		return nil, ErrShippingDisabled
 	}
 	var order models.Order
-	if err := service.database.WithContext(ctx).Preload("Items").Preload("Addresses").First(&order, orderID).Error; err != nil {
+	if err := service.database.WithContext(ctx).Preload("Items").Preload("Addresses").Preload("Payment").First(&order, orderID).Error; err != nil {
 		return nil, err
 	}
 	if order.Status != models.OrderStatusProcessing {
 		return nil, ErrInvalidTransition
+	}
+	if order.Payment.ID == 0 || (order.Payment.Status != models.PaymentStatusPaid && order.Payment.Status != models.PaymentStatusAuthorized) {
+		return nil, ErrShippingPaymentNotReady
 	}
 	address, ok := orderShippingAddress(order.Addresses)
 	if !ok {
@@ -143,7 +154,9 @@ func (service *ShippingService) ApplyCallback(ctx context.Context, callback Ship
 	if err != nil || orderID == 0 {
 		return ErrInvalidShippingCallback
 	}
-	return service.database.WithContext(ctx).Transaction(func(transaction *gorm.DB) error {
+	created := false
+	var recipient models.User
+	err = service.database.WithContext(ctx).Transaction(func(transaction *gorm.DB) error {
 		receipt := models.ShippingEventReceipt{EventID: callback.EventID}
 		if err := transaction.Create(&receipt).Error; err != nil {
 			if errors.Is(err, gorm.ErrDuplicatedKey) {
@@ -152,7 +165,7 @@ func (service *ShippingService) ApplyCallback(ctx context.Context, callback Ship
 			return err
 		}
 		var order models.Order
-		if err := transaction.Select("id").First(&order, uint(orderID)).Error; err != nil {
+		if err := transaction.Select("id", "user_id").First(&order, uint(orderID)).Error; err != nil {
 			return err
 		}
 		cache := models.OrderShipment{
@@ -163,8 +176,57 @@ func (service *ShippingService) ApplyCallback(ctx context.Context, callback Ship
 		if callback.EstimatedDelivery != nil {
 			cache.EstimatedFrom, cache.EstimatedUntil = callback.EstimatedDelivery.From, callback.EstimatedDelivery.Until
 		}
-		return upsertShipment(transaction, cache)
+		if err := upsertShipment(transaction, cache); err != nil {
+			return err
+		}
+		message, notify := shippingNotification(callback, uint(orderID))
+		if !notify {
+			return nil
+		}
+		message.UserID = order.UserID
+		if err := transaction.Create(&message).Error; err != nil {
+			return err
+		}
+		if err := transaction.First(&recipient, order.UserID).Error; err != nil {
+			return err
+		}
+		created = true
+		return nil
 	})
+	if err != nil {
+		return err
+	}
+	if created && service.mailer != nil {
+		go service.mailer.SendShipmentUpdate(recipient, uint(orderID), callback.Status, callback.StatusLabel)
+	}
+	return nil
+}
+
+func shippingNotification(callback ShippingCallback, orderID uint) (models.Notification, bool) {
+	// Legacy senders did not include event_type. When it is present, only
+	// lifecycle transitions create notifications; ETA/stops updates stay on
+	// the read-only tracking screen.
+	if callback.EventType != "" && callback.EventType != "status_changed" {
+		return models.Notification{}, false
+	}
+	titles := map[string]string{
+		"received_at_origin": "Shipment received by logistics",
+		"in_transit":         "Your shipment is on the way",
+		"out_for_delivery":   "Out for delivery",
+		"delivered":          "Your order has been delivered",
+		"delivery_failed":    "Delivery attempt failed",
+		"return_received":    "Return received",
+		"return_completed":   "Return completed",
+	}
+	title, ok := titles[callback.Status]
+	if !ok {
+		return models.Notification{}, false
+	}
+	message := fmt.Sprintf("Order #%d shipping status is now %s.", orderID, callback.StatusLabel)
+	if callback.Status == "out_for_delivery" && callback.RemainingStops != nil {
+		message = fmt.Sprintf("Order #%d is out for delivery with %d stops remaining.", orderID, *callback.RemainingStops)
+	}
+	return models.Notification{Type: "shipping_" + callback.Status, Title: title, Message: message, RelatedOrderID: orderID, ShippingEventID: callback.EventID}, true
 }
 
 func (service *ShippingService) CachedOrderShipment(ctx context.Context, orderID uint) (*models.OrderShipment, error) {

@@ -29,9 +29,9 @@ func AllowedOrderStatusTransitions(from OrderStatus) []OrderStatus {
 	case OrderStatusPending:
 		return []OrderStatus{OrderStatusProcessing, OrderStatusCancelled}
 	case OrderStatusProcessing:
-		return []OrderStatus{OrderStatusShipped, OrderStatusCancelled}
-	case OrderStatusShipped:
-		return []OrderStatus{OrderStatusCompleted}
+		// Shipping handover is performed only through ShippingService.Handover.
+		// Logistics lifecycle statuses are owned by shipping-service.
+		return []OrderStatus{OrderStatusCancelled}
 	default:
 		return nil
 	}

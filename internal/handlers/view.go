@@ -15,5 +15,8 @@ func viewData(c *gin.Context, data gin.H) gin.H {
 	if user, ok := middleware.CurrentUser(c); ok {
 		data["CurrentUser"] = user
 	}
+	if count, ok := c.Get(middleware.UnreadNotificationCountKey); ok {
+		data["UnreadNotificationCount"] = count
+	}
 	return data
 }
