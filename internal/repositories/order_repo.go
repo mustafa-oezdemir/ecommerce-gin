@@ -26,6 +26,7 @@ func (r *OrderRepository) GetByIDForUser(ctx context.Context, orderID, userID ui
 		Preload("Items.Product", "active = ?", true).
 		Preload("Addresses").
 		Preload("Payment").
+		Preload("ReturnRequest.Items").
 		Where("id = ? AND user_id = ?", orderID, userID).
 		First(&order).Error; err != nil {
 		return nil, err

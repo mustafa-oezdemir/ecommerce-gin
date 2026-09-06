@@ -27,3 +27,17 @@ func TestProductGalleryImagesSupportsLegacyCover(t *testing.T) {
 		t.Fatalf("legacy cover was not returned: %#v", images)
 	}
 }
+
+func TestReturnReasonValidation(t *testing.T) {
+	for _, reason := range []ReturnReason{
+		ReturnReasonDamaged, ReturnReasonWrongItem, ReturnReasonNotAsDescribed, ReturnReasonDoesNotFit,
+		ReturnReasonChangedMind, ReturnReasonDefective, ReturnReasonOther,
+	} {
+		if !reason.Valid() {
+			t.Fatalf("expected %q to be a valid return reason", reason)
+		}
+	}
+	if ReturnReason("free-text").Valid() {
+		t.Fatal("free-text return reasons must not be accepted")
+	}
+}

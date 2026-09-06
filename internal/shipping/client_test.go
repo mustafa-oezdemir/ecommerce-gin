@@ -93,6 +93,27 @@ func TestCreateShipmentMapsClientTimeout(t *testing.T) {
 	}
 }
 
+func TestCreateReturnUsesVersionedEndpointAndIdempotencyKey(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/api/v1/returns" || request.Header.Get("Idempotency-Key") != "return-order-17" {
+			t.Fatalf("unexpected return request: %s key=%q", request.URL.Path, request.Header.Get("Idempotency-Key"))
+		}
+		_ = json.NewEncoder(writer).Encode(map[string]any{"success": true, "data": map[string]any{"shipment_id": "shp_return_17", "tracking_number": "RET-DE-20260906-ABC123", "shipment_type": "return", "status": "return_requested", "status_label": "Return requested"}})
+	}))
+	defer server.Close()
+	client, err := NewHTTPClient(server.URL, "01234567890123456789012345678901", time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	shipment, err := client.CreateReturn(context.Background(), CreateReturnRequest{OriginalShipmentID: "shp_17", OrderID: "17", CustomerID: "5", Sender: Address{FirstName: "Ada"}, Items: []Item{{ProductID: "4", Name: "Book", Quantity: 1}}}, "return-order-17", "request-17")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if shipment.ShipmentID != "shp_return_17" || shipment.TrackingNumber != "RET-DE-20260906-ABC123" {
+		t.Fatalf("unexpected return shipment: %+v", shipment)
+	}
+}
+
 func TestTrackingURLUsesBrowserReachablePublicBaseURL(t *testing.T) {
 	client, err := NewHTTPClient("http://shipping-app:8090", "01234567890123456789012345678901", time.Second, "https://tracking.example.test")
 	if err != nil {

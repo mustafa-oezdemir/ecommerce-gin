@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/models"
@@ -19,6 +20,8 @@ var (
 	ErrShippingAddressAbsent   = errors.New("order shipping address is unavailable")
 	ErrShippingPaymentNotReady = errors.New("order payment is not ready for shipping")
 	ErrInvalidShippingCallback = errors.New("invalid shipping callback")
+	ErrDeliveryNotConfirmed    = errors.New("shipment has not been delivered")
+	ErrInvalidReturnRequest    = errors.New("invalid return request")
 )
 
 type ShippingService struct {
@@ -41,6 +44,11 @@ type ShippingCallback struct {
 	OccurredAt        time.Time                      `json:"occurred_at"`
 }
 
+type ReturnItemInput struct {
+	OrderItemID uint
+	Quantity    int
+}
+
 func NewShippingService(database *gorm.DB, client shippingapi.Client, mailers ...*MailService) *ShippingService {
 	if database == nil {
 		panic("services: database is required")
@@ -59,6 +67,13 @@ func (service *ShippingService) TrackingURL(trackingNumber string) string {
 		return ""
 	}
 	return service.client.TrackingURL(trackingNumber)
+}
+
+func (service *ShippingService) QRCodeURL(trackingNumber string) string {
+	if service.client == nil {
+		return ""
+	}
+	return service.client.QRCodeURL(trackingNumber)
 }
 
 func (service *ShippingService) Timeline(ctx context.Context, trackingNumber, requestID string) ([]shippingapi.ShipmentEvent, error) {
@@ -148,6 +163,125 @@ func (service *ShippingService) RefreshOrderShipment(ctx context.Context, orderI
 	return &cache, nil
 }
 
+func (service *ShippingService) ConfirmDelivery(ctx context.Context, userID, orderID uint, requestID string) error {
+	if service.client == nil {
+		return ErrShippingDisabled
+	}
+	if userID == 0 || orderID == 0 {
+		return ErrInvalidReturnRequest
+	}
+	shipment, err := service.client.GetShipmentByOrder(ctx, orderID, requestID)
+	if err != nil {
+		return err
+	}
+	if shipment == nil || shipment.Status != "delivered" {
+		return ErrDeliveryNotConfirmed
+	}
+	if err := upsertShipment(service.database.WithContext(ctx), shipmentCache(orderID, shipment, "")); err != nil {
+		return err
+	}
+	now := time.Now().UTC()
+	result := service.database.WithContext(ctx).Model(&models.Order{}).
+		Where("id = ? AND user_id = ? AND customer_received_at IS NULL", orderID, userID).
+		Update("customer_received_at", now)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		var order models.Order
+		if err := service.database.WithContext(ctx).Select("customer_received_at").Where("id = ? AND user_id = ?", orderID, userID).First(&order).Error; err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (service *ShippingService) RequestReturn(ctx context.Context, userID, orderID uint, reason models.ReturnReason, note string, items []ReturnItemInput, requestID string) (*models.ReturnRequest, error) {
+	if service.client == nil {
+		return nil, ErrShippingDisabled
+	}
+	if userID == 0 || orderID == 0 || !reason.Valid() || len([]rune(note)) > 1000 || len(items) == 0 {
+		return nil, ErrInvalidReturnRequest
+	}
+	var order models.Order
+	if err := service.database.WithContext(ctx).Preload("Items").Preload("Addresses").Preload("ReturnRequest").First(&order, "id = ? AND user_id = ?", orderID, userID).Error; err != nil {
+		return nil, err
+	}
+	if order.ReturnRequest != nil {
+		return order.ReturnRequest, nil
+	}
+	outbound, err := service.client.GetShipmentByOrder(ctx, orderID, requestID)
+	if err != nil {
+		return nil, err
+	}
+	if outbound == nil || outbound.Status != "delivered" {
+		return nil, ErrDeliveryNotConfirmed
+	}
+	address, ok := orderShippingAddress(order.Addresses)
+	if !ok {
+		return nil, ErrShippingAddressAbsent
+	}
+	orderItems := make(map[uint]models.OrderItem, len(order.Items))
+	for _, item := range order.Items {
+		orderItems[item.ID] = item
+	}
+	returnItems := make([]models.ReturnItem, 0, len(items))
+	shipmentItems := make([]shippingapi.Item, 0, len(items))
+	selectedItems := make(map[uint]struct{}, len(items))
+	for _, item := range items {
+		orderItem, found := orderItems[item.OrderItemID]
+		if !found || item.Quantity < 1 || item.Quantity > orderItem.Quantity {
+			return nil, ErrInvalidReturnRequest
+		}
+		if _, duplicate := selectedItems[item.OrderItemID]; duplicate {
+			return nil, ErrInvalidReturnRequest
+		}
+		selectedItems[item.OrderItemID] = struct{}{}
+		returnItems = append(returnItems, models.ReturnItem{OrderItemID: orderItem.ID, ProductID: orderItem.ProductID, Quantity: item.Quantity})
+		shipmentItems = append(shipmentItems, shippingapi.Item{ProductID: strconv.FormatUint(uint64(orderItem.ProductID), 10), Name: orderItem.ProductName, SKU: orderItem.ProductSKU, Quantity: item.Quantity})
+	}
+	shipment, err := service.client.CreateReturn(ctx, shippingapi.CreateReturnRequest{
+		OriginalShipmentID: outbound.ShipmentID,
+		OrderID:            strconv.FormatUint(uint64(order.ID), 10),
+		CustomerID:         strconv.FormatUint(uint64(order.UserID), 10),
+		Sender:             shippingAddress(address),
+		Items:              shipmentItems,
+	}, "return-order-"+strconv.FormatUint(uint64(order.ID), 10), requestID)
+	if err != nil {
+		return nil, err
+	}
+	if shipment == nil || shipment.ShipmentID == "" || shipment.TrackingNumber == "" || shipment.ShipmentType != "return" {
+		return nil, ErrInvalidReturnRequest
+	}
+	returnRequest := models.ReturnRequest{
+		OrderID: order.ID, UserID: order.UserID, Reason: reason, Note: strings.TrimSpace(note),
+		OriginalShipmentID: outbound.ShipmentID, ReturnShipmentID: shipment.ShipmentID,
+		ReturnTrackingNumber: shipment.TrackingNumber, Status: shipment.Status,
+	}
+	err = service.database.WithContext(ctx).Transaction(func(transaction *gorm.DB) error {
+		if err := transaction.Clauses(clause.OnConflict{DoNothing: true}).Create(&returnRequest).Error; err != nil {
+			return err
+		}
+		if returnRequest.ID == 0 {
+			if err := transaction.Where("order_id = ?", order.ID).First(&returnRequest).Error; err != nil {
+				return err
+			}
+		} else {
+			for index := range returnItems {
+				returnItems[index].ReturnRequestID = returnRequest.ID
+			}
+			if err := transaction.Create(&returnItems).Error; err != nil {
+				return err
+			}
+		}
+		return upsertShipment(transaction, shipmentCache(order.ID, shipment, ""))
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &returnRequest, nil
+}
+
 func (service *ShippingService) ApplyCallback(ctx context.Context, callback ShippingCallback) error {
 	if callback.EventID == "" || callback.ShipmentID == "" || callback.OrderID == "" || callback.TrackingNumber == "" || callback.Status == "" || callback.StatusLabel == "" || callback.OccurredAt.IsZero() || (callback.ShipmentType != "outbound" && callback.ShipmentType != "return") {
 		return ErrInvalidShippingCallback
@@ -180,6 +314,11 @@ func (service *ShippingService) ApplyCallback(ctx context.Context, callback Ship
 		}
 		if err := upsertShipment(transaction, cache); err != nil {
 			return err
+		}
+		if callback.ShipmentType == "return" {
+			if err := transaction.Model(&models.ReturnRequest{}).Where("return_shipment_id = ?", callback.ShipmentID).Update("status", callback.Status).Error; err != nil {
+				return err
+			}
 		}
 		message, notify := shippingNotification(callback, uint(orderID))
 		if !notify {
@@ -234,6 +373,17 @@ func shippingNotification(callback ShippingCallback, orderID uint) (models.Notif
 func (service *ShippingService) CachedOrderShipment(ctx context.Context, orderID uint) (*models.OrderShipment, error) {
 	var shipment models.OrderShipment
 	if err := service.database.WithContext(ctx).Where("order_id = ? AND shipment_type = ?", orderID, "outbound").First(&shipment).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &shipment, nil
+}
+
+func (service *ShippingService) CachedReturnShipment(ctx context.Context, orderID uint) (*models.OrderShipment, error) {
+	var shipment models.OrderShipment
+	if err := service.database.WithContext(ctx).Where("order_id = ? AND shipment_type = ?", orderID, "return").First(&shipment).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}

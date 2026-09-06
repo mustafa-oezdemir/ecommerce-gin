@@ -70,6 +70,14 @@ type CreateShipmentRequest struct {
 	ServiceLevel string  `json:"service_level"`
 }
 
+type CreateReturnRequest struct {
+	OriginalShipmentID string  `json:"original_shipment_id"`
+	OrderID            string  `json:"order_id"`
+	CustomerID         string  `json:"customer_id"`
+	Sender             Address `json:"sender"`
+	Items              []Item  `json:"items"`
+}
+
 type EstimatedDelivery struct {
 	From  *time.Time `json:"from,omitempty"`
 	Until *time.Time `json:"until,omitempty"`
@@ -101,9 +109,11 @@ type ShipmentEvent struct {
 
 type Client interface {
 	CreateShipment(context.Context, CreateShipmentRequest, string, string) (*Shipment, error)
+	CreateReturn(context.Context, CreateReturnRequest, string, string) (*Shipment, error)
 	GetShipmentByOrder(context.Context, uint, string) (*Shipment, error)
 	GetTimeline(context.Context, string, string) ([]ShipmentEvent, error)
 	TrackingURL(string) string
+	QRCodeURL(string) string
 }
 
 type HTTPClient struct {
@@ -149,6 +159,17 @@ func (client *HTTPClient) CreateShipment(ctx context.Context, shipment CreateShi
 	return &response, nil
 }
 
+func (client *HTTPClient) CreateReturn(ctx context.Context, shipment CreateReturnRequest, idempotencyKey, requestID string) (*Shipment, error) {
+	if strings.TrimSpace(idempotencyKey) == "" {
+		return nil, fmt.Errorf("return idempotency key is required")
+	}
+	var response Shipment
+	if err := client.doJSON(ctx, http.MethodPost, "/api/v1/returns", shipment, &response, idempotencyKey, requestID, true); err != nil {
+		return nil, err
+	}
+	return &response, nil
+}
+
 func (client *HTTPClient) GetShipmentByOrder(ctx context.Context, orderID uint, requestID string) (*Shipment, error) {
 	if orderID == 0 {
 		return nil, ErrNotFound
@@ -162,6 +183,10 @@ func (client *HTTPClient) GetShipmentByOrder(ctx context.Context, orderID uint, 
 
 func (client *HTTPClient) TrackingURL(trackingNumber string) string {
 	return client.publicURL.String() + "/track/" + url.PathEscape(trackingNumber)
+}
+
+func (client *HTTPClient) QRCodeURL(trackingNumber string) string {
+	return client.publicURL.String() + "/qr/" + url.PathEscape(trackingNumber)
 }
 
 func (client *HTTPClient) GetTimeline(ctx context.Context, trackingNumber, requestID string) ([]ShipmentEvent, error) {

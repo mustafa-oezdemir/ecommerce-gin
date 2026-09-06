@@ -78,6 +78,65 @@
 					</div>
 				</div>
 			{{ end }}
+			{{ if .Shipment }}
+				{{ if or .CanConfirmDelivery .CanRequestReturn }}
+					<div class="card detail-card mb-4">
+						<div class="card-body p-4">
+							<h2 class="h5 mb-3">Delivery actions</h2>
+							<div class="d-flex flex-wrap gap-2">
+								{{ if .CanConfirmDelivery }}
+									<form method="post" action="/account/orders/{{ .Order.ID }}/confirm-delivery">
+										{{ .CSRFField }}
+										<button class="btn btn-success" type="submit">Confirm delivery</button>
+									</form>
+								{{ end }}
+								{{ if .CanRequestReturn }}
+									<form method="post" action="/account/orders/{{ .Order.ID }}/return" class="w-100 mt-3">
+										{{ .CSRFField }}
+										{{ range .Order.Items }}
+											<div class="input-group mb-2">
+												<div class="input-group-text"><input class="form-check-input mt-0" type="checkbox" name="return_item_id" value="{{ .ID }}" aria-label="Return {{ .ProductName }}"></div>
+												<span class="form-control">{{ .ProductName }}</span>
+												<input class="form-control" type="number" name="return_quantity_{{ .ID }}" min="1" max="{{ .Quantity }}" value="1" aria-label="Quantity for {{ .ProductName }}">
+											</div>
+										{{ end }}
+										<div class="d-flex flex-wrap gap-2">
+											<select class="form-select" name="reason" aria-label="Return reason" required>
+												<option value="" selected disabled>Return reason</option>
+												<option value="damaged">Damaged</option>
+												<option value="wrong_item">Wrong item</option>
+												<option value="not_as_described">Not as described</option>
+												<option value="does_not_fit">Does not fit</option>
+												<option value="changed_mind">Changed mind</option>
+												<option value="defective">Defective</option>
+												<option value="other">Other</option>
+											</select>
+											<input class="form-control" name="note" maxlength="1000" placeholder="Optional note">
+											<button class="btn btn-outline-primary" type="submit">Start return</button>
+										</div>
+									</form>
+								{{ end }}
+							</div>
+						</div>
+					</div>
+				{{ end }}
+			{{ end }}
+			{{ if .ReturnShipment }}
+				<div class="card detail-card mb-4">
+					<div class="card-body p-4 d-flex flex-wrap justify-content-between align-items-center gap-3">
+						<div>
+							<h2 class="h5 mb-1">Return</h2>
+							<div class="small text-muted">Return tracking number</div>
+							<div class="fw-semibold font-monospace">{{ .ReturnShipment.TrackingNumber }}</div>
+							<div class="small text-muted">{{ .ReturnShipment.StatusLabel }}</div>
+						</div>
+						<div class="d-flex align-items-center gap-3">
+							{{ if .ReturnQRCodeURL }}<img src="{{ .ReturnQRCodeURL }}" alt="Return shipment QR code" width="96" height="96">{{ end }}
+							{{ if .ReturnTrackingURL }}<a class="btn btn-outline-primary" href="{{ .ReturnTrackingURL }}">Track return</a>{{ end }}
+						</div>
+					</div>
+				</div>
+			{{ end }}
 
 			<div class="card detail-card">
 				<div class="card-body p-4">

@@ -49,6 +49,9 @@ var notificationsSchema string
 //go:embed 000014_shipment_handover_code.sql
 var shipmentHandoverCodeSchema string
 
+//go:embed 000015_customer_delivery_returns.sql
+var customerDeliveryReturnsSchema string
+
 type migration struct {
 	version string
 	sql     string
@@ -74,6 +77,7 @@ func Apply(db *gorm.DB) error {
 			{version: "000012_shipping_order_type", sql: shippingOrderTypeSchema},
 			{version: "000013_notifications", sql: notificationsSchema},
 			{version: "000014_shipment_handover_code", sql: shipmentHandoverCodeSchema},
+			{version: "000015_customer_delivery_returns", sql: customerDeliveryReturnsSchema},
 		} {
 			var count int64
 			if err := tx.Raw("SELECT COUNT(*) FROM schema_migrations WHERE version = ?", migration.version).Scan(&count).Error; err != nil {

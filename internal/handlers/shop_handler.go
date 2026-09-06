@@ -268,5 +268,99 @@ func (h *ShopHandler) OrderDetail(c *gin.Context) {
 	} else if shipment, cacheErr := h.shipping.CachedOrderShipment(c.Request.Context(), order.ID); cacheErr == nil && shipment != nil {
 		data["Shipment"] = shipment
 	}
+	if shipment, cacheErr := h.shipping.CachedOrderShipment(c.Request.Context(), order.ID); cacheErr == nil && shipment != nil && shipment.Status == "delivered" {
+		data["CanConfirmDelivery"] = order.CustomerReceivedAt == nil
+		data["CanRequestReturn"] = order.ReturnRequest == nil
+	}
+	if returnShipment, cacheErr := h.shipping.CachedReturnShipment(c.Request.Context(), order.ID); cacheErr == nil && returnShipment != nil {
+		data["ReturnShipment"] = returnShipment
+		data["ReturnTrackingURL"] = h.shipping.TrackingURL(returnShipment.TrackingNumber)
+		data["ReturnQRCodeURL"] = h.shipping.QRCodeURL(returnShipment.TrackingNumber)
+	}
 	c.HTML(http.StatusOK, "order_detail.tmpl", viewData(c, data))
+}
+
+func (h *ShopHandler) ConfirmDelivery(c *gin.Context) {
+	user, ok := middleware.CurrentUser(c)
+	if !ok {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+	orderID, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || orderID == 0 {
+		c.AbortWithStatus(http.StatusNotFound)
+		return
+	}
+	if err := h.shipping.ConfirmDelivery(c.Request.Context(), user.ID, uint(orderID), c.GetString(middleware.RequestIDKey)); err != nil {
+		if errors.Is(err, services.ErrDeliveryNotConfirmed) {
+			c.String(http.StatusConflict, "Delivery has not been confirmed by shipping")
+			return
+		}
+		if errors.Is(err, services.ErrShippingDisabled) || errors.Is(err, shippingapi.ErrUnavailable) || errors.Is(err, shippingapi.ErrTimeout) {
+			c.String(http.StatusServiceUnavailable, "Shipping service is temporarily unavailable")
+			return
+		}
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.AbortWithStatus(http.StatusNotFound)
+			return
+		}
+		c.String(http.StatusInternalServerError, "Could not confirm delivery")
+		return
+	}
+	c.Redirect(http.StatusSeeOther, "/account/orders/"+strconv.FormatUint(orderID, 10))
+}
+
+func (h *ShopHandler) RequestReturn(c *gin.Context) {
+	user, ok := middleware.CurrentUser(c)
+	if !ok {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+	orderID, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || orderID == 0 {
+		c.AbortWithStatus(http.StatusNotFound)
+		return
+	}
+	items, err := returnItemInputs(c)
+	if err != nil {
+		c.String(http.StatusBadRequest, "Select at least one valid return item")
+		return
+	}
+	request, err := h.shipping.RequestReturn(c.Request.Context(), user.ID, uint(orderID), models.ReturnReason(c.PostForm("reason")), c.PostForm("note"), items, c.GetString(middleware.RequestIDKey))
+	if err != nil {
+		switch {
+		case errors.Is(err, services.ErrDeliveryNotConfirmed):
+			c.String(http.StatusConflict, "Returns are available after delivery")
+		case errors.Is(err, services.ErrInvalidReturnRequest):
+			c.String(http.StatusBadRequest, "Select a valid return reason")
+		case errors.Is(err, gorm.ErrRecordNotFound):
+			c.AbortWithStatus(http.StatusNotFound)
+		case errors.Is(err, services.ErrShippingDisabled), errors.Is(err, shippingapi.ErrUnavailable), errors.Is(err, shippingapi.ErrTimeout):
+			c.String(http.StatusServiceUnavailable, "Shipping service is temporarily unavailable")
+		default:
+			c.String(http.StatusInternalServerError, "Could not create return shipment")
+		}
+		return
+	}
+	c.Redirect(http.StatusSeeOther, "/account/orders/"+strconv.FormatUint(uint64(request.OrderID), 10))
+}
+
+func returnItemInputs(c *gin.Context) ([]services.ReturnItemInput, error) {
+	ids := c.PostFormArray("return_item_id")
+	if len(ids) == 0 {
+		return nil, errors.New("no return items")
+	}
+	items := make([]services.ReturnItemInput, 0, len(ids))
+	for _, rawID := range ids {
+		id, err := strconv.ParseUint(rawID, 10, 64)
+		if err != nil || id == 0 {
+			return nil, errors.New("invalid return item")
+		}
+		quantity, err := strconv.Atoi(c.PostForm("return_quantity_" + rawID))
+		if err != nil || quantity < 1 {
+			return nil, errors.New("invalid return quantity")
+		}
+		items = append(items, services.ReturnItemInput{OrderItemID: uint(id), Quantity: quantity})
+	}
+	return items, nil
 }

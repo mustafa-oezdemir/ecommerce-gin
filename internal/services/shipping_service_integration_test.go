@@ -14,15 +14,21 @@ import (
 
 type shippingClientStub struct {
 	createdRequest shippingapi.CreateShipmentRequest
+	returnRequest  shippingapi.CreateReturnRequest
 	idempotencyKey string
 	requestID      string
 	shipment       *shippingapi.Shipment
+	returnShipment *shippingapi.Shipment
 	err            error
 }
 
 func (stub *shippingClientStub) CreateShipment(_ context.Context, request shippingapi.CreateShipmentRequest, key, requestID string) (*shippingapi.Shipment, error) {
 	stub.createdRequest, stub.idempotencyKey, stub.requestID = request, key, requestID
 	return stub.shipment, stub.err
+}
+func (stub *shippingClientStub) CreateReturn(_ context.Context, request shippingapi.CreateReturnRequest, key, requestID string) (*shippingapi.Shipment, error) {
+	stub.returnRequest, stub.idempotencyKey, stub.requestID = request, key, requestID
+	return stub.returnShipment, stub.err
 }
 func (stub *shippingClientStub) GetShipmentByOrder(context.Context, uint, string) (*shippingapi.Shipment, error) {
 	return stub.shipment, stub.err
@@ -32,6 +38,9 @@ func (stub *shippingClientStub) GetTimeline(context.Context, string, string) ([]
 }
 func (stub *shippingClientStub) TrackingURL(tracking string) string {
 	return "https://pehlione-shipping.com/track/" + tracking
+}
+func (stub *shippingClientStub) QRCodeURL(tracking string) string {
+	return "https://pehlione-shipping.com/qr/" + tracking
 }
 
 func TestShippingHandoverUsesSnapshotsAndUpdatesOrderAtomically(t *testing.T) {
@@ -146,11 +155,55 @@ func TestShippingStopsCallbackUpdatesCacheWithoutNotification(t *testing.T) {
 	if err := service.ApplyCallback(t.Context(), callback); err != nil {
 		t.Fatal(err)
 	}
+
 	var notifications int64
 	database.Model(&models.Notification{}).Where("shipping_event_id = ?", eventID).Count(&notifications)
 	cache, err := service.CachedOrderShipment(t.Context(), order.ID)
 	if err != nil || notifications != 0 || cache == nil || cache.RemainingStops == nil || *cache.RemainingStops != 10 {
 		t.Fatalf("stops callback result: notifications=%d cache=%+v err=%v", notifications, cache, err)
+	}
+}
+
+func TestCustomerDeliveryConfirmationAndReturnAreIdempotent(t *testing.T) {
+	database := checkoutIntegrationDatabase(t)
+	fixture := newCheckoutFixture(t, database, 1, 1)
+	order := createShippingOrderFixture(t, database, fixture)
+	outbound := &shippingapi.Shipment{ShipmentID: "shp_outbound", OrderID: fmt.Sprint(order.ID), TrackingNumber: "PHE-DE-20260906-ABC123", ShipmentType: "outbound", Status: "delivered", StatusLabel: "Delivered"}
+	returnShipment := &shippingapi.Shipment{ShipmentID: "shp_return", OrderID: fmt.Sprint(order.ID), TrackingNumber: "RET-DE-20260906-ABC123", ShipmentType: "return", Status: "return_requested", StatusLabel: "Return requested"}
+	stub := &shippingClientStub{shipment: outbound, returnShipment: returnShipment}
+	service := NewShippingService(database, stub)
+
+	if err := service.ConfirmDelivery(t.Context(), order.UserID, order.ID, "request-delivery"); err != nil {
+		t.Fatalf("confirm delivery: %v", err)
+	}
+	if err := service.ConfirmDelivery(t.Context(), order.UserID, order.ID, "request-delivery-retry"); err != nil {
+		t.Fatalf("repeat confirmation: %v", err)
+	}
+	var confirmed models.Order
+	if err := database.First(&confirmed, order.ID).Error; err != nil || confirmed.CustomerReceivedAt == nil {
+		t.Fatalf("delivery confirmation was not persisted: %v %+v", err, confirmed.CustomerReceivedAt)
+	}
+
+	items := []ReturnItemInput{{OrderItemID: 0, Quantity: 1}}
+	var orderItem models.OrderItem
+	if err := database.Where("order_id = ?", order.ID).First(&orderItem).Error; err != nil {
+		t.Fatal(err)
+	}
+	items[0].OrderItemID = orderItem.ID
+	first, err := service.RequestReturn(t.Context(), order.UserID, order.ID, models.ReturnReasonDefective, "does not start", items, "request-return")
+	if err != nil {
+		t.Fatalf("request return: %v", err)
+	}
+	second, err := service.RequestReturn(t.Context(), order.UserID, order.ID, models.ReturnReasonDefective, "does not start", items, "request-return-retry")
+	if err != nil {
+		t.Fatalf("repeat return request: %v", err)
+	}
+	if first.ID == 0 || first.ID != second.ID || stub.returnRequest.OriginalShipmentID != outbound.ShipmentID || stub.idempotencyKey != "return-order-"+fmt.Sprint(order.ID) {
+		t.Fatalf("return request was not idempotent: first=%+v second=%+v request=%+v key=%q", first, second, stub.returnRequest, stub.idempotencyKey)
+	}
+	var count int64
+	if err := database.Model(&models.ReturnRequest{}).Where("order_id = ?", order.ID).Count(&count).Error; err != nil || count != 1 {
+		t.Fatalf("expected one return request, got %d: %v", count, err)
 	}
 }
 

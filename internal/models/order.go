@@ -48,22 +48,24 @@ func CanTransitionOrderStatus(from, to OrderStatus) bool {
 
 type Order struct {
 	gorm.Model
-	UserID         uint `gorm:"not null;index"`
-	User           User
-	Status         OrderStatus   `gorm:"size:50;index;not null"`
-	OrderNumber    string        `gorm:"size:32;uniqueIndex"`
-	IdempotencyKey string        `gorm:"size:64;not null;uniqueIndex:idx_order_user_key"`
-	PaymentMethod  PaymentMethod `gorm:"size:32;not null"`
-	Currency       string        `gorm:"size:3;not null;default:EUR"`
-	SubtotalCents  int64         `gorm:"not null;default:0"`
-	ShippingCents  int64         `gorm:"not null;default:0"`
-	TaxCents       int64         `gorm:"not null;default:0"`
-	DiscountCents  int64         `gorm:"not null;default:0"`
-	TotalCents     int64         `gorm:"not null"`
-	Items          []OrderItem
-	Addresses      []OrderAddress
-	Payment        Payment
-	Shipment       OrderShipment
+	UserID             uint `gorm:"not null;index"`
+	User               User
+	Status             OrderStatus   `gorm:"size:50;index;not null"`
+	OrderNumber        string        `gorm:"size:32;uniqueIndex"`
+	IdempotencyKey     string        `gorm:"size:64;not null;uniqueIndex:idx_order_user_key"`
+	PaymentMethod      PaymentMethod `gorm:"size:32;not null"`
+	Currency           string        `gorm:"size:3;not null;default:EUR"`
+	SubtotalCents      int64         `gorm:"not null;default:0"`
+	ShippingCents      int64         `gorm:"not null;default:0"`
+	TaxCents           int64         `gorm:"not null;default:0"`
+	DiscountCents      int64         `gorm:"not null;default:0"`
+	TotalCents         int64         `gorm:"not null"`
+	Items              []OrderItem
+	Addresses          []OrderAddress
+	Payment            Payment
+	Shipment           OrderShipment
+	ReturnRequest      *ReturnRequest
+	CustomerReceivedAt *time.Time
 }
 
 type OrderShipment struct {
@@ -85,6 +87,48 @@ type ShippingEventReceipt struct {
 	ID        uint `gorm:"primaryKey"`
 	CreatedAt time.Time
 	EventID   string `gorm:"size:64;not null;uniqueIndex"`
+}
+
+type ReturnReason string
+
+const (
+	ReturnReasonDamaged        ReturnReason = "damaged"
+	ReturnReasonWrongItem      ReturnReason = "wrong_item"
+	ReturnReasonNotAsDescribed ReturnReason = "not_as_described"
+	ReturnReasonDoesNotFit     ReturnReason = "does_not_fit"
+	ReturnReasonChangedMind    ReturnReason = "changed_mind"
+	ReturnReasonDefective      ReturnReason = "defective"
+	ReturnReasonOther          ReturnReason = "other"
+)
+
+func (reason ReturnReason) Valid() bool {
+	switch reason {
+	case ReturnReasonDamaged, ReturnReasonWrongItem, ReturnReasonNotAsDescribed, ReturnReasonDoesNotFit, ReturnReasonChangedMind, ReturnReasonDefective, ReturnReasonOther:
+		return true
+	default:
+		return false
+	}
+}
+
+type ReturnRequest struct {
+	gorm.Model
+	OrderID              uint         `gorm:"not null;uniqueIndex"`
+	UserID               uint         `gorm:"not null;index"`
+	Reason               ReturnReason `gorm:"size:32;not null"`
+	Note                 string       `gorm:"size:1000"`
+	OriginalShipmentID   string       `gorm:"size:64;not null;uniqueIndex"`
+	ReturnShipmentID     string       `gorm:"size:64;not null;uniqueIndex"`
+	ReturnTrackingNumber string       `gorm:"size:64;not null;uniqueIndex"`
+	Status               string       `gorm:"size:50;not null"`
+	Items                []ReturnItem
+}
+
+type ReturnItem struct {
+	gorm.Model
+	ReturnRequestID uint `gorm:"not null;uniqueIndex:idx_return_items_request_order_item,priority:1"`
+	OrderItemID     uint `gorm:"not null;uniqueIndex:idx_return_items_request_order_item,priority:2"`
+	ProductID       uint `gorm:"not null"`
+	Quantity        int  `gorm:"not null"`
 }
 
 type OrderItem struct {
