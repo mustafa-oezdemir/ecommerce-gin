@@ -1,0 +1,86 @@
+groups:
+  - name: shipping-service
+    rules:
+      - alert: ShippingDown
+        expr: up{job="shipping-service"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: Shipping Service is unavailable
+          description: Prometheus has been unable to scrape Shipping for at least two minutes.
+
+      - alert: ShippingHighErrorRate
+        expr: |
+          sum(rate(shipping_http_requests_total{status=~"5.."}[5m]))
+          / clamp_min(sum(rate(shipping_http_requests_total[5m])), 0.01) > 0.05
+          and sum(rate(shipping_http_requests_total[5m])) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Shipping HTTP error rate is high
+          description: More than 5% of Shipping HTTP traffic has returned 5xx responses for ten minutes.
+
+      - alert: ShippingHighLatency
+        expr: histogram_quantile(0.95, sum by (le) (rate(shipping_http_request_duration_seconds_bucket[5m]))) > 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Shipping p95 latency is high
+          description: Shipping p95 HTTP latency has exceeded one second for ten minutes.
+
+      - alert: ShippingDatabaseUnavailable
+        expr: shipping_health_ready == 0
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: Shipping database readiness is failing
+          description: Shipping has reported its required database dependency unavailable for three minutes.
+
+      - alert: EcommerceCallbackFailures
+        expr: sum(increase(shipping_ecommerce_callback_requests_total{result!="success"}[10m])) >= 3
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Shipping callbacks to E-Commerce are failing
+          description: At least three callback failures occurred in the last ten minutes and the condition persists.
+
+      - alert: ShippingOutboxBacklog
+        expr: shipping_outbox_current{status="pending"} > 25
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Shipping outbox backlog is growing
+          description: More than 25 callback events have remained pending for ten minutes.
+
+      - alert: ShippingOutboxStuck
+        expr: shipping_outbox_oldest_pending_seconds > 900
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: Shipping outbox delivery is stuck
+          description: The oldest pending callback event is more than fifteen minutes old.
+
+      - alert: ShippingDeliveryFailureSpike
+        expr: increase(shipping_delivery_failures_total[15m]) >= 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Shipping delivery failures increased
+          description: At least five delivery failures were recorded in the last fifteen minutes.
+
+      - alert: ShippingAPIAuthenticationFailures
+        expr: increase(shipping_api_auth_failures_total[5m]) >= 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Shipping API authentication failures increased
+          description: Repeated invalid service credentials were observed without exposing token or client identifiers.

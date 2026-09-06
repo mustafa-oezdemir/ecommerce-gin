@@ -150,8 +150,12 @@ services:
       - "${PROMETHEUS_HOST_PORT:-9090}:9090"
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/rules:/etc/prometheus/rules:ro
     depends_on:
       - app
+    networks:
+      default:
+      pehlione-backend:
 
   grafana:
     image: grafana/grafana
