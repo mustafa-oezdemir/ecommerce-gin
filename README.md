@@ -265,8 +265,10 @@ Prerequisites:
 Deploy:
 
 ```bash
-cp .env.production.example .env.production
-# Replace every placeholder with an independent generated secret.
+# PowerShell: creates ignored env files in both sibling repositories and
+# generates independent cryptographically secure application/database secrets.
+./scripts/New-ProductionEnv.ps1
+# Replace the remaining CHANGE_ME ACME/SMTP values.
 docker compose --env-file .env.production -f docker-compose.production.yml config
 docker compose --env-file .env.production -f docker-compose.production.yml up -d --build
 docker compose --env-file .env.production -f docker-compose.production.yml ps
