@@ -24,9 +24,14 @@
             </div>
             <span class="badge bg-success-subtle text-success rounded-pill px-3 py-2">Order Received</span>
             <h1 class="h2 mt-3 mb-3">Thank you!</h1>
-            <p class="text-muted mb-2">Your order <strong>{{if .Order.OrderNumber}}{{.Order.OrderNumber}}{{else}}#{{.Order.ID}}{{end}}</strong> has been successfully placed.</p>
-            {{if .Order.Payment.ID}}<p class="text-muted mb-2">Payment: <strong>{{.Order.Payment.Status}}</strong> via {{.Order.Payment.Method}}</p>{{end}}
-            {{range .Order.Addresses}}{{if eq .Type "shipping"}}<p class="text-muted mb-4">Shipping to: {{.FirstName}} {{.LastName}}, {{.Street}} {{.HouseNumber}}, {{.PostalCode}} {{.City}}</p>{{end}}{{end}}
+            <p class="text-muted mb-2">Your order 
+            <strong>{{if .Order.OrderNumber}}{{.Order.OrderNumber}}{{else}}#{{.Order.ID}}{{end}}</strong> has been successfully placed.</p>
+            {{if .Order.Payment.ID}}
+            <p class="text-muted mb-2">Payment: 
+            <strong>{{.Order.Payment.Status}}</strong> via {{.Order.Payment.Method}}</p>{{end}}
+            {{range .Order.Addresses}}{{if eq .Type "shipping"}}
+            <p class="text-muted mb-4">Shipping to: {{.FirstName}} {{.LastName}}, {{.Street}} {{.HouseNumber}}, {{.PostalCode}} {{.City}}
+            </p>{{end}}{{end}}
             <div class="fs-5 fw-bold mb-4">Total: {{money .Order.TotalCents}}</div>
             <div class="d-flex justify-content-center gap-2 flex-wrap">
               <a href="/account/orders/{{.Order.ID}}" class="btn btn-primary">View Order</a>
