@@ -68,13 +68,13 @@ func (h *EmployeeHandler) UpdateProductImage(c *gin.Context) {
 		if currentCount+int64(len(newFilenames)) > maxProductImages {
 			return errTooManyProductImages
 		}
-		var lastPosition struct{ Position int64 }
-		if err := transaction.Model(&models.ProductImage{}).Select("COALESCE(MAX(position), -1) AS position").Where("product_id = ?", product.ID).Scan(&lastPosition).Error; err != nil {
+		var lastPosition struct{ Position uint }
+		if err := transaction.Model(&models.ProductImage{}).Select("COALESCE(MAX(position), 0) AS position").Where("product_id = ?", product.ID).Scan(&lastPosition).Error; err != nil {
 			return err
 		}
 		images := make([]models.ProductImage, 0, len(newFilenames))
 		for index, filename := range newFilenames {
-			images = append(images, models.ProductImage{ProductID: product.ID, Filename: filename, Position: uint(lastPosition.Position + int64(index) + 1)})
+			images = append(images, models.ProductImage{ProductID: product.ID, Filename: filename, Position: lastPosition.Position + uint(index) + 1})
 		}
 		if err := transaction.Create(&images).Error; err != nil {
 			return err

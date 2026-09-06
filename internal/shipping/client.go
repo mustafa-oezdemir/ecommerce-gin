@@ -217,7 +217,9 @@ func (client *HTTPClient) doJSON(ctx context.Context, method, path string, input
 			return fmt.Errorf("%w: %v", ErrUnavailable, err)
 		}
 		err = decodeResponse(response, output)
-		response.Body.Close()
+		if closeErr := response.Body.Close(); err == nil && closeErr != nil {
+			err = closeErr
+		}
 		if err == nil || !retryable || !isRetryableResponse(err) || attempt == 2 || ctx.Err() != nil {
 			return err
 		}

@@ -13,13 +13,50 @@ services:
     build:
       context: ../shipping-service
     environment:
+      APP_ENV: development
+      APP_URL: ${SHIPPING_PUBLIC_URL:-http://localhost:8090}
+      APP_PORT: 8090
+      GIN_MODE: release
       DATABASE_DSN: shipping:${SHIPPING_MYSQL_PASSWORD}@tcp(shipping-db:3306)/shipping?charset=utf8mb4&parseTime=True&loc=UTC
       ECOMMERCE_TO_SHIPPING_TOKEN: ${SHIPPING_API_TOKEN}
       ECOMMERCE_CALLBACK_URL: http://app:8080/api/v1/internal/shipping/events
+      ECOMMERCE_API_URL: http://app:8080
+      ECOMMERCE_PUBLIC_URL: ${APP_URL:-http://localhost:8080}
       SHIPPING_TO_ECOMMERCE_TOKEN: ${SHIPPING_TO_ECOMMERCE_TOKEN}
+      INTERNAL_QR_SECRET: ${INTERNAL_QR_SECRET}
+      SESSION_SECRET: ${SHIPPING_SESSION_SECRET}
+      PROFILE_IMAGE_DIRECTORY: /app/data/profile-images
+      INITIAL_ADMIN_EMAIL: ${SHIPPING_INITIAL_ADMIN_EMAIL:-}
+      INITIAL_ADMIN_PASSWORD: ${SHIPPING_INITIAL_ADMIN_PASSWORD:-}
+      WAREHOUSE_NAME: ${WAREHOUSE_NAME:-NordShop Logistics Center}
+      WAREHOUSE_COMPANY: ${WAREHOUSE_COMPANY:-NordShop GmbH}
+      WAREHOUSE_STREET: ${WAREHOUSE_STREET:-Musterstrasse}
+      WAREHOUSE_HOUSE_NUMBER: ${WAREHOUSE_HOUSE_NUMBER:-10}
+      WAREHOUSE_POSTAL_CODE: ${WAREHOUSE_POSTAL_CODE:-35039}
+      WAREHOUSE_CITY: ${WAREHOUSE_CITY:-Marburg}
+      WAREHOUSE_COUNTRY: ${WAREHOUSE_COUNTRY:-DE}
+    depends_on:
+      shipping-db:
+        condition: service_healthy
+    ports:
+      - "${SHIPPING_HOST_PORT:-8090}:8090"
+    volumes:
+      - shipping_profile_images:/app/data/profile-images
   shipping-db:
+    image: mysql:8.4
     environment:
       MYSQL_DATABASE: shipping
       MYSQL_USER: shipping
       MYSQL_PASSWORD: ${SHIPPING_MYSQL_PASSWORD}
       MYSQL_ROOT_PASSWORD: ${SHIPPING_MYSQL_ROOT_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - shipping_mysql:/var/lib/mysql
+
+volumes:
+  shipping_mysql:
+  shipping_profile_images:

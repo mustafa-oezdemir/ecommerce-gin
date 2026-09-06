@@ -120,9 +120,6 @@ func NewRouter(config RouterConfig) (http.Handler, error) {
 			http.Error(writer, "Forbidden", http.StatusForbidden)
 		})),
 	}
-	if config.PublicURLHost != "" {
-		protectOptions = append(protectOptions, csrf.TrustedOrigins([]string{config.PublicURLHost}))
-	}
 	csrfMiddleware := csrf.Protect(config.CSRFKey, protectOptions...)
 	handler := csrfMiddleware(router)
 	csrfAwareHandler := http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
