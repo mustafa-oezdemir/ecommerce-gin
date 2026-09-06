@@ -233,7 +233,7 @@ Employee handover calls `POST /api/v1/shipments` with a stable per-order idempot
 For a shared development network, set `SHIPPING_API_TOKEN`, `SHIPPING_TO_ECOMMERCE_TOKEN`, `SHIPPING_MYSQL_PASSWORD`, `SHIPPING_MYSQL_ROOT_PASSWORD`, and `INTERNAL_QR_SECRET` in the E-Commerce Compose environment, then run from this repository:
 
 ```bash
-docker compose -f docker-compose.yml -f ../shipping-service/docker-compose.yml -f docker-compose.integration.yml up --build
+docker compose -f docker-compose.yml -f docker-compose.integration.yml up --build
 ```
 
 The two services and their independent MySQL databases share only the Compose network; database credentials and schemas remain isolated.
@@ -282,7 +282,7 @@ Production routing is intentionally split:
 - E-Commerce → Shipping API: `http://shipping-app:8090`
 - Shipping → E-Commerce callback API: `http://ecommerce-app:8080/api/v1/internal/shipping/events`
 
-The application rejects non-HTTPS `APP_URL` and `SHIPPING_PUBLIC_URL` values in production. Session and CSRF cookies are host-only, `Secure`, `HttpOnly`, and `SameSite=Lax`; the canonical E-Commerce host is explicitly trusted for CSRF origin checks. Caddy preserves the public host and sets sanitized forwarding headers. `TRUSTED_PROXIES` is limited to the fixed `10.231.17.0/24` edge network rather than trusting arbitrary clients. If that subnet overlaps the deployment host's existing Docker/VPN routes, choose another private subnet and update both `edge.ipam` and the two `TRUSTED_PROXIES` values together.
+The application rejects non-HTTPS `APP_URL` and `SHIPPING_PUBLIC_URL` values in production. Session and CSRF cookies are host-only, `Secure`, `HttpOnly`, and `SameSite=Lax`; CSRF origin validation uses the request's exact public host, which Caddy preserves. `TRUSTED_PROXIES` is limited to the fixed `10.231.17.0/24` edge network rather than trusting arbitrary clients. If that subnet overlaps the deployment host's existing Docker/VPN routes, choose another private subnet and update both `edge.ipam` and the two `TRUSTED_PROXIES` values together.
 
 Verify after DNS propagation:
 

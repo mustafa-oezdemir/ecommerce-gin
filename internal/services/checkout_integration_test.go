@@ -83,6 +83,7 @@ func cleanupCheckoutFixture(database *gorm.DB, fixture checkoutFixture) {
 		eventIDs[index] = "event-" + fmt.Sprint(orderID)
 	}
 	database.Where("event_id IN ?", eventIDs).Delete(&models.WebhookEvent{})
+	database.Unscoped().Where("order_id IN ?", orderIDs).Delete(&models.OrderShipment{})
 	database.Unscoped().Where("order_id IN ?", orderIDs).Delete(&models.Payment{})
 	database.Unscoped().Where("order_id IN ?", orderIDs).Delete(&models.OrderAddress{})
 	database.Unscoped().Where("order_id IN ?", orderIDs).Delete(&models.OrderItem{})
