@@ -1,0 +1,29 @@
+{
+  "annotations": {"list": []},
+  "description": "Combined E-Commerce and Shipping integration health overview.",
+  "editable": true,
+  "graphTooltip": 1,
+  "panels": [
+    {"id":1,"type":"stat","title":"E-Commerce UP","gridPos":{"h":5,"w":6,"x":0,"y":0},"targets":[{"refId":"A","expr":"up{job=\"ecommerce-app\"}","instant":true}],"fieldConfig":{"defaults":{"mappings":[{"type":"value","options":{"0":{"text":"DOWN","color":"red"},"1":{"text":"UP","color":"green"}}}]},"overrides":[]},"options":{"colorMode":"background","graphMode":"none","reduceOptions":{"calcs":["lastNotNull"],"fields":"","values":false}}},
+    {"id":2,"type":"stat","title":"Shipping UP","gridPos":{"h":5,"w":6,"x":6,"y":0},"targets":[{"refId":"A","expr":"up{job=\"shipping-service\"}","instant":true}],"fieldConfig":{"defaults":{"mappings":[{"type":"value","options":{"0":{"text":"DOWN","color":"red"},"1":{"text":"UP","color":"green"}}}]},"overrides":[]},"options":{"colorMode":"background","graphMode":"none","reduceOptions":{"calcs":["lastNotNull"],"fields":"","values":false}}},
+    {"id":3,"type":"stat","title":"E-Commerce RPS","gridPos":{"h":5,"w":6,"x":12,"y":0},"targets":[{"refId":"A","expr":"sum(rate(http_requests_total[5m]))","instant":true}],"fieldConfig":{"defaults":{"unit":"reqps"},"overrides":[]},"options":{"colorMode":"value","graphMode":"area","reduceOptions":{"calcs":["lastNotNull"],"fields":"","values":false}}},
+    {"id":4,"type":"stat","title":"Shipping RPS","gridPos":{"h":5,"w":6,"x":18,"y":0},"targets":[{"refId":"A","expr":"sum(rate(shipping_http_requests_total[5m]))","instant":true}],"fieldConfig":{"defaults":{"unit":"reqps"},"overrides":[]},"options":{"colorMode":"value","graphMode":"area","reduceOptions":{"calcs":["lastNotNull"],"fields":"","values":false}}},
+    {"id":10,"type":"timeseries","title":"Service Request Rates","gridPos":{"h":8,"w":12,"x":0,"y":5},"targets":[{"refId":"A","expr":"sum(rate(http_requests_total[5m]))","legendFormat":"E-Commerce"},{"refId":"B","expr":"sum(rate(shipping_http_requests_total[5m]))","legendFormat":"Shipping"}],"fieldConfig":{"defaults":{"unit":"reqps"},"overrides":[]},"options":{"legend":{"displayMode":"table","placement":"bottom"},"tooltip":{"mode":"multi"}}},
+    {"id":11,"type":"timeseries","title":"Cross-Service Integration Errors","gridPos":{"h":8,"w":12,"x":12,"y":5},"targets":[{"refId":"A","expr":"sum(rate(shipping_api_errors_total[5m]))","legendFormat":"E-Commerce to Shipping"},{"refId":"B","expr":"sum(rate(shipping_ecommerce_callback_requests_total{result!=\"success\"}[5m]))","legendFormat":"Shipping to E-Commerce"}],"fieldConfig":{"defaults":{"unit":"reqps"},"overrides":[]},"options":{"legend":{"displayMode":"table","placement":"bottom"},"tooltip":{"mode":"multi"}}},
+    {"id":20,"type":"stat","title":"Shipping Dependency View","gridPos":{"h":5,"w":6,"x":0,"y":13},"targets":[{"refId":"A","expr":"shipping_ecommerce_dependency_up","instant":true}],"fieldConfig":{"defaults":{"mappings":[{"type":"value","options":{"0":{"text":"CALLBACK DOWN","color":"red"},"1":{"text":"CALLBACK UP","color":"green"}}}]},"overrides":[]},"options":{"colorMode":"background","graphMode":"none","reduceOptions":{"calcs":["lastNotNull"],"fields":"","values":false}}},
+    {"id":21,"type":"stat","title":"Outbox Pending","gridPos":{"h":5,"w":6,"x":6,"y":13},"targets":[{"refId":"A","expr":"shipping_outbox_current{status=\"pending\"} or vector(0)","instant":true}],"fieldConfig":{"defaults":{"decimals":0},"overrides":[]},"options":{"colorMode":"value","graphMode":"area","reduceOptions":{"calcs":["lastNotNull"],"fields":"","values":false}}},
+    {"id":22,"type":"stat","title":"Outbox Failed","gridPos":{"h":5,"w":6,"x":12,"y":13},"targets":[{"refId":"A","expr":"shipping_outbox_current{status=\"failed\"} or vector(0)","instant":true}],"fieldConfig":{"defaults":{"decimals":0},"overrides":[]},"options":{"colorMode":"value","graphMode":"area","reduceOptions":{"calcs":["lastNotNull"],"fields":"","values":false}}},
+    {"id":23,"type":"stat","title":"Oldest Pending Event","gridPos":{"h":5,"w":6,"x":18,"y":13},"targets":[{"refId":"A","expr":"shipping_outbox_oldest_pending_seconds","instant":true}],"fieldConfig":{"defaults":{"unit":"s"},"overrides":[]},"options":{"colorMode":"value","graphMode":"area","reduceOptions":{"calcs":["lastNotNull"],"fields":"","values":false}}},
+    {"id":30,"type":"timeseries","title":"E-Commerce → Shipping API Latency","gridPos":{"h":8,"w":12,"x":0,"y":18},"targets":[{"refId":"A","expr":"histogram_quantile(0.95, sum by (le) (rate(shipping_api_duration_seconds_bucket[5m])))","legendFormat":"p95"}],"fieldConfig":{"defaults":{"unit":"s"},"overrides":[]},"options":{"legend":{"displayMode":"table","placement":"bottom"},"tooltip":{"mode":"multi"}}},
+    {"id":31,"type":"timeseries","title":"Shipping → E-Commerce Callback Latency","gridPos":{"h":8,"w":12,"x":12,"y":18},"targets":[{"refId":"A","expr":"histogram_quantile(0.95, sum by (le) (rate(shipping_ecommerce_callback_duration_seconds_bucket[5m])))","legendFormat":"p95"}],"fieldConfig":{"defaults":{"unit":"s"},"overrides":[]},"options":{"legend":{"displayMode":"table","placement":"bottom"},"tooltip":{"mode":"multi"}}}
+  ],
+  "refresh": "15s",
+  "schemaVersion": 39,
+  "tags": ["ecommerce", "shipping", "integration", "prometheus"],
+  "templating": {"list": []},
+  "time": {"from": "now-6h", "to": "now"},
+  "timezone": "browser",
+  "title": "E-Commerce + Shipping Overview",
+  "uid": "ecommerce-shipping-overview",
+  "version": 1
+}
