@@ -1,0 +1,29 @@
+services:
+  app:
+    environment:
+      SHIPPING_API_URL: http://shipping-app:8090
+      SHIPPING_PUBLIC_URL: ${SHIPPING_PUBLIC_URL:-http://localhost:8090}
+      SHIPPING_API_TOKEN: ${SHIPPING_API_TOKEN}
+      SHIPPING_TO_ECOMMERCE_TOKEN: ${SHIPPING_TO_ECOMMERCE_TOKEN}
+    depends_on:
+      shipping-app:
+        condition: service_started
+
+  shipping-app:
+    build:
+      context: ../shipping-service
+    environment:
+      APP_PORT: 8090
+      DATABASE_DSN: shipping:${SHIPPING_MYSQL_PASSWORD}@tcp(shipping-db:3306)/shipping?charset=utf8mb4&parseTime=True&loc=UTC
+      ECOMMERCE_TO_SHIPPING_TOKEN: ${SHIPPING_API_TOKEN}
+      ECOMMERCE_CALLBACK_URL: http://app:8080/api/v1/internal/shipping/events
+      SHIPPING_TO_ECOMMERCE_TOKEN: ${SHIPPING_TO_ECOMMERCE_TOKEN}
+    ports: !override
+      - "8090:8090"
+
+  shipping-db:
+    environment:
+      MYSQL_DATABASE: shipping
+      MYSQL_USER: shipping
+      MYSQL_PASSWORD: ${SHIPPING_MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${SHIPPING_MYSQL_ROOT_PASSWORD}

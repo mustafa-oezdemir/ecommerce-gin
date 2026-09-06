@@ -15,56 +15,62 @@ import (
 )
 
 type Config struct {
-	AppEnv                string
-	AppPort               string
-	MetricsPort           string
-	GinMode               string
-	TrustedProxies        []string
-	LogLevel              string
-	LogConsoleFormat      string
-	LogFile               string
-	LogMaxSizeMB          int
-	LogMaxBackups         int
-	LogMaxAgeDays         int
-	LogCompress           bool
-	LogAddSource          bool
-	HTTPReadHeaderTimeout time.Duration
-	HTTPReadTimeout       time.Duration
-	HTTPWriteTimeout      time.Duration
-	HTTPIdleTimeout       time.Duration
-	HTTPShutdownTimeout   time.Duration
-	HTTPMaxHeaderBytes    int
-	ProductImageDirectory string
-	ProductImageMaxBytes  int64
-	ProductImageMaxWidth  int
-	ProductImageMaxHeight int
-	ProductImageMaxPixels int64
-	ProfileImageDirectory string
-	ProfileImageMaxBytes  int64
-	ProfileImageMaxWidth  int
-	ProfileImageMaxHeight int
-	ProfileImageMaxPixels int64
-	ClamAVAddress         string
-	ClamAVScanTimeout     time.Duration
-	MySQLHost             string
-	MySQLPort             string
-	MySQLDatabase         string
-	MySQLUser             string
-	MySQLPassword         string
-	DBMaxOpenConns        int
-	DBMaxIdleConns        int
-	DBConnMaxLifetime     time.Duration
-	DBConnMaxIdleTime     time.Duration
-	DBConnectTimeout      time.Duration
-	DBReadTimeout         time.Duration
-	DBWriteTimeout        time.Duration
-	DBPingTimeout         time.Duration
-	SessionSecret         string
-	SessionSecure         bool
-	CSRFKey               []byte
-	SecurityEncryptionKey []byte
-	PaymentWebhookSecret  string
-	DSN                   string
+	AppEnv                        string
+	AppPort                       string
+	MetricsPort                   string
+	GinMode                       string
+	TrustedProxies                []string
+	LogLevel                      string
+	LogConsoleFormat              string
+	LogFile                       string
+	LogMaxSizeMB                  int
+	LogMaxBackups                 int
+	LogMaxAgeDays                 int
+	LogCompress                   bool
+	LogAddSource                  bool
+	HTTPReadHeaderTimeout         time.Duration
+	HTTPReadTimeout               time.Duration
+	HTTPWriteTimeout              time.Duration
+	HTTPIdleTimeout               time.Duration
+	HTTPShutdownTimeout           time.Duration
+	HTTPMaxHeaderBytes            int
+	ProductImageDirectory         string
+	ProductImageMaxBytes          int64
+	ProductImageMaxWidth          int
+	ProductImageMaxHeight         int
+	ProductImageMaxPixels         int64
+	ProfileImageDirectory         string
+	ProfileImageMaxBytes          int64
+	ProfileImageMaxWidth          int
+	ProfileImageMaxHeight         int
+	ProfileImageMaxPixels         int64
+	ClamAVAddress                 string
+	ClamAVScanTimeout             time.Duration
+	MySQLHost                     string
+	MySQLPort                     string
+	MySQLDatabase                 string
+	MySQLUser                     string
+	MySQLPassword                 string
+	DBMaxOpenConns                int
+	DBMaxIdleConns                int
+	DBConnMaxLifetime             time.Duration
+	DBConnMaxIdleTime             time.Duration
+	DBConnectTimeout              time.Duration
+	DBReadTimeout                 time.Duration
+	DBWriteTimeout                time.Duration
+	DBPingTimeout                 time.Duration
+	SessionSecret                 string
+	SessionSecure                 bool
+	CSRFKey                       []byte
+	SecurityEncryptionKey         []byte
+	PaymentWebhookSecret          string
+	ShippingServiceURL            string
+	ShippingPublicURL             string
+	ShippingServiceToken          string
+	ShippingCallbackToken         string
+	ShippingPreviousCallbackToken string
+	ShippingTimeout               time.Duration
+	DSN                           string
 }
 
 func Load() *Config {
@@ -121,6 +127,16 @@ func Load() *Config {
 	csrfSecret := strings.TrimSpace(os.Getenv("CSRF_SECRET"))
 	securitySecret := strings.TrimSpace(os.Getenv("SECURITY_ENCRYPTION_KEY"))
 	paymentWebhookSecret := strings.TrimSpace(os.Getenv("PAYMENT_WEBHOOK_SECRET"))
+	shippingServiceURL := strings.TrimRight(firstEnvironment("SHIPPING_API_URL", "SHIPPING_SERVICE_URL"), "/")
+	shippingPublicURL := strings.TrimRight(firstEnvironment("SHIPPING_PUBLIC_URL"), "/")
+	shippingServiceToken := firstEnvironment("SHIPPING_API_TOKEN", "ECOMMERCE_TO_SHIPPING_TOKEN")
+	shippingCallbackToken := firstEnvironment("SHIPPING_TO_ECOMMERCE_TOKEN", "SHIPPING_CALLBACK_TOKEN")
+	shippingPreviousCallbackToken := firstEnvironment("SHIPPING_TO_ECOMMERCE_PREVIOUS_TOKEN")
+	shippingTimeoutName := "SHIPPING_API_TIMEOUT"
+	if strings.TrimSpace(os.Getenv(shippingTimeoutName)) == "" {
+		shippingTimeoutName = "SHIPPING_TIMEOUT"
+	}
+	shippingTimeout := envDuration(shippingTimeoutName, 5*time.Second)
 
 	if appEnv == "" {
 		log.Fatal("APP_ENV is required (development, test, or production)")
@@ -227,6 +243,15 @@ func Load() *Config {
 	if appEnv == "production" && !sessionSecure {
 		log.Fatal("SESSION_SECURE must be true in production")
 	}
+	if shippingServiceURL != "" && len(shippingServiceToken) < 32 {
+		log.Fatal("SHIPPING_API_TOKEN must contain at least 32 characters when SHIPPING_API_URL is configured")
+	}
+	if shippingCallbackToken != "" && len(shippingCallbackToken) < 32 {
+		log.Fatal("SHIPPING_TO_ECOMMERCE_TOKEN must contain at least 32 characters when configured")
+	}
+	if shippingPreviousCallbackToken != "" && len(shippingPreviousCallbackToken) < 32 {
+		log.Fatal("SHIPPING_TO_ECOMMERCE_PREVIOUS_TOKEN must contain at least 32 characters when configured")
+	}
 
 	mysqlConfig := mysqldriver.Config{
 		User:                 mysqlUser,
@@ -245,56 +270,62 @@ func Load() *Config {
 	dsn := mysqlConfig.FormatDSN()
 
 	return &Config{
-		AppEnv:                appEnv,
-		AppPort:               appPort,
-		MetricsPort:           metricsPort,
-		GinMode:               ginMode,
-		TrustedProxies:        trustedProxies,
-		LogLevel:              logLevel,
-		LogConsoleFormat:      logConsoleFormat,
-		LogFile:               logFile,
-		LogMaxSizeMB:          logMaxSizeMB,
-		LogMaxBackups:         logMaxBackups,
-		LogMaxAgeDays:         logMaxAgeDays,
-		LogCompress:           logCompress,
-		LogAddSource:          logAddSource,
-		HTTPReadHeaderTimeout: httpReadHeaderTimeout,
-		HTTPReadTimeout:       httpReadTimeout,
-		HTTPWriteTimeout:      httpWriteTimeout,
-		HTTPIdleTimeout:       httpIdleTimeout,
-		HTTPShutdownTimeout:   httpShutdownTimeout,
-		HTTPMaxHeaderBytes:    httpMaxHeaderBytes,
-		ProductImageDirectory: productImageDirectory,
-		ProductImageMaxBytes:  productImageMaxBytes,
-		ProductImageMaxWidth:  productImageMaxWidth,
-		ProductImageMaxHeight: productImageMaxHeight,
-		ProductImageMaxPixels: productImageMaxPixels,
-		ProfileImageDirectory: profileImageDirectory,
-		ProfileImageMaxBytes:  profileImageMaxBytes,
-		ProfileImageMaxWidth:  profileImageMaxWidth,
-		ProfileImageMaxHeight: profileImageMaxHeight,
-		ProfileImageMaxPixels: profileImageMaxPixels,
-		ClamAVAddress:         clamAVAddress,
-		ClamAVScanTimeout:     clamAVScanTimeout,
-		MySQLHost:             mysqlHost,
-		MySQLPort:             mysqlPort,
-		MySQLDatabase:         mysqlDB,
-		MySQLUser:             mysqlUser,
-		MySQLPassword:         mysqlPassword,
-		DBMaxOpenConns:        dbMaxOpenConns,
-		DBMaxIdleConns:        dbMaxIdleConns,
-		DBConnMaxLifetime:     dbConnMaxLifetime,
-		DBConnMaxIdleTime:     dbConnMaxIdleTime,
-		DBConnectTimeout:      dbConnectTimeout,
-		DBReadTimeout:         dbReadTimeout,
-		DBWriteTimeout:        dbWriteTimeout,
-		DBPingTimeout:         dbPingTimeout,
-		SessionSecret:         sessionSecret,
-		SessionSecure:         sessionSecure,
-		CSRFKey:               csrfKey,
-		SecurityEncryptionKey: securityKey,
-		PaymentWebhookSecret:  paymentWebhookSecret,
-		DSN:                   dsn,
+		AppEnv:                        appEnv,
+		AppPort:                       appPort,
+		MetricsPort:                   metricsPort,
+		GinMode:                       ginMode,
+		TrustedProxies:                trustedProxies,
+		LogLevel:                      logLevel,
+		LogConsoleFormat:              logConsoleFormat,
+		LogFile:                       logFile,
+		LogMaxSizeMB:                  logMaxSizeMB,
+		LogMaxBackups:                 logMaxBackups,
+		LogMaxAgeDays:                 logMaxAgeDays,
+		LogCompress:                   logCompress,
+		LogAddSource:                  logAddSource,
+		HTTPReadHeaderTimeout:         httpReadHeaderTimeout,
+		HTTPReadTimeout:               httpReadTimeout,
+		HTTPWriteTimeout:              httpWriteTimeout,
+		HTTPIdleTimeout:               httpIdleTimeout,
+		HTTPShutdownTimeout:           httpShutdownTimeout,
+		HTTPMaxHeaderBytes:            httpMaxHeaderBytes,
+		ProductImageDirectory:         productImageDirectory,
+		ProductImageMaxBytes:          productImageMaxBytes,
+		ProductImageMaxWidth:          productImageMaxWidth,
+		ProductImageMaxHeight:         productImageMaxHeight,
+		ProductImageMaxPixels:         productImageMaxPixels,
+		ProfileImageDirectory:         profileImageDirectory,
+		ProfileImageMaxBytes:          profileImageMaxBytes,
+		ProfileImageMaxWidth:          profileImageMaxWidth,
+		ProfileImageMaxHeight:         profileImageMaxHeight,
+		ProfileImageMaxPixels:         profileImageMaxPixels,
+		ClamAVAddress:                 clamAVAddress,
+		ClamAVScanTimeout:             clamAVScanTimeout,
+		MySQLHost:                     mysqlHost,
+		MySQLPort:                     mysqlPort,
+		MySQLDatabase:                 mysqlDB,
+		MySQLUser:                     mysqlUser,
+		MySQLPassword:                 mysqlPassword,
+		DBMaxOpenConns:                dbMaxOpenConns,
+		DBMaxIdleConns:                dbMaxIdleConns,
+		DBConnMaxLifetime:             dbConnMaxLifetime,
+		DBConnMaxIdleTime:             dbConnMaxIdleTime,
+		DBConnectTimeout:              dbConnectTimeout,
+		DBReadTimeout:                 dbReadTimeout,
+		DBWriteTimeout:                dbWriteTimeout,
+		DBPingTimeout:                 dbPingTimeout,
+		SessionSecret:                 sessionSecret,
+		SessionSecure:                 sessionSecure,
+		CSRFKey:                       csrfKey,
+		SecurityEncryptionKey:         securityKey,
+		PaymentWebhookSecret:          paymentWebhookSecret,
+		ShippingServiceURL:            shippingServiceURL,
+		ShippingPublicURL:             shippingPublicURL,
+		ShippingServiceToken:          shippingServiceToken,
+		ShippingCallbackToken:         shippingCallbackToken,
+		ShippingPreviousCallbackToken: shippingPreviousCallbackToken,
+		ShippingTimeout:               shippingTimeout,
+		DSN:                           dsn,
 	}
 }
 
@@ -312,6 +343,15 @@ func envCSV(name string) []string {
 		}
 	}
 	return result
+}
+
+func firstEnvironment(names ...string) string {
+	for _, name := range names {
+		if value := strings.TrimSpace(os.Getenv(name)); value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func envInt(name string, fallback int) int {

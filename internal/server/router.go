@@ -19,25 +19,29 @@ import (
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/middleware"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/models"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/services"
+	shippingapi "github.com/mustafa-oezdemir/ecommerce-gin/internal/shipping"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/uploads"
 	"github.com/mustafa-oezdemir/ecommerce-gin/web"
 	"gorm.io/gorm"
 )
 
 type RouterConfig struct {
-	Environment       string
-	TrustedProxies    []string
-	SessionSecret     string
-	SessionSecure     bool
-	CSRFKey           []byte
-	SecurityKey       []byte
-	WebhookSecret     string
-	Database          *gorm.DB
-	Metrics           *metrics.Metrics
-	Logger            *slog.Logger
-	ImageStore        *uploads.ImageStore
-	ProfileImageStore *uploads.ImageStore
-	LogReader         *logging.Reader
+	Environment                   string
+	TrustedProxies                []string
+	SessionSecret                 string
+	SessionSecure                 bool
+	CSRFKey                       []byte
+	SecurityKey                   []byte
+	WebhookSecret                 string
+	Database                      *gorm.DB
+	Metrics                       *metrics.Metrics
+	Logger                        *slog.Logger
+	ImageStore                    *uploads.ImageStore
+	ProfileImageStore             *uploads.ImageStore
+	LogReader                     *logging.Reader
+	ShippingClient                shippingapi.Client
+	ShippingCallbackToken         string
+	ShippingPreviousCallbackToken string
 }
 
 func NewRouter(config RouterConfig) (http.Handler, error) {
@@ -100,7 +104,7 @@ func NewRouter(config RouterConfig) (http.Handler, error) {
 	router.StaticFS("/static", http.FS(staticFiles))
 	router.GET("/media/products/:filename", serveProductImage(config.ImageStore, config.Logger))
 	router.GET("/media/profiles/:filename", serveStoredImage(config.ProfileImageStore))
-	registerRoutes(router, config.Database, config.Metrics, config.ImageStore, config.ProfileImageStore, config.LogReader, config.SecurityKey, config.Environment, config.WebhookSecret)
+	registerRoutes(router, config.Database, config.Metrics, config.ImageStore, config.ProfileImageStore, config.LogReader, config.SecurityKey, config.Environment, config.WebhookSecret, config.ShippingClient, config.ShippingCallbackToken, config.ShippingPreviousCallbackToken)
 	api.RegisterRoutes(router, config.Database)
 
 	csrfMiddleware := csrf.Protect(
@@ -118,7 +122,7 @@ func NewRouter(config RouterConfig) (http.Handler, error) {
 	)
 	handler := csrfMiddleware(router)
 	csrfAwareHandler := http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		if request.Method == http.MethodPost && strings.HasPrefix(request.URL.Path, "/webhooks/payments/") {
+		if request.Method == http.MethodPost && (strings.HasPrefix(request.URL.Path, "/webhooks/payments/") || request.URL.Path == "/api/v1/internal/shipping/events") {
 			request = csrf.UnsafeSkipCheck(request)
 		}
 		handler.ServeHTTP(writer, request)
@@ -131,14 +135,16 @@ func NewRouter(config RouterConfig) (http.Handler, error) {
 	return csrfAwareHandler, nil
 }
 
-func registerRoutes(router *gin.Engine, database *gorm.DB, appMetrics *metrics.Metrics, imageStore, profileImageStore *uploads.ImageStore, logReader *logging.Reader, securityKey []byte, environment, webhookSecret string) {
+func registerRoutes(router *gin.Engine, database *gorm.DB, appMetrics *metrics.Metrics, imageStore, profileImageStore *uploads.ImageStore, logReader *logging.Reader, securityKey []byte, environment, webhookSecret string, shippingClient shippingapi.Client, shippingCallbackTokens ...string) {
 	health := handlers.NewHealthHandler(database, appMetrics)
 	router.GET("/health/live", health.Live)
 	router.GET("/health/ready", health.Ready)
 	router.GET("/healthz", health.Live)
 	router.GET("/readyz", health.Ready)
 
-	shop := handlers.NewShopHandler(database)
+	shippingService := services.NewShippingService(database, shippingClient)
+	shippingHandler := handlers.NewShippingHandler(shippingService, shippingCallbackTokens...)
+	shop := handlers.NewShopHandler(database, shippingService)
 	checkout := handlers.NewCheckoutHandler(database, environment, webhookSecret)
 	requireAuth := middleware.RequireAuth(database)
 	optionalAuth := middleware.OptionalAuth(database)
@@ -208,6 +214,7 @@ func registerRoutes(router *gin.Engine, database *gorm.DB, appMetrics *metrics.M
 	router.POST("/auth/two-factor-challenge", twoFactorLimiter.Middleware(), auth.VerifyTwoFactorChallenge)
 	router.POST("/logout", requireAuth, auth.Logout)
 	router.POST("/webhooks/payments/:provider", checkout.Webhook)
+	router.POST("/api/v1/internal/shipping/events", shippingHandler.Callback)
 
 	admin := handlers.NewAdminHandler(database, logReader)
 	adminGroup := router.Group("/admin")
@@ -237,6 +244,7 @@ func registerRoutes(router *gin.Engine, database *gorm.DB, appMetrics *metrics.M
 	employeeGroup.POST("/products/:id/stock", employee.UpdateStock)
 	employeeGroup.GET("/orders", employee.ListOrders)
 	employeeGroup.POST("/orders/:id/status", employee.UpdateOrderStatus)
+	employeeGroup.POST("/orders/:id/shipment", shippingHandler.Handover)
 }
 
 func serveProductImage(imageStore *uploads.ImageStore, logger *slog.Logger) gin.HandlerFunc {

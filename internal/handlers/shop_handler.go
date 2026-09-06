@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"errors"
+	"log/slog"
 	"net/http"
 	"strconv"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/middleware"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/models"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/services"
+	shippingapi "github.com/mustafa-oezdemir/ecommerce-gin/internal/shipping"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/validation"
 	"gorm.io/gorm"
 )
@@ -19,13 +21,17 @@ type ShopHandler struct {
 	orderService *services.OrderService
 	engagement   *services.ProductEngagementService
 	listService  *services.ProductListService
+	shipping     *services.ShippingService
 }
 
-func NewShopHandler(database *gorm.DB) *ShopHandler {
+func NewShopHandler(database *gorm.DB, shippingService *services.ShippingService) *ShopHandler {
 	if database == nil {
 		panic("handlers: database is required")
 	}
-	return &ShopHandler{database: database, cartService: services.NewCartService(database), orderService: services.NewOrderService(database), engagement: services.NewProductEngagementService(database), listService: services.NewProductListService(database)}
+	if shippingService == nil {
+		panic("handlers: shipping service is required")
+	}
+	return &ShopHandler{database: database, cartService: services.NewCartService(database), orderService: services.NewOrderService(database), engagement: services.NewProductEngagementService(database), listService: services.NewProductListService(database), shipping: shippingService}
 }
 
 func (h *ShopHandler) Home(c *gin.Context)         { h.renderProducts(c) }
@@ -237,5 +243,28 @@ func (h *ShopHandler) OrderDetail(c *gin.Context) {
 		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}
-	c.HTML(http.StatusOK, "order_detail.tmpl", viewData(c, gin.H{"Order": order}))
+	data := gin.H{"Order": order}
+	if h.shipping.Enabled() {
+		shipment, shippingErr := h.shipping.RefreshOrderShipment(c.Request.Context(), order.ID, c.GetString(middleware.RequestIDKey))
+		if shippingErr != nil && !errors.Is(shippingErr, shippingapi.ErrNotFound) {
+			slog.WarnContext(c.Request.Context(), "shipping status refresh failed; using cached status", "order_id", order.ID, "error", shippingErr)
+		}
+		if shipment == nil {
+			shipment, shippingErr = h.shipping.CachedOrderShipment(c.Request.Context(), order.ID)
+		}
+		if shippingErr != nil {
+			slog.WarnContext(c.Request.Context(), "shipping status cache lookup failed", "order_id", order.ID, "error", shippingErr)
+		} else if shipment != nil {
+			data["Shipment"] = shipment
+			data["ShipmentTrackingURL"] = h.shipping.TrackingURL(shipment.TrackingNumber)
+			if timeline, timelineErr := h.shipping.Timeline(c.Request.Context(), shipment.TrackingNumber, c.GetString(middleware.RequestIDKey)); timelineErr == nil {
+				data["ShipmentTimeline"] = timeline
+			} else {
+				slog.WarnContext(c.Request.Context(), "shipping timeline unavailable", "order_id", order.ID, "error", timelineErr)
+			}
+		}
+	} else if shipment, cacheErr := h.shipping.CachedOrderShipment(c.Request.Context(), order.ID); cacheErr == nil && shipment != nil {
+		data["Shipment"] = shipment
+	}
+	c.HTML(http.StatusOK, "order_detail.tmpl", viewData(c, data))
 }

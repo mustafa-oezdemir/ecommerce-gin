@@ -25,6 +25,24 @@
         <span class="badge bg-primary-subtle text-primary rounded-pill px-3 py-2">Order</span>
         <h1 class="h2 mt-3 mb-0">Order #{{.Order.ID}}</h1>
       </div>
+      {{if .Shipment}}
+      <div class="card detail-card mb-4">
+        <div class="card-body p-4 d-flex flex-wrap justify-content-between align-items-center gap-3">
+          <div>
+            <h2 class="h5 mb-1">Shipment</h2>
+            <div class="small text-muted">Tracking number</div>
+            <div class="fw-semibold font-monospace">{{.Shipment.TrackingNumber}}</div>
+          </div>
+          <div>
+            <div class="small text-muted">Status</div>
+            <div class="fw-semibold">{{.Shipment.StatusLabel}}</div>
+            {{if .Shipment.RemainingStops}}<div class="small text-muted">{{.Shipment.RemainingStops}} stops remaining</div>{{end}}
+            {{if .Shipment.EstimatedFrom}}<div class="small text-muted">Estimated: {{.Shipment.EstimatedFrom.Format "02 Jan 15:04"}}</div>{{end}}
+          </div>
+          {{if .ShipmentTrackingURL}}<a class="btn btn-outline-primary" href="{{.ShipmentTrackingURL}}">Track shipment</a>{{end}}
+        </div>
+      </div>
+      {{end}}
       <a href="/account/orders" class="btn btn-outline-secondary">Back</a>
     </div>
 
@@ -43,6 +61,22 @@
         </div>
       </div>
     </div>
+
+    {{if .ShipmentTimeline}}
+    <div class="card detail-card mb-4">
+      <div class="card-body p-4">
+        <h2 class="h5 mb-3">Shipment timeline</h2>
+        <ol class="list-group list-group-numbered list-group-flush">
+          {{range .ShipmentTimeline}}
+          <li class="list-group-item px-0 d-flex justify-content-between gap-3">
+            <div><div class="fw-semibold">{{.Title}}</div>{{if .Location}}<div class="small text-muted">{{.Location}}</div>{{end}}</div>
+            <time class="small text-muted text-nowrap" datetime="{{.OccurredAt.Format "2006-01-02T15:04:05Z07:00"}}">{{.OccurredAt.Format "02 Jan 15:04"}}</time>
+          </li>
+          {{end}}
+        </ol>
+      </div>
+    </div>
+    {{end}}
 
     <div class="card detail-card">
       <div class="card-body p-4">

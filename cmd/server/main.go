@@ -19,6 +19,7 @@ import (
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/logging"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/metrics"
 	appserver "github.com/mustafa-oezdemir/ecommerce-gin/internal/server"
+	shippingapi "github.com/mustafa-oezdemir/ecommerce-gin/internal/shipping"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/uploads"
 )
 
@@ -112,20 +113,31 @@ func run() (runErr error) {
 	if err != nil {
 		return fmt.Errorf("configure application log reader: %w", err)
 	}
+	var shippingClient shippingapi.Client
+	if cfg.ShippingServiceURL != "" {
+		client, err := shippingapi.NewHTTPClient(cfg.ShippingServiceURL, cfg.ShippingServiceToken, cfg.ShippingTimeout, cfg.ShippingPublicURL)
+		if err != nil {
+			return fmt.Errorf("configure shipping API client: %w", err)
+		}
+		shippingClient = client
+	}
 	applicationHandler, err := appserver.NewRouter(appserver.RouterConfig{
-		Environment:       cfg.AppEnv,
-		TrustedProxies:    cfg.TrustedProxies,
-		SessionSecret:     cfg.SessionSecret,
-		SessionSecure:     cfg.SessionSecure,
-		CSRFKey:           cfg.CSRFKey,
-		SecurityKey:       cfg.SecurityEncryptionKey,
-		WebhookSecret:     cfg.PaymentWebhookSecret,
-		Database:          database,
-		Metrics:           appMetrics,
-		Logger:            slog.Default(),
-		ImageStore:        imageStore,
-		ProfileImageStore: profileImageStore,
-		LogReader:         logReader,
+		Environment:                   cfg.AppEnv,
+		TrustedProxies:                cfg.TrustedProxies,
+		SessionSecret:                 cfg.SessionSecret,
+		SessionSecure:                 cfg.SessionSecure,
+		CSRFKey:                       cfg.CSRFKey,
+		SecurityKey:                   cfg.SecurityEncryptionKey,
+		WebhookSecret:                 cfg.PaymentWebhookSecret,
+		Database:                      database,
+		Metrics:                       appMetrics,
+		Logger:                        slog.Default(),
+		ImageStore:                    imageStore,
+		ProfileImageStore:             profileImageStore,
+		LogReader:                     logReader,
+		ShippingClient:                shippingClient,
+		ShippingCallbackToken:         cfg.ShippingCallbackToken,
+		ShippingPreviousCallbackToken: cfg.ShippingPreviousCallbackToken,
 	})
 	if err != nil {
 		return fmt.Errorf("build application router: %w", err)

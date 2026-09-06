@@ -82,6 +82,12 @@
                   {{else}}
                   <span class="text-muted small">No further actions</span>
                   {{end}}
+                  {{if eq .Status "processing"}}
+                  <form method="post" action="/employee/orders/{{.ID}}/shipment" class="mt-2">
+                    {{$.CSRFField}}
+                    <button type="submit" class="btn btn-outline-primary btn-sm">Hand over to shipping</button>
+                  </form>
+                  {{end}}
                 </td>
               </tr>
               {{else}}

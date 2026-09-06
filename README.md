@@ -207,6 +207,35 @@ Every checkout uses a cryptographically random key backed by unique `(user_id, i
 
 Favorites are an idempotent system-backed Product List and cannot be deleted through normal list operations. Favorite, list, and review actions return one JSON envelope and use the existing CSRF header. Reviews are limited to one per customer/product and can be edited or deleted only by their owner. The server derives review eligibility from an order item whose order is `shipped` or `completed`; it never accepts a “verified” flag from the browser. Templates escape review content before rendering.
 
+## E-Commerce ↔ Shipping architecture
+
+The storefront owns customers, orders, order items, addresses, products, payments, and return business rules. The independent `shipping-service` owns shipments, tracking numbers, address snapshots, ETA, remaining stops, tracking events, labels, and delivery lifecycle state. Communication is versioned REST/JSON only; neither service accesses the other's database.
+
+```mermaid
+sequenceDiagram
+    participant Employee
+    participant Ecommerce as ecommerce-gin
+    participant Shipping as shipping-service
+    participant ShippingDB as shipping DB
+    Employee->>Ecommerce: Hand over order
+    Ecommerce->>Shipping: POST /api/v1/shipments<br/>Bearer token + Idempotency-Key + X-Request-ID
+    Shipping->>ShippingDB: Shipment + snapshots + event + outbox
+    Shipping-->>Ecommerce: Tracking number
+    Shipping-->>Ecommerce: POST /api/v1/internal/shipping/events
+```
+
+Shipping configuration uses `SHIPPING_API_URL` for the backend-only service address, `SHIPPING_PUBLIC_URL` for the browser-reachable tracking origin, `SHIPPING_API_TOKEN` for E-Commerce → Shipping authentication, `SHIPPING_TO_ECOMMERCE_TOKEN` for callbacks, optional `SHIPPING_TO_ECOMMERCE_PREVIOUS_TOKEN` during rotation, and `SHIPPING_API_TIMEOUT` for the bounded HTTP client timeout.
+
+Employee handover calls `POST /api/v1/shipments` with a stable per-order idempotency key. Customer order details refresh through `GET /api/v1/shipments/order/:orderID` and load `GET /api/v1/shipments/:trackingNumber/events`. Cached shipment data keeps the order page available during a Shipping outage. Callbacks arrive at `POST /api/v1/internal/shipping/events`, use timing-safe bearer-token authentication, and are deduplicated by a database-unique `event_id`.
+
+For a shared development network, set `SHIPPING_API_TOKEN`, `SHIPPING_TO_ECOMMERCE_TOKEN`, `SHIPPING_MYSQL_PASSWORD`, `SHIPPING_MYSQL_ROOT_PASSWORD`, and `INTERNAL_QR_SECRET` in the E-Commerce Compose environment, then run from this repository:
+
+```bash
+docker compose -f docker-compose.yml -f ../shipping-service/docker-compose.yml -f docker-compose.integration.yml up --build
+```
+
+The two services and their independent MySQL databases share only the Compose network; database credentials and schemas remain isolated.
+
 ## Development
 
 ```bash

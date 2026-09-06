@@ -37,6 +37,12 @@ var profileImagesSchema string
 //go:embed 000010_checkout_payments.sql
 var checkoutPaymentsSchema string
 
+//go:embed 000011_shipping_integration.sql
+var shippingIntegrationSchema string
+
+//go:embed 000012_shipping_order_type.sql
+var shippingOrderTypeSchema string
+
 type migration struct {
 	version string
 	sql     string
@@ -58,6 +64,8 @@ func Apply(db *gorm.DB) error {
 			{version: "000008_profile_name_backfill", sql: profileNameBackfillSchema},
 			{version: "000009_profile_images", sql: profileImagesSchema},
 			{version: "000010_checkout_payments", sql: checkoutPaymentsSchema},
+			{version: "000011_shipping_integration", sql: shippingIntegrationSchema},
+			{version: "000012_shipping_order_type", sql: shippingOrderTypeSchema},
 		} {
 			var count int64
 			if err := tx.Raw("SELECT COUNT(*) FROM schema_migrations WHERE version = ?", migration.version).Scan(&count).Error; err != nil {
@@ -66,7 +74,7 @@ func Apply(db *gorm.DB) error {
 			if count > 0 {
 				continue
 			}
-			for _, statement := range strings.Split(migration.sql, ";\n") {
+			for _, statement := range splitStatements(migration.sql) {
 				statement = strings.TrimSpace(statement)
 				if statement == "" {
 					continue
@@ -81,4 +89,10 @@ func Apply(db *gorm.DB) error {
 		}
 		return nil
 	})
+}
+
+func splitStatements(script string) []string {
+	normalized := strings.ReplaceAll(script, "\r\n", "\n")
+	normalized = strings.ReplaceAll(normalized, "\r", "\n")
+	return strings.Split(normalized, ";\n")
 }

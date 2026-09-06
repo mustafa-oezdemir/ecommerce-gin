@@ -1,0 +1,78 @@
+openapi: 3.1.0
+info:
+  title: Ecommerce Internal Service API
+  version: 1.0.0
+servers:
+  - url: http://ecommerce-app:8080
+components:
+  securitySchemes:
+    shippingCallbackToken:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque
+  schemas:
+    EstimatedDelivery:
+      type: object
+      properties:
+        from: {type: string, format: date-time}
+        until: {type: string, format: date-time}
+    ShippingEvent:
+      type: object
+      additionalProperties: false
+      required: [event_id, shipment_id, order_id, tracking_number, shipment_type, status, status_label, occurred_at]
+      properties:
+        event_id: {type: string, maxLength: 64}
+        shipment_id: {type: string, maxLength: 64}
+        order_id: {type: string, pattern: '^[1-9][0-9]*$'}
+        tracking_number: {type: string, maxLength: 64}
+        shipment_type: {type: string, enum: [outbound, return]}
+        status: {type: string, maxLength: 50}
+        status_label: {type: string, maxLength: 100}
+        remaining_stops: {type: integer, minimum: 0}
+        estimated_delivery: {$ref: '#/components/schemas/EstimatedDelivery'}
+        occurred_at: {type: string, format: date-time}
+    ErrorEnvelope:
+      type: object
+      required: [success, error]
+      properties:
+        success: {type: boolean, const: false}
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: {type: string}
+            message: {type: string}
+            request_id: {type: string}
+paths:
+  /api/v1/internal/shipping/events:
+    post:
+      summary: Receive an idempotent shipment lifecycle callback
+      security:
+        - shippingCallbackToken: []
+      parameters:
+        - in: header
+          name: X-Request-ID
+          required: false
+          schema: {type: string, maxLength: 128}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ShippingEvent'}
+      responses:
+        '204': {description: Event accepted or already processed}
+        '400':
+          description: Invalid callback
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+        '401':
+          description: Invalid or missing service token
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+        '413':
+          description: Request exceeds 1 MiB
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorEnvelope'}

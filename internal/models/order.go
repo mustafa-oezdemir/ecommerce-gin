@@ -1,6 +1,10 @@
 package models
 
-import "gorm.io/gorm"
+import (
+	"time"
+
+	"gorm.io/gorm"
+)
 
 type OrderStatus string
 
@@ -59,6 +63,27 @@ type Order struct {
 	Items          []OrderItem
 	Addresses      []OrderAddress
 	Payment        Payment
+	Shipment       OrderShipment
+}
+
+type OrderShipment struct {
+	gorm.Model
+	OrderID           uint   `gorm:"not null;uniqueIndex:idx_order_shipments_order_type,priority:1"`
+	ShipmentID        string `gorm:"size:64;not null;uniqueIndex"`
+	TrackingNumber    string `gorm:"size:64;not null;uniqueIndex"`
+	ShipmentType      string `gorm:"size:16;not null;uniqueIndex:idx_order_shipments_order_type,priority:2"`
+	Status            string `gorm:"size:50;not null"`
+	StatusLabel       string `gorm:"size:100;not null"`
+	RemainingStops    *int
+	EstimatedFrom     *time.Time
+	EstimatedUntil    *time.Time
+	LastShippingEvent string `gorm:"size:64"`
+}
+
+type ShippingEventReceipt struct {
+	ID        uint `gorm:"primaryKey"`
+	CreatedAt time.Time
+	EventID   string `gorm:"size:64;not null;uniqueIndex"`
 }
 
 type OrderItem struct {
