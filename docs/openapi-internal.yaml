@@ -3,7 +3,7 @@ info:
   title: Ecommerce Internal Service API
   version: 1.0.0
 servers:
-  - url: http://ecommerce-app:8080
+  - url: http://localhost:8080
 components:
   securitySchemes:
     shippingCallbackToken:
