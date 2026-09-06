@@ -16,12 +16,18 @@ import (
 type MailService struct {
 	host, port, from   string
 	username, password string
+	appURL             string
 	enabled            bool
 }
 
 func NewMailServiceFromEnv() *MailService {
 	appEnv, host, port, from := strings.ToLower(strings.TrimSpace(os.Getenv("APP_ENV"))), strings.TrimSpace(os.Getenv("SMTP_HOST")), strings.TrimSpace(os.Getenv("SMTP_PORT")), strings.TrimSpace(os.Getenv("SMTP_FROM"))
 	username, password := strings.TrimSpace(os.Getenv("SMTP_USERNAME")), os.Getenv("SMTP_PASSWORD")
+	appURL := strings.TrimRight(strings.TrimSpace(os.Getenv("APP_URL")), "/")
+	if appURL == "" {
+		appURL = "http://localhost:" + strings.TrimSpace(os.Getenv("APP_PORT"))
+		appURL = strings.TrimSuffix(appURL, ":")
+	}
 	if host == "" {
 		host = "127.0.0.1"
 	}
@@ -32,11 +38,11 @@ func NewMailServiceFromEnv() *MailService {
 		from = "no-reply@ecommerce.local"
 	}
 	enabled := host != "" && port != "" && from != "" && (appEnv != "production" || (username != "" && password != ""))
-	return &MailService{host: host, port: port, from: from, username: username, password: password, enabled: enabled}
+	return &MailService{host: host, port: port, from: from, username: username, password: password, appURL: appURL, enabled: enabled}
 }
 
 func (s *MailService) SendOrderCreated(user models.User, order models.Order) {
-	_ = s.send(user.Email, fmt.Sprintf("Order #%d has been created", order.ID), fmt.Sprintf("Hello %s,\n\nyour order #%d has been created successfully.\nStatus: %s\nTotal: %d.%02d EUR\n\nThank you.\n", user.Name, order.ID, order.Status, order.TotalCents/100, order.TotalCents%100))
+	_ = s.send(user.Email, fmt.Sprintf("Order #%d has been created", order.ID), fmt.Sprintf("Hello %s,\n\nyour order #%d has been created successfully.\nStatus: %s\nTotal: %d.%02d EUR\nView order: %s\n\nThank you.\n", user.Name, order.ID, order.Status, order.TotalCents/100, order.TotalCents%100, s.orderURL(order.ID)))
 }
 
 func (s *MailService) SendPasswordChanged(user models.User) {
@@ -44,7 +50,11 @@ func (s *MailService) SendPasswordChanged(user models.User) {
 }
 
 func (s *MailService) SendOrderStatusChanged(user models.User, order models.Order) {
-	_ = s.send(user.Email, fmt.Sprintf("Order #%d: status updated", order.ID), fmt.Sprintf("Hello %s,\n\nthe status of your order #%d is now: %s.\n", user.Name, order.ID, order.Status))
+	_ = s.send(user.Email, fmt.Sprintf("Order #%d: status updated", order.ID), fmt.Sprintf("Hello %s,\n\nthe status of your order #%d is now: %s.\nView order: %s\n", user.Name, order.ID, order.Status, s.orderURL(order.ID)))
+}
+
+func (s *MailService) orderURL(orderID uint) string {
+	return fmt.Sprintf("%s/account/orders/%d", s.appURL, orderID)
 }
 
 func (s *MailService) SendSecurityCode(to, displayName, code string, expiresIn time.Duration) error {

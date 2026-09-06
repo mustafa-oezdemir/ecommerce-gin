@@ -27,6 +27,7 @@ import (
 
 type RouterConfig struct {
 	Environment                   string
+	PublicURLHost                 string
 	TrustedProxies                []string
 	SessionSecret                 string
 	SessionSecure                 bool
@@ -107,8 +108,7 @@ func NewRouter(config RouterConfig) (http.Handler, error) {
 	registerRoutes(router, config.Database, config.Metrics, config.ImageStore, config.ProfileImageStore, config.LogReader, config.SecurityKey, config.Environment, config.WebhookSecret, config.ShippingClient, config.ShippingCallbackToken, config.ShippingPreviousCallbackToken)
 	api.RegisterRoutes(router, config.Database)
 
-	csrfMiddleware := csrf.Protect(
-		config.CSRFKey,
+	protectOptions := []csrf.Option{
 		csrf.Secure(config.SessionSecure),
 		csrf.HttpOnly(true),
 		csrf.SameSite(csrf.SameSiteLaxMode),
@@ -119,7 +119,11 @@ func NewRouter(config RouterConfig) (http.Handler, error) {
 			config.Logger.Warn("csrf validation failed", "reason", csrf.FailureReason(request))
 			http.Error(writer, "Forbidden", http.StatusForbidden)
 		})),
-	)
+	}
+	if config.PublicURLHost != "" {
+		protectOptions = append(protectOptions, csrf.TrustedOrigins([]string{config.PublicURLHost}))
+	}
+	csrfMiddleware := csrf.Protect(config.CSRFKey, protectOptions...)
 	handler := csrfMiddleware(router)
 	csrfAwareHandler := http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.Method == http.MethodPost && (strings.HasPrefix(request.URL.Path, "/webhooks/payments/") || request.URL.Path == "/api/v1/internal/shipping/events") {
@@ -139,6 +143,8 @@ func registerRoutes(router *gin.Engine, database *gorm.DB, appMetrics *metrics.M
 	health := handlers.NewHealthHandler(database, appMetrics)
 	router.GET("/health/live", health.Live)
 	router.GET("/health/ready", health.Ready)
+	router.GET("/health", health.Live)
+	router.GET("/ready", health.Ready)
 	router.GET("/healthz", health.Live)
 	router.GET("/readyz", health.Ready)
 

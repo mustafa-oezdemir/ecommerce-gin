@@ -1,0 +1,172 @@
+name: pehlione-production
+
+services:
+  ecommerce-db:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ecommerce
+      MYSQL_USER: ecommerce
+      MYSQL_PASSWORD: ${ECOMMERCE_MYSQL_PASSWORD:?set ECOMMERCE_MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${ECOMMERCE_MYSQL_ROOT_PASSWORD:?set ECOMMERCE_MYSQL_ROOT_PASSWORD}
+    volumes:
+      - ecommerce_mysql:/var/lib/mysql
+    networks: [ecommerce_data]
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  shipping-db:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: shipping
+      MYSQL_USER: shipping
+      MYSQL_PASSWORD: ${SHIPPING_MYSQL_PASSWORD:?set SHIPPING_MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${SHIPPING_MYSQL_ROOT_PASSWORD:?set SHIPPING_MYSQL_ROOT_PASSWORD}
+    volumes:
+      - shipping_mysql:/var/lib/mysql
+    networks: [shipping_data]
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  clamav:
+    image: clamav/clamav:1.4
+    restart: unless-stopped
+    volumes:
+      - clamav_data:/var/lib/clamav
+    networks: [ecommerce_data]
+
+  ecommerce-app:
+    build:
+      context: .
+      dockerfile: cmd/server/Dockerfile
+    restart: unless-stopped
+    environment:
+      APP_ENV: production
+      APP_PORT: 8080
+      APP_URL: https://pehlione-ecommerce.com
+      METRICS_PORT: 9091
+      GIN_MODE: release
+      TRUSTED_PROXIES: 10.231.17.0/24
+      LOG_LEVEL: info
+      LOG_CONSOLE_FORMAT: json
+      LOG_FILE: /app/logs/ecommerce.log
+      PRODUCT_IMAGE_DIRECTORY: /app/uploads/products
+      PROFILE_IMAGE_DIRECTORY: /app/uploads/profiles
+      CLAMAV_ADDRESS: clamav:3310
+      MYSQL_HOST: ecommerce-db
+      MYSQL_PORT: 3306
+      MYSQL_DATABASE: ecommerce
+      MYSQL_USER: ecommerce
+      MYSQL_PASSWORD: ${ECOMMERCE_MYSQL_PASSWORD}
+      SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET}
+      SESSION_SECURE: "true"
+      CSRF_SECRET: ${CSRF_SECRET:?set CSRF_SECRET}
+      SECURITY_ENCRYPTION_KEY: ${SECURITY_ENCRYPTION_KEY:?set SECURITY_ENCRYPTION_KEY}
+      PAYMENT_WEBHOOK_SECRET: ${PAYMENT_WEBHOOK_SECRET:-}
+      SHIPPING_API_URL: http://shipping-app:8090
+      SHIPPING_PUBLIC_URL: https://pehlione-shipping.com
+      SHIPPING_API_TOKEN: ${ECOMMERCE_TO_SHIPPING_TOKEN:?set ECOMMERCE_TO_SHIPPING_TOKEN}
+      SHIPPING_TO_ECOMMERCE_TOKEN: ${SHIPPING_TO_ECOMMERCE_TOKEN:?set SHIPPING_TO_ECOMMERCE_TOKEN}
+      SHIPPING_TO_ECOMMERCE_PREVIOUS_TOKEN: ${SHIPPING_TO_ECOMMERCE_PREVIOUS_TOKEN:-}
+      SHIPPING_API_TIMEOUT: 5s
+      SMTP_HOST: ${SMTP_HOST:?set SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_FROM: ${SMTP_FROM:?set SMTP_FROM}
+      SMTP_USERNAME: ${SMTP_USERNAME:?set SMTP_USERNAME}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:?set SMTP_PASSWORD}
+    volumes:
+      - ecommerce_logs:/app/logs
+      - ecommerce_uploads:/app/uploads
+    expose: ["8080", "9091"]
+    networks: [edge, ecommerce_data]
+    depends_on:
+      ecommerce-db:
+        condition: service_healthy
+      clamav:
+        condition: service_healthy
+      shipping-app:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:8080/ready"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
+
+  shipping-app:
+    build:
+      context: ../shipping-service
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      APP_ENV: production
+      APP_PORT: 8090
+      APP_URL: https://pehlione-shipping.com
+      GIN_MODE: release
+      TRUSTED_PROXIES: 10.231.17.0/24
+      DATABASE_DSN: shipping:${SHIPPING_MYSQL_PASSWORD}@tcp(shipping-db:3306)/shipping?charset=utf8mb4&parseTime=True&loc=UTC
+      DATABASE_CONNECT_TIMEOUT: 30s
+      ECOMMERCE_TO_SHIPPING_TOKEN: ${ECOMMERCE_TO_SHIPPING_TOKEN}
+      ECOMMERCE_TO_SHIPPING_PREVIOUS_TOKEN: ${ECOMMERCE_TO_SHIPPING_PREVIOUS_TOKEN:-}
+      ECOMMERCE_API_URL: http://ecommerce-app:8080
+      ECOMMERCE_PUBLIC_URL: https://pehlione-ecommerce.com
+      SHIPPING_TO_ECOMMERCE_TOKEN: ${SHIPPING_TO_ECOMMERCE_TOKEN}
+      INTERNAL_QR_SECRET: ${INTERNAL_QR_SECRET:?set INTERNAL_QR_SECRET}
+      WAREHOUSE_NAME: ${WAREHOUSE_NAME:?set WAREHOUSE_NAME}
+      WAREHOUSE_COMPANY: ${WAREHOUSE_COMPANY:?set WAREHOUSE_COMPANY}
+      WAREHOUSE_STREET: ${WAREHOUSE_STREET:?set WAREHOUSE_STREET}
+      WAREHOUSE_HOUSE_NUMBER: ${WAREHOUSE_HOUSE_NUMBER:?set WAREHOUSE_HOUSE_NUMBER}
+      WAREHOUSE_POSTAL_CODE: ${WAREHOUSE_POSTAL_CODE:?set WAREHOUSE_POSTAL_CODE}
+      WAREHOUSE_CITY: ${WAREHOUSE_CITY:?set WAREHOUSE_CITY}
+      WAREHOUSE_COUNTRY: ${WAREHOUSE_COUNTRY:-DE}
+    expose: ["8090"]
+    networks: [edge, shipping_data]
+    depends_on:
+      shipping-db:
+        condition: service_healthy
+
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    environment:
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [edge]
+    depends_on:
+      ecommerce-app:
+        condition: service_healthy
+      shipping-app:
+        condition: service_started
+
+networks:
+  edge:
+    ipam:
+      config:
+        - subnet: 10.231.17.0/24
+  ecommerce_data:
+    internal: true
+  shipping_data:
+    internal: true
+
+volumes:
+  ecommerce_mysql:
+  shipping_mysql:
+  ecommerce_logs:
+  ecommerce_uploads:
+  clamav_data:
+  caddy_data:
+  caddy_config:

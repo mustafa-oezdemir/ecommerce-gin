@@ -38,13 +38,15 @@ func TestNewRouterBuildsApplicationRoutes(t *testing.T) {
 		t.Fatalf("build router: %v", err)
 	}
 
-	response := httptest.NewRecorder()
-	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/health/live", nil))
-	if response.Code != http.StatusOK || response.Body.String() != `{"status":"alive"}` {
-		t.Fatalf("unexpected liveness response: %d %s", response.Code, response.Body.String())
-	}
-	if response.Header().Get(middleware.RequestIDHeader) == "" {
-		t.Fatal("server router did not install the middleware stack")
+	for _, path := range []string{"/health/live", "/health", "/healthz"} {
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
+		if response.Code != http.StatusOK || response.Body.String() != `{"status":"alive"}` {
+			t.Fatalf("unexpected liveness response for %s: %d %s", path, response.Code, response.Body.String())
+		}
+		if response.Header().Get(middleware.RequestIDHeader) == "" {
+			t.Fatal("server router did not install the middleware stack")
+		}
 	}
 
 	staticResponse := httptest.NewRecorder()

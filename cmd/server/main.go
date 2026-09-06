@@ -123,6 +123,7 @@ func run() (runErr error) {
 	}
 	applicationHandler, err := appserver.NewRouter(appserver.RouterConfig{
 		Environment:                   cfg.AppEnv,
+		PublicURLHost:                 cfg.AppURLHost,
 		TrustedProxies:                cfg.TrustedProxies,
 		SessionSecret:                 cfg.SessionSecret,
 		SessionSecure:                 cfg.SessionSecure,

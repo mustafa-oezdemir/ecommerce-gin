@@ -1,0 +1,31 @@
+{
+	email {$ACME_EMAIL}
+}
+
+(security_headers) {
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+		Permissions-Policy "geolocation=(), microphone=(), camera=()"
+		-Server
+	}
+}
+
+pehlione-ecommerce.com {
+	import security_headers
+	encode zstd gzip
+	reverse_proxy ecommerce-app:8080 {
+		health_uri /health
+		health_interval 30s
+	}
+}
+
+pehlione-shipping.com {
+	import security_headers
+	encode zstd gzip
+	reverse_proxy shipping-app:8090 {
+		health_uri /health
+		health_interval 30s
+	}
+}

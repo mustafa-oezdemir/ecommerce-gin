@@ -91,6 +91,7 @@ Copy `.env.example` and keep `.env` private. Docker passes only application-requ
 | --- | --- |
 | `APP_ENV` | `development`, `test`, or `production` |
 | `TRUSTED_PROXIES` | Comma-separated proxy IPs/CIDRs; leave empty for direct traffic |
+| `APP_URL` | Canonical browser origin; required and HTTPS-only in production |
 | `APP_PORT` | Application HTTP port |
 | `ECOMMERCE_HOST_PORT` | Docker host port for the main application (default `8080`) |
 | `METRICS_PORT` | Internal Prometheus metrics port |
@@ -252,4 +253,44 @@ CI runs formatting, vetting, tests, race detection, and builds. The security wor
 
 ## Production notes
 
-Run behind an HTTPS reverse proxy and set `APP_ENV=production`, `GIN_MODE=release` and `SESSION_SECURE=true`. Supply unique secrets through a secrets manager, keep MySQL on a private network, configure backups/monitoring, and use a real production mail provider only through a separately reviewed integration. MailHog is intentionally development/test only.
+The repository includes a production stack for both repositories. It terminates TLS with Caddy and exposes only ports 80/443; E-Commerce, Shipping, metrics, ClamAV, and both MySQL databases remain on Docker networks.
+
+Prerequisites:
+
+- Clone `ecommerce-gin` and `shipping-service` next to each other, because the production Compose build context is `../shipping-service`.
+- Point the DNS `A`/`AAAA` records for `pehlione-ecommerce.com` and `pehlione-shipping.com` to the deployment host. Remove an `AAAA` record if the host has no working public IPv6 route.
+- Permit inbound TCP 80/443 and UDP 443. Caddy uses ports 80/443 for ACME validation, HTTPS redirects, and HTTP/3.
+- Keep Cloudflare or another CDN in DNS-only mode for the first certificate issuance, or configure its TLS mode and origin reachability correctly.
+
+Deploy:
+
+```bash
+cp .env.production.example .env.production
+# Replace every placeholder with an independent generated secret.
+docker compose --env-file .env.production -f docker-compose.production.yml config
+docker compose --env-file .env.production -f docker-compose.production.yml up -d --build
+docker compose --env-file .env.production -f docker-compose.production.yml ps
+docker compose --env-file .env.production -f docker-compose.production.yml logs caddy
+```
+
+Production routing is intentionally split:
+
+- Browser E-Commerce URL: `https://pehlione-ecommerce.com`
+- Browser Shipping/tracking URL and QR origin: `https://pehlione-shipping.com`
+- E-Commerce → Shipping API: `http://shipping-app:8090`
+- Shipping → E-Commerce callback API: `http://ecommerce-app:8080/api/v1/internal/shipping/events`
+
+The application rejects non-HTTPS `APP_URL` and `SHIPPING_PUBLIC_URL` values in production. Session and CSRF cookies are host-only, `Secure`, `HttpOnly`, and `SameSite=Lax`; the canonical E-Commerce host is explicitly trusted for CSRF origin checks. Caddy preserves the public host and sets sanitized forwarding headers. `TRUSTED_PROXIES` is limited to the fixed `10.231.17.0/24` edge network rather than trusting arbitrary clients. If that subnet overlaps the deployment host's existing Docker/VPN routes, choose another private subnet and update both `edge.ipam` and the two `TRUSTED_PROXIES` values together.
+
+Verify after DNS propagation:
+
+```bash
+curl -I http://pehlione-ecommerce.com
+curl -fsS https://pehlione-ecommerce.com/health
+curl -fsS https://pehlione-ecommerce.com/ready
+curl -I http://pehlione-shipping.com
+curl -fsS https://pehlione-shipping.com/health
+curl -fsS https://pehlione-shipping.com/ready
+```
+
+HTTP must redirect to HTTPS. The health endpoints must return success without authentication, while internal APIs still require their bearer tokens. Order notification links are resolved from `APP_URL`, never from the request `Host` header; email-address verification continues to use short-lived codes. Supply unique secrets through a secrets manager, configure database/volume backups and monitoring, and use a reviewed production SMTP provider. MailHog is intentionally development/test only.

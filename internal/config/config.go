@@ -3,8 +3,10 @@ package config
 import (
 	"crypto/sha256"
 	"encoding/base64"
+	"fmt"
 	"log"
 	"net"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -17,6 +19,8 @@ import (
 type Config struct {
 	AppEnv                        string
 	AppPort                       string
+	AppURL                        string
+	AppURLHost                    string
 	MetricsPort                   string
 	GinMode                       string
 	TrustedProxies                []string
@@ -80,6 +84,7 @@ func Load() *Config {
 
 	appEnv := strings.TrimSpace(os.Getenv("APP_ENV"))
 	appPort := strings.TrimSpace(os.Getenv("APP_PORT"))
+	appURL := strings.TrimSpace(os.Getenv("APP_URL"))
 	metricsPort := strings.TrimSpace(os.Getenv("METRICS_PORT"))
 	ginMode := strings.TrimSpace(os.Getenv("GIN_MODE"))
 	trustedProxies := envCSV("TRUSTED_PROXIES")
@@ -148,6 +153,22 @@ func Load() *Config {
 
 	if appPort == "" {
 		log.Fatal("APP_PORT is required")
+	}
+	if appURL == "" {
+		if appEnv == "production" {
+			log.Fatal("APP_URL is required in production")
+		}
+		appURL = "http://localhost:" + appPort
+	}
+	appURL, appURLHost, err := validatePublicURL("APP_URL", appURL, appEnv == "production")
+	if err != nil {
+		log.Fatal(err)
+	}
+	if shippingPublicURL != "" {
+		shippingPublicURL, _, err = validatePublicURL("SHIPPING_PUBLIC_URL", shippingPublicURL, appEnv == "production")
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 	if metricsPort == "" {
 		metricsPort = "9091"
@@ -272,6 +293,8 @@ func Load() *Config {
 	return &Config{
 		AppEnv:                        appEnv,
 		AppPort:                       appPort,
+		AppURL:                        appURL,
+		AppURLHost:                    appURLHost,
 		MetricsPort:                   metricsPort,
 		GinMode:                       ginMode,
 		TrustedProxies:                trustedProxies,
@@ -327,6 +350,21 @@ func Load() *Config {
 		ShippingTimeout:               shippingTimeout,
 		DSN:                           dsn,
 	}
+}
+
+func validatePublicURL(name, raw string, requireHTTPS bool) (string, string, error) {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
+		return "", "", fmt.Errorf("%s must be an absolute http(s) origin without credentials, query, or fragment", name)
+	}
+	if parsed.Path != "" && parsed.Path != "/" {
+		return "", "", fmt.Errorf("%s must not contain a path", name)
+	}
+	if requireHTTPS && parsed.Scheme != "https" {
+		return "", "", fmt.Errorf("%s must use https in production", name)
+	}
+	parsed.Path = ""
+	return strings.TrimRight(parsed.String(), "/"), parsed.Host, nil
 }
 
 func envCSV(name string) []string {
