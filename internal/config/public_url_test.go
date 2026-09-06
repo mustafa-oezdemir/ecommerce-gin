@@ -11,11 +11,11 @@ func TestValidatePublicURL(t *testing.T) {
 		wantHost   string
 		wantError  bool
 	}{
-		{name: "production domain", raw: "https://pehlione-ecommerce.com/", production: true, wantURL: "https://pehlione-ecommerce.com", wantHost: "pehlione-ecommerce.com"},
+		{name: "production domain", raw: "http://localhost:8080/", production: true, wantURL: "http://localhost:8080", wantHost: "localhost:8080"},
 		{name: "local development", raw: "http://localhost:8080", wantURL: "http://localhost:8080", wantHost: "localhost:8080"},
-		{name: "production rejects plain HTTP", raw: "http://pehlione-ecommerce.com", production: true, wantError: true},
-		{name: "rejects path", raw: "https://pehlione-ecommerce.com/store", production: true, wantError: true},
-		{name: "rejects credentials", raw: "https://user:pass@pehlione-ecommerce.com", production: true, wantError: true},
+		{name: "production rejects plain HTTP", raw: "http://localhost:8080", production: true, wantError: true},
+		{name: "rejects path", raw: "https://localhost:8080/store", production: true, wantError: true},
+		{name: "rejects credentials", raw: "https://user:pass@localhost:8080", production: true, wantError: true},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
