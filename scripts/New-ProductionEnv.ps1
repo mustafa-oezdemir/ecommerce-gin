@@ -44,6 +44,7 @@ $paymentWebhookSecret = New-Base64Secret
 $ecommerceToShippingToken = New-Base64Secret 48
 $shippingToEcommerceToken = New-Base64Secret 48
 $internalQRSecret = New-Base64Secret 48
+$shippingSessionSecret = New-Base64Secret 48
 
 $ecommerceEnvironment = @"
 ACME_EMAIL=$AcmeEmail
@@ -62,6 +63,12 @@ ECOMMERCE_TO_SHIPPING_PREVIOUS_TOKEN=
 SHIPPING_TO_ECOMMERCE_TOKEN=$shippingToEcommerceToken
 SHIPPING_TO_ECOMMERCE_PREVIOUS_TOKEN=
 INTERNAL_QR_SECRET=$internalQRSecret
+SHIPPING_SESSION_SECRET=$shippingSessionSecret
+SHIPPING_SESSION_TTL=12h
+SHIPPING_INITIAL_ADMIN_EMAIL=
+SHIPPING_INITIAL_ADMIN_PASSWORD=
+SHIPPING_INITIAL_ADMIN_FIRST_NAME=Shipping
+SHIPPING_INITIAL_ADMIN_LAST_NAME=Administrator
 
 SMTP_HOST=$SmtpHost
 SMTP_PORT=587
@@ -94,6 +101,13 @@ ECOMMERCE_PUBLIC_URL=https://pehlione-ecommerce.com
 ECOMMERCE_CALLBACK_URL=
 SHIPPING_TO_ECOMMERCE_TOKEN=$shippingToEcommerceToken
 INTERNAL_QR_SECRET=$internalQRSecret
+SESSION_SECRET=$shippingSessionSecret
+SESSION_TTL=12h
+PROFILE_IMAGE_DIRECTORY=./data/profile-images
+INITIAL_ADMIN_EMAIL=
+INITIAL_ADMIN_PASSWORD=
+INITIAL_ADMIN_FIRST_NAME=Shipping
+INITIAL_ADMIN_LAST_NAME=Administrator
 
 WAREHOUSE_NAME=PehliOne Logistics Center
 WAREHOUSE_COMPANY=PehliOne GmbH

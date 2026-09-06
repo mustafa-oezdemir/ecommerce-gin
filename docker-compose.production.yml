@@ -119,6 +119,13 @@ services:
       ECOMMERCE_PUBLIC_URL: https://pehlione-ecommerce.com
       SHIPPING_TO_ECOMMERCE_TOKEN: ${SHIPPING_TO_ECOMMERCE_TOKEN}
       INTERNAL_QR_SECRET: ${INTERNAL_QR_SECRET:?set INTERNAL_QR_SECRET}
+      SESSION_SECRET: ${SHIPPING_SESSION_SECRET:?set SHIPPING_SESSION_SECRET}
+      SESSION_TTL: ${SHIPPING_SESSION_TTL:-12h}
+      PROFILE_IMAGE_DIRECTORY: /app/data/profile-images
+      INITIAL_ADMIN_EMAIL: ${SHIPPING_INITIAL_ADMIN_EMAIL:-}
+      INITIAL_ADMIN_PASSWORD: ${SHIPPING_INITIAL_ADMIN_PASSWORD:-}
+      INITIAL_ADMIN_FIRST_NAME: ${SHIPPING_INITIAL_ADMIN_FIRST_NAME:-Shipping}
+      INITIAL_ADMIN_LAST_NAME: ${SHIPPING_INITIAL_ADMIN_LAST_NAME:-Administrator}
       WAREHOUSE_NAME: ${WAREHOUSE_NAME:?set WAREHOUSE_NAME}
       WAREHOUSE_COMPANY: ${WAREHOUSE_COMPANY:?set WAREHOUSE_COMPANY}
       WAREHOUSE_STREET: ${WAREHOUSE_STREET:?set WAREHOUSE_STREET}
@@ -127,6 +134,8 @@ services:
       WAREHOUSE_CITY: ${WAREHOUSE_CITY:?set WAREHOUSE_CITY}
       WAREHOUSE_COUNTRY: ${WAREHOUSE_COUNTRY:-DE}
     expose: ["8090"]
+    volumes:
+      - shipping_profile_images:/app/data/profile-images
     networks: [edge, shipping_data]
     depends_on:
       shipping-db:
@@ -165,6 +174,7 @@ networks:
 volumes:
   ecommerce_mysql:
   shipping_mysql:
+  shipping_profile_images:
   ecommerce_logs:
   ecommerce_uploads:
   clamav_data:
