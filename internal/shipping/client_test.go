@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -28,7 +29,7 @@ func TestCreateShipmentAuthenticatesPropagatesHeadersAndRetries(t *testing.T) {
 		_ = json.NewEncoder(writer).Encode(map[string]any{"success": true, "data": map[string]any{"shipment_id": "shp_123", "tracking_number": "NS-DE-20260906-ABC123", "shipment_type": "outbound", "status": "created", "status_label": "Created"}})
 	}))
 	defer server.Close()
-	client, err := NewHTTPClient(server.URL, "01234567890123456789012345678901", time.Second)
+	client, err := NewHTTPClient(server.URL, "01234567890123456789012345678901", time.Second, server.URL)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,7 +63,7 @@ func TestCreateShipmentDoesNotRetryPermanentResponses(t *testing.T) {
 				_, _ = writer.Write([]byte(test.body))
 			}))
 			defer server.Close()
-			client, err := NewHTTPClient(server.URL, "01234567890123456789012345678901", time.Second)
+			client, err := NewHTTPClient(server.URL, "01234567890123456789012345678901", time.Second, server.URL)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -83,7 +84,7 @@ func TestCreateShipmentMapsClientTimeout(t *testing.T) {
 		writer.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
-	client, err := NewHTTPClient(server.URL, "01234567890123456789012345678901", 5*time.Millisecond)
+	client, err := NewHTTPClient(server.URL, "01234567890123456789012345678901", 5*time.Millisecond, server.URL)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +102,7 @@ func TestCreateReturnUsesVersionedEndpointAndIdempotencyKey(t *testing.T) {
 		_ = json.NewEncoder(writer).Encode(map[string]any{"success": true, "data": map[string]any{"shipment_id": "shp_return_17", "tracking_number": "RET-DE-20260906-ABC123", "shipment_type": "return", "status": "return_requested", "status_label": "Return requested"}})
 	}))
 	defer server.Close()
-	client, err := NewHTTPClient(server.URL, "01234567890123456789012345678901", time.Second)
+	client, err := NewHTTPClient(server.URL, "01234567890123456789012345678901", time.Second, server.URL)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,12 +116,28 @@ func TestCreateReturnUsesVersionedEndpointAndIdempotencyKey(t *testing.T) {
 }
 
 func TestTrackingURLUsesBrowserReachablePublicBaseURL(t *testing.T) {
-	client, err := NewHTTPClient("http://shipping-app:8090", "01234567890123456789012345678901", time.Second, "https://tracking.example.test")
-	if err != nil {
-		t.Fatal(err)
+	for _, test := range []struct{ name, publicURL, want string }{
+		{name: "development", publicURL: "http://localhost:8090", want: "http://localhost:8090/track/NS%20DE%2F17"},
+		{name: "production target", publicURL: "https://pehlione-shipping.com", want: "https://pehlione-shipping.com/track/NS%20DE%2F17"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			client, err := NewHTTPClient("http://shipping-app:8090", "01234567890123456789012345678901", time.Second, test.publicURL)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := client.TrackingURL("NS DE/17"); got != test.want {
+				t.Fatalf("unexpected tracking URL: %s", got)
+			}
+			if got := client.QRCodeURL("NS DE/17"); got != strings.Replace(test.want, "/track/", "/qr/", 1) {
+				t.Fatalf("unexpected QR URL: %s", got)
+			}
+		})
 	}
-	if got := client.TrackingURL("NS DE/17"); got != "https://tracking.example.test/track/NS%20DE%2F17" {
-		t.Fatalf("unexpected tracking URL: %s", got)
+}
+
+func TestHTTPClientRequiresSeparatePublicURL(t *testing.T) {
+	if _, err := NewHTTPClient("http://shipping-app:8090", "01234567890123456789012345678901", time.Second); err == nil {
+		t.Fatal("expected an explicit browser-reachable shipping URL")
 	}
 }
 
@@ -135,7 +152,7 @@ func TestGetTimelineUsesInternalAPIAndDecodesEvents(t *testing.T) {
 		_ = json.NewEncoder(writer).Encode(map[string]any{"success": true, "data": []map[string]any{{"event_id": "evt_1", "status": "in_transit", "title": "In transit", "occurred_at": "2026-09-06T08:30:00Z"}}})
 	}))
 	defer server.Close()
-	client, err := NewHTTPClient(server.URL, "01234567890123456789012345678901", time.Second)
+	client, err := NewHTTPClient(server.URL, "01234567890123456789012345678901", time.Second, server.URL)
 	if err != nil {
 		t.Fatal(err)
 	}

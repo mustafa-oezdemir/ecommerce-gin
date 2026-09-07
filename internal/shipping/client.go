@@ -139,12 +139,12 @@ func NewHTTPClient(baseURL, token string, timeout time.Duration, publicBaseURL .
 	if timeout <= 0 {
 		return nil, fmt.Errorf("shipping request timeout must be positive")
 	}
-	publicParsed := parsed
-	if len(publicBaseURL) > 0 && strings.TrimSpace(publicBaseURL[0]) != "" {
-		publicParsed, err = url.Parse(strings.TrimRight(strings.TrimSpace(publicBaseURL[0]), "/"))
-		if err != nil || !validBaseURL(publicParsed) {
-			return nil, fmt.Errorf("invalid shipping public URL")
-		}
+	if len(publicBaseURL) == 0 || strings.TrimSpace(publicBaseURL[0]) == "" {
+		return nil, fmt.Errorf("shipping public URL is required")
+	}
+	publicParsed, err := url.Parse(strings.TrimRight(strings.TrimSpace(publicBaseURL[0]), "/"))
+	if err != nil || !validBaseURL(publicParsed) {
+		return nil, fmt.Errorf("invalid shipping public URL")
 	}
 	return &HTTPClient{baseURL: parsed, publicURL: publicParsed, token: token, httpClient: &http.Client{Timeout: timeout}}, nil
 }

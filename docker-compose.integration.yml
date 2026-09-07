@@ -19,8 +19,8 @@ services:
       GIN_MODE: release
       DATABASE_DSN: shipping:${SHIPPING_MYSQL_PASSWORD}@tcp(shipping-db:3306)/shipping?charset=utf8mb4&parseTime=True&loc=UTC
       ECOMMERCE_TO_SHIPPING_TOKEN: ${SHIPPING_API_TOKEN}
-      ECOMMERCE_CALLBACK_URL: http://app:8080/api/v1/internal/shipping/events
-      ECOMMERCE_API_URL: http://app:8080
+      ECOMMERCE_CALLBACK_URL: http://ecommerce-app:8080/api/v1/internal/shipping/events
+      ECOMMERCE_API_URL: http://ecommerce-app:8080
       ECOMMERCE_PUBLIC_URL: ${APP_URL:-http://localhost:8080}
       SHIPPING_TO_ECOMMERCE_TOKEN: ${SHIPPING_TO_ECOMMERCE_TOKEN}
       INTERNAL_QR_SECRET: ${INTERNAL_QR_SECRET}

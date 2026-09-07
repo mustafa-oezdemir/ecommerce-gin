@@ -170,6 +170,9 @@ func Load() *Config {
 			log.Fatal(err)
 		}
 	}
+	if shippingServiceURL != "" && shippingPublicURL == "" {
+		log.Fatal("SHIPPING_PUBLIC_URL is required when SHIPPING_API_URL is configured")
+	}
 	if metricsPort == "" {
 		metricsPort = "9091"
 	}
