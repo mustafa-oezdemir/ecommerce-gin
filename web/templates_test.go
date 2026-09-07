@@ -17,7 +17,7 @@ func TestStaticFSContainsCSPCompatibleScripts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open static filesystem: %v", err)
 	}
-	for _, name := range []string{"account.js", "checkout.js", "product-list.js", "product-detail.js", "site.css"} {
+	for _, name := range []string{"account.js", "checkout.js", "product-list.js", "product-detail.js", "alpine-csp-3.17.1.min.js", "site.css"} {
 		contents, err := fs.ReadFile(assets, name)
 		if err != nil {
 			t.Errorf("read %s: %v", name, err)
@@ -25,6 +25,42 @@ func TestStaticFSContainsCSPCompatibleScripts(t *testing.T) {
 		}
 		if len(contents) == 0 {
 			t.Errorf("%s is empty", name)
+		}
+	}
+}
+
+func TestProductListUsesDraftFirstFilterDrawer(t *testing.T) {
+	templateContents, err := fs.ReadFile(templateFS, "templates/product_list.tmpl")
+	if err != nil {
+		t.Fatalf("read product list template: %v", err)
+	}
+	body := string(templateContents)
+	for _, expected := range []string{
+		`x-data="productFilters"`, `x-on:click="openPanel"`, `x-on:keydown.escape.window="closePanel"`,
+		`x-on:click="clearDraft"`, `>Apply Filters</button>`, `name="q"`, `name="category"`,
+		`name="brand"`, `name="min_price"`, `name="max_price"`, `name="color"`,
+		`name="clothing_size"`, `name="shoe_size"`, `name="rating"`, `name="in_stock"`,
+		`Category-specific attributes`, `.ProductFilters.Chips`, `.ProductResult.Total`,
+	} {
+		if !strings.Contains(body, expected) {
+			t.Errorf("product filter template is missing %q", expected)
+		}
+	}
+	if strings.Contains(body, `x-on:change="submit`) {
+		t.Fatal("filter controls must not submit on each draft change")
+	}
+
+	assets, err := StaticFS()
+	if err != nil {
+		t.Fatal(err)
+	}
+	script, err := fs.ReadFile(assets, "product-list.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, expected := range []string{"captureDraft()", "this.$refs.form.reset()", "clearDraft()", `window.Alpine.data("productFilters"`} {
+		if !strings.Contains(string(script), expected) {
+			t.Errorf("product filter script is missing %q", expected)
 		}
 	}
 }

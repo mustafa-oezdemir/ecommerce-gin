@@ -6,6 +6,7 @@ A secure, server-rendered e-commerce demo built with Go, Gin, GORM, and MySQL. I
 
 - **Customer experience** — browse products, manage a cart, complete checkout, and view orders.
 - **Product engagement** — reusable favorites, personal product lists, 1–10 ratings, and verified-purchase reviews.
+- **Database-backed discovery** — draft-first product filters for search, category, brand, price, color, clothing/shoe sizes, rating, stock, and variant attributes, with URL-preserving sorting and pagination.
 - **Account security** — personal profile photos, email verification, TOTP two-factor authentication, single-use recovery codes, and security-versioned sessions.
 - **Operations** — manage products, inventory, and order status as an employee.
 - **Administration** — review dashboards, users, categories, and orders.
@@ -21,6 +22,7 @@ A secure, server-rendered e-commerce demo built with Go, Gin, GORM, and MySQL. I
 | Application | Go, Gin, GORM |
 | Database | MySQL 8 |
 | UI | Server-rendered HTML templates |
+| Filter UI | Alpine.js CSP build (self-hosted) |
 | Local platform | Docker Compose, MailHog |
 | Monitoring | Prometheus, Grafana |
 | Upload security | ClamAV (`clamd`) and image re-encoding |
@@ -192,6 +194,12 @@ Employees can add up to eight images to each product, either while creating it o
 Accepted images are decoded and re-encoded before storage. This removes original metadata, trailing payloads, and the client filename. Random server-generated filenames and their stable gallery order are stored in MySQL, while sanitized files are held in the persistent `app_uploads` Docker volume with non-executable permissions. Deleted files and failed database writes are cleaned up automatically. Public image responses allow only generated filenames and use immutable caching. The legacy single-image value is migrated automatically and remains the cover-image reference for backward compatibility.
 
 ClamAV is reachable only on the Compose network; port `3310` is not published to the host. Its signature database is retained in the `clamav_data` volume and updated by the official container.
+
+## Storefront product discovery
+
+The storefront filter button opens a responsive Alpine.js panel. Filter controls hold a temporary draft and do not contact the backend until **Apply Filters** submits one GET request. Closing the panel with its close button, Escape, or the backdrop restores the last applied values; **Clear All** clears only the draft until it is applied. Applied filters remain in the URL, render as removable chips, and are preserved across database-backed pagination. Sort remains outside the panel and applies directly.
+
+Product discovery uses normalized brands and product variants. SKU, color, clothing size, EU shoe size, stock, and category-specific attributes are matched inside one correlated variant query, so values from different variants cannot produce a false match. Prices stay integer cents, user-entered values are parameterized, and all sort choices are mapped through a fixed whitelist.
 
 ## Product API
 
