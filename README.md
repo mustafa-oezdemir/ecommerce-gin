@@ -337,6 +337,27 @@ docker compose config
 
 CI runs formatting, vetting, tests, race detection, and builds. The security workflow runs `govulncheck` and `gosec`; Dependabot tracks Go, Docker and GitHub Actions updates.
 
+### Mage and Render builds
+
+The Mage build always targets the actual application entry point instead of
+running `go build` against a directory that contains no server source files:
+
+```bash
+go run github.com/magefile/mage@v1.15.0 -d . build
+go run github.com/magefile/mage@v1.15.0 -d . verify
+```
+
+For a Native Go Render service, use:
+
+```text
+Build Command: go run github.com/magefile/mage@v1.15.0 -d . build
+Start Command: ./bin/server
+```
+
+The repository-level `main.go` also keeps Render's default root `go build`
+compatible. The server prefers Render's `PORT` and falls back to `APP_PORT`
+outside Render.
+
 ## Planned production deployment
 
 The repository includes a target production stack for both repositories. The `pehlione-*` domains in that configuration are deployment targets, not a claim that they are currently online. After deployment, Caddy terminates TLS and exposes only ports 80/443; E-Commerce, Shipping, metrics, ClamAV, and both MySQL databases remain on Docker networks.
