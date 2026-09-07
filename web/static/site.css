@@ -281,6 +281,36 @@ body {
   object-fit: cover;
 }
 
+.profile-photo-editor {
+  padding: 1rem;
+  border: 1px solid var(--bs-border-color);
+  border-radius: 1rem;
+  background: var(--bs-tertiary-bg);
+}
+
+.profile-photo {
+  width: 112px;
+  height: 112px;
+  min-width: 112px;
+  display: block;
+  flex: 0 0 112px;
+  aspect-ratio: 1;
+  border: 4px solid #fff;
+  border-radius: 50%;
+  background: var(--pehli-orange-soft);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.14);
+  object-fit: cover;
+  object-position: center;
+}
+
+.profile-photo-placeholder {
+  display: inline-grid;
+  place-items: center;
+  color: var(--pehli-orange-dark);
+  font-size: 1.75rem;
+  font-weight: 800;
+}
+
 .account-trigger:hover .account-avatar,
 .account-trigger:focus-visible .account-avatar,
 .account-dropdown[open] .account-avatar {

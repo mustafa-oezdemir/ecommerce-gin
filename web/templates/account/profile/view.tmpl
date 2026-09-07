@@ -32,9 +32,9 @@
 								<div class="flex-grow-1">
 									<h2 class="h5">Profile Information</h2>
 									<p class="small text-muted">These values are loaded from your authenticated account.</p>
-									<div class="d-flex flex-column flex-sm-row align-items-sm-center gap-3 mb-4">
+									<div class="profile-photo-editor d-flex flex-column flex-sm-row align-items-sm-center gap-3 mb-4">
 										{{ if .User.ProfileImageFilename }}
-											<img class="profile-photo" src="/media/profiles/{{ .User.ProfileImageFilename }}" alt="Current profile photo">
+											<img class="profile-photo" src="/media/profiles/{{ .User.ProfileImageFilename }}" alt="Current profile photo" width="112" height="112">
 										{{ else }}
 											<span class="profile-photo profile-photo-placeholder" aria-label="Profile initials">{{ if .User.Name }}{{ initials .User.Name }}{{ else }}A{{ end }}</span>
 										{{ end }}

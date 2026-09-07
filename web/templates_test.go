@@ -29,6 +29,23 @@ func TestStaticFSContainsCSPCompatibleScripts(t *testing.T) {
 	}
 }
 
+func TestProfilePhotoHasBoundedCircularPresentation(t *testing.T) {
+	assets, err := StaticFS()
+	if err != nil {
+		t.Fatal(err)
+	}
+	contents, err := fs.ReadFile(assets, "site.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	styles := string(contents)
+	for _, expected := range []string{".profile-photo {", "width: 112px", "height: 112px", "border-radius: 50%", "object-fit: cover", "object-position: center"} {
+		if !strings.Contains(styles, expected) {
+			t.Errorf("profile photo styles are missing %q", expected)
+		}
+	}
+}
+
 func TestProductListUsesDraftFirstFilterDrawer(t *testing.T) {
 	templateContents, err := fs.ReadFile(templateFS, "templates/products/index.tmpl")
 	if err != nil {
@@ -120,6 +137,7 @@ func TestAccountAndNavbarRenderStoredProfileImage(t *testing.T) {
 	for _, expected := range []string{
 		`src="/media/profiles/0123456789abcdef0123456789abcdef.png"`,
 		`alt="Current profile photo"`,
+		`width="112" height="112"`,
 		`action="/account/profile/image/delete"`,
 		`class="account-avatar account-avatar-image"`,
 	} {
