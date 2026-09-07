@@ -15,7 +15,7 @@ func NewOrderRepository(database *gorm.DB) *OrderRepository {
 
 func (r *OrderRepository) ListByUserID(ctx context.Context, userID uint) ([]models.Order, error) {
 	var orders []models.Order
-	err := r.database.WithContext(ctx).Preload("Items").Preload("Payment").Where("user_id = ?", userID).Order("created_at DESC").Find(&orders).Error
+	err := r.database.WithContext(ctx).Preload("Items").Preload("Payment").Preload("Shipment").Where("user_id = ?", userID).Order("created_at DESC").Find(&orders).Error
 	return orders, err
 }
 

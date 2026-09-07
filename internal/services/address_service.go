@@ -30,6 +30,20 @@ func (s *AddressService) List(ctx context.Context, userID uint) ([]models.UserAd
 	return addresses, err
 }
 
+func (s *AddressService) Get(ctx context.Context, userID, addressID uint) (*models.UserAddress, error) {
+	if userID == 0 || addressID == 0 {
+		return nil, ErrInvalidAddress
+	}
+	var address models.UserAddress
+	if err := s.database.WithContext(ctx).Where("id = ? AND user_id = ?", addressID, userID).First(&address).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrAddressNotFound
+		}
+		return nil, err
+	}
+	return &address, nil
+}
+
 func (s *AddressService) Create(ctx context.Context, userID uint, address models.UserAddress) (*models.UserAddress, error) {
 	if userID == 0 || !validAddress(address) {
 		return nil, ErrInvalidAddress

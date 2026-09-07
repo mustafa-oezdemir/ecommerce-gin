@@ -129,7 +129,30 @@ func (h *CheckoutHandler) ListAddresses(c *gin.Context) {
 		c.String(http.StatusInternalServerError, "Could not load addresses")
 		return
 	}
-	c.HTML(http.StatusOK, "account/addresses/index", viewData(c, gin.H{"Addresses": addresses}))
+	c.HTML(http.StatusOK, "account/addresses/index", viewData(c, gin.H{"PageTitle": "My Addresses", "Addresses": addresses}))
+}
+
+func (h *CheckoutHandler) NewAddress(c *gin.Context) {
+	c.HTML(http.StatusOK, "account/addresses/create", viewData(c, gin.H{"PageTitle": "Add Address", "Address": models.UserAddress{CountryCode: "DE"}}))
+}
+
+func (h *CheckoutHandler) EditAddress(c *gin.Context) {
+	user, ok := middleware.CurrentUser(c)
+	if !ok {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+	var uri validation.AddressIDURI
+	if c.ShouldBindUri(&uri) != nil {
+		c.AbortWithStatus(http.StatusNotFound)
+		return
+	}
+	address, err := h.addresses.Get(c.Request.Context(), user.ID, uri.ID)
+	if err != nil {
+		c.AbortWithStatus(http.StatusNotFound)
+		return
+	}
+	c.HTML(http.StatusOK, "account/addresses/edit", viewData(c, gin.H{"PageTitle": "Edit Address", "Address": address}))
 }
 
 func (h *CheckoutHandler) CreateAddress(c *gin.Context) {

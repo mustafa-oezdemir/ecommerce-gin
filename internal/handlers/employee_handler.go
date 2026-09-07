@@ -72,7 +72,7 @@ func (h *EmployeeHandler) ListProducts(c *gin.Context) {
 	selectedStockStatus := normalizeStockStatus(c.Query("stock_status"))
 
 	var products []models.Product
-	query := h.database.WithContext(c.Request.Context()).Preload("Category").Preload("Images", func(database *gorm.DB) *gorm.DB {
+	query := h.database.WithContext(c.Request.Context()).Preload("Category").Preload("Brand").Preload("Variants").Preload("Images", func(database *gorm.DB) *gorm.DB {
 		return database.Order("position ASC, id ASC")
 	}).Order("products.created_at DESC")
 	if search != "" {
@@ -100,6 +100,7 @@ func (h *EmployeeHandler) ListProducts(c *gin.Context) {
 		return
 	}
 	data := gin.H{
+		"PageTitle":            "Products",
 		"Products":             products,
 		"Categories":           categories,
 		"ImageMaxMB":           (h.imageStore.MaxBytes() + (1 << 20) - 1) / (1 << 20),
@@ -128,6 +129,57 @@ func (h *EmployeeHandler) ListProducts(c *gin.Context) {
 		data["Success"] = "The cover image was updated."
 	}
 	c.HTML(http.StatusOK, "employee/products/index", viewData(c, data))
+}
+
+func (h *EmployeeHandler) NewProduct(c *gin.Context) {
+	categories, ok := h.productCategories(c)
+	if !ok {
+		return
+	}
+	c.HTML(http.StatusOK, "employee/products/create", viewData(c, gin.H{"PageTitle": "Add Product", "Product": models.Product{Active: true}, "Categories": categories, "ImageMaxMB": (h.imageStore.MaxBytes() + (1 << 20) - 1) / (1 << 20), "ImageLimit": maxProductImages}))
+}
+
+func (h *EmployeeHandler) ViewProduct(c *gin.Context) {
+	product, ok := h.productFromParam(c)
+	if !ok {
+		return
+	}
+	c.HTML(http.StatusOK, "employee/products/view", viewData(c, gin.H{"PageTitle": "Product Details", "Product": product}))
+}
+
+func (h *EmployeeHandler) EditProduct(c *gin.Context) {
+	product, ok := h.productFromParam(c)
+	if !ok {
+		return
+	}
+	categories, ok := h.productCategories(c)
+	if !ok {
+		return
+	}
+	c.HTML(http.StatusOK, "employee/products/edit", viewData(c, gin.H{"PageTitle": "Edit Product", "Product": product, "Categories": categories, "ImageMaxMB": (h.imageStore.MaxBytes() + (1 << 20) - 1) / (1 << 20), "ImageLimit": maxProductImages}))
+}
+
+func (h *EmployeeHandler) productFromParam(c *gin.Context) (*models.Product, bool) {
+	var uri validation.ProductIDURI
+	if err := c.ShouldBindUri(&uri); err != nil {
+		c.AbortWithStatus(http.StatusNotFound)
+		return nil, false
+	}
+	var product models.Product
+	if err := h.database.WithContext(c.Request.Context()).Preload("Category").Preload("Brand").Preload("Variants").Preload("Images", func(database *gorm.DB) *gorm.DB { return database.Order("position ASC, id ASC") }).First(&product, uri.ID).Error; err != nil {
+		c.AbortWithStatus(http.StatusNotFound)
+		return nil, false
+	}
+	return &product, true
+}
+
+func (h *EmployeeHandler) productCategories(c *gin.Context) ([]models.Category, bool) {
+	var categories []models.Category
+	if err := h.database.WithContext(c.Request.Context()).Order("name ASC").Find(&categories).Error; err != nil {
+		c.String(http.StatusInternalServerError, "Could not load categories")
+		return nil, false
+	}
+	return categories, true
 }
 
 func (h *EmployeeHandler) CreateProduct(c *gin.Context) {
@@ -304,7 +356,7 @@ func (h *EmployeeHandler) ListOrders(c *gin.Context) {
 	}
 
 	var orders []models.Order
-	query := h.database.WithContext(c.Request.Context()).Preload("Items").Preload("User").Preload("Shipment").Joins("JOIN users ON users.id = orders.user_id").Order(orderBy)
+	query := h.database.WithContext(c.Request.Context()).Preload("Items").Preload("User").Preload("Payment").Preload("Shipment").Joins("JOIN users ON users.id = orders.user_id").Order(orderBy)
 	if userSearch != "" {
 		like := "%" + userSearch + "%"
 		query = query.Where("(users.name LIKE ? OR users.email LIKE ?)", like, like)
@@ -319,6 +371,7 @@ func (h *EmployeeHandler) ListOrders(c *gin.Context) {
 		return
 	}
 	c.HTML(http.StatusOK, "employee/orders/index", viewData(c, gin.H{
+		"PageTitle":      "Orders",
 		"Orders":         orders,
 		"Statuses":       managementOrderStatuses,
 		"UserSearch":     userSearch,
@@ -327,6 +380,20 @@ func (h *EmployeeHandler) ListOrders(c *gin.Context) {
 		"PendingFilter":  selectedStatus == models.OrderStatusPending,
 		"DashboardURL":   managementDashboardURL(c),
 	}))
+}
+
+func (h *EmployeeHandler) ViewOrder(c *gin.Context) {
+	var uri validation.ProductIDURI
+	if err := c.ShouldBindUri(&uri); err != nil {
+		c.AbortWithStatus(http.StatusNotFound)
+		return
+	}
+	var order models.Order
+	if err := h.database.WithContext(c.Request.Context()).Preload("User").Preload("Payment").Preload("Shipment").Preload("Items.Product").Preload("Addresses").First(&order, uri.ID).Error; err != nil {
+		c.AbortWithStatus(http.StatusNotFound)
+		return
+	}
+	c.HTML(http.StatusOK, "employee/orders/view", viewData(c, gin.H{"PageTitle": "Order Details", "Order": order}))
 }
 
 func managementDashboardURL(c *gin.Context) string {

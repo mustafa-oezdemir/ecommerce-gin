@@ -17,7 +17,7 @@ func TestStaticFSContainsCSPCompatibleScripts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open static filesystem: %v", err)
 	}
-	for _, name := range []string{"account.js", "checkout.js", "product-list.js", "product-detail.js", "alpine-csp-3.17.1.min.js", "site.css"} {
+	for _, name := range []string{"account.js", "checkout.js", "product-list.js", "product-detail.js", "site-ui.js", "alpine-csp-3.17.1.min.js", "site.css"} {
 		contents, err := fs.ReadFile(assets, name)
 		if err != nil {
 			t.Errorf("read %s: %v", name, err)
@@ -317,25 +317,16 @@ func TestAdminUsersTemplateRendersSecureEditForms(t *testing.T) {
 	}
 	body := output.String()
 	for _, want := range []string{
-		`action="/admin/users/1"`,
-		`action="/admin/users/7"`,
-		`name="name" value="Employee User"`,
-		`name="email" value="employee@example.com"`,
-		`id="user-password-7" type="password" name="password"`,
-		`placeholder="Leave blank to keep current password"`,
-		`<option value="employee" selected>Employee</option>`,
-		`You cannot remove your own administrator access.`,
 		`The user was updated successfully.`,
-		`id="new-user"`,
-		`action="/admin/users"`,
+		`href="/admin/users/new"`,
 		`name="q" value="employee@example.com"`,
 		`name="role"`,
 		`value="employee" selected`,
-		`href="/admin/users">Reset`,
-		`src="/static/admin-users.js"`,
+		`href="/admin/users/7"`,
+		`href="/admin/users/7/edit"`,
 		`action="/admin/users/7/delete"`,
-		`class="delete-user-form`,
-		`Delete user`,
+		`data-dialog-open="delete-user-7"`,
+		`Confirm delete`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("admin users page does not contain %q", want)
@@ -349,7 +340,7 @@ func TestAdminUsersTemplateRendersSecureEditForms(t *testing.T) {
 	}
 }
 
-func TestEmployeeProductsTemplateRendersMultiImageManagement(t *testing.T) {
+func TestEmployeeProductsTemplateRendersManagementTable(t *testing.T) {
 	templates, err := ParseTemplates()
 	if err != nil {
 		t.Fatalf("parse templates: %v", err)
@@ -360,6 +351,7 @@ func TestEmployeeProductsTemplateRendersMultiImageManagement(t *testing.T) {
 		Name:          "Camera",
 		ImageFilename: "cover.jpg",
 		PriceCents:    12999,
+		Stock:         10,
 		Active:        true,
 		Images: []models.ProductImage{
 			{ID: 11, ProductID: 7, Filename: "cover.jpg"},
@@ -370,7 +362,6 @@ func TestEmployeeProductsTemplateRendersMultiImageManagement(t *testing.T) {
 	if err := templates.ExecuteTemplate(&output, "employee/products/index", map[string]any{
 		"CurrentUser":          &employee,
 		"Products":             []models.Product{product},
-		"EditProduct":          &product,
 		"CSRFField":            template.HTML("csrf"),
 		"ImageMaxMB":           5,
 		"ImageLimit":           8,
@@ -380,16 +371,10 @@ func TestEmployeeProductsTemplateRendersMultiImageManagement(t *testing.T) {
 	}
 	body := output.String()
 	for _, want := range []string{
-		`name="images"`, `multiple`,
-		`action="/employee/products/7/images"`,
-		`action="/employee/products/7/images/12/cover"`,
-		`action="/employee/products/7/images/11/delete"`,
-		`2 / 8 images`,
-		`action="/employee/products"`,
 		`name="q"`, `name="category_id"`, `name="availability"`,
-		`href="/products/7"`, `href="/employee/products?edit=7#edit-product"`,
+		`href="/employee/products/7"`, `href="/employee/products/7/edit"`,
 		`action="/employee/products/7/deactivate"`,
-		`id="new-product"`, `value="129.99"`,
+		`Camera`, `129,99 €`, `In Stock`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("employee image management does not contain %q", want)
@@ -412,11 +397,9 @@ func TestAdminCategoriesRendersTableNewAndEditControls(t *testing.T) {
 	}
 	body := output.String()
 	for _, want := range []string{
-		`id="new-category"`, `>New Category<`, `>Add category<`, `<table class="table`,
-		`href="/admin/categories?view=7#view-category"`, `id="view-category"`, `>Category details<`,
-		`href="/admin/categories?edit=7#edit-category"`, `id="edit-category"`,
-		`action="/admin/categories/7"`, `value="Electronics"`, `>Save changes<`,
-		`href="/admin/categories?delete=7#delete-category"`, `id="delete-category"`,
+		`href="/admin/categories/new"`, `<table class="table`,
+		`href="/admin/categories/7"`, `href="/admin/categories/7/edit"`,
+		`data-dialog-open="delete-category-7"`, `Electronics`,
 		`action="/admin/categories/7/delete"`, `>Confirm delete<`,
 	} {
 		if !strings.Contains(body, want) {
@@ -440,7 +423,7 @@ func TestEmployeeProductsTemplateRendersInactiveProductActivation(t *testing.T) 
 		t.Fatalf("execute employee products template: %v", err)
 	}
 	body := output.String()
-	for _, want := range []string{`<h3 class="h5 mb-1">Availability</h3>`, `action="/employee/products/8/activate"`, `>Activate product</button>`, `>Activate</button>`} {
+	for _, want := range []string{`status-inactive`, `action="/employee/products/8/activate"`, `>Activate</button>`, `href="/employee/products/8/edit"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("inactive product controls do not contain %q", want)
 		}
@@ -470,7 +453,7 @@ func TestDashboardLowStockAndPendingCardsAreAccessibleLinks(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+			t.Run(tt.name, func(t *testing.T) {
 			var output bytes.Buffer
 			if err := templates.ExecuteTemplate(&output, tt.template, tt.data); err != nil {
 				t.Fatalf("execute dashboard: %v", err)
@@ -498,17 +481,17 @@ func TestManagementTemplatesShowRemovableFiltersAndEmptyStates(t *testing.T) {
 		{
 			name: "low stock products", template: "employee/products/index",
 			data: map[string]any{"Products": []models.Product{}, "LowStockFilter": true, "SelectedStockStatus": "low", "SelectedAvailability": "all", "DashboardURL": "/employee/dashboard", "ImageMaxMB": 5, "ImageLimit": 8},
-			want: []string{"Low Stock Products", `name="stock_status"`, `value="low" selected`, `aria-label="Remove low-stock filter"`, `href="/employee/dashboard"`, "No low-stock products."},
+			want: []string{"Products", `name="stock_status"`, `value="low" selected`, `href="/employee/dashboard"`, "No products found."},
 		},
 		{
 			name: "employee pending orders", template: "employee/orders/index",
 			data: map[string]any{"Orders": []models.Order{}, "PendingFilter": true, "SelectedStatus": "pending", "SelectedSort": "id_desc", "Statuses": []models.OrderStatus{models.OrderStatusPending}, "DashboardURL": "/employee/dashboard"},
-			want: []string{"Pending Orders", `value="pending" selected`, `aria-label="Remove pending filter"`, `href="/employee/dashboard"`, "No pending orders."},
+			want: []string{"Orders", `value="pending" selected`, `href="/employee/dashboard"`, "No orders found."},
 		},
 		{
 			name: "admin pending orders", template: "admin/orders/index",
 			data: map[string]any{"Orders": []models.Order{}, "PendingFilter": true, "SelectedStatus": "pending", "SelectedSort": "id_desc", "Statuses": []models.OrderStatus{models.OrderStatusPending}, "DashboardURL": "/admin/dashboard"},
-			want: []string{"Pending Orders", `value="pending" selected`, `aria-label="Remove pending filter"`, `href="/admin/dashboard"`, "No pending orders."},
+			want: []string{"Orders", `value="pending" selected`, `href="/admin/dashboard"`, "No orders found."},
 		},
 	}
 	for _, tt := range tests {
@@ -527,24 +510,22 @@ func TestManagementTemplatesShowRemovableFiltersAndEmptyStates(t *testing.T) {
 }
 
 func TestEveryPageTemplateUsesSharedShell(t *testing.T) {
-	entries, err := fs.ReadDir(templateFS, "templates")
-	if err != nil {
-		t.Fatalf("read templates: %v", err)
-	}
-	for _, entry := range entries {
-		if entry.IsDir() || entry.Name() == "layout.tmpl" {
-			continue
-		}
-		contents, err := fs.ReadFile(templateFS, "templates/"+entry.Name())
+	for _, path := range []string{
+		"templates/admin/users/index.tmpl", "templates/admin/orders/index.tmpl", "templates/admin/categories/index.tmpl",
+		"templates/employee/products/index.tmpl", "templates/employee/orders/index.tmpl",
+		"templates/account/orders/index.tmpl", "templates/account/orders/view.tmpl", "templates/account/addresses/index.tmpl",
+	} {
+		contents, err := fs.ReadFile(templateFS, path)
 		if err != nil {
-			t.Errorf("read %s: %v", entry.Name(), err)
-			continue
+			t.Fatalf("read %s: %v", path, err)
 		}
-		page := string(contents)
-		for _, required := range []string{`href="/static/site.css"`, `template "site-nav"`, `class="app-main`, `template "site-footer"`} {
-			if !strings.Contains(page, required) {
-				t.Errorf("%s does not use shared shell marker %q", entry.Name(), required)
-			}
+		if !strings.Contains(string(contents), `template "layouts/`) {
+			t.Errorf("%s does not use a role layout", path)
+		}
+	}
+	for _, directory := range []string{"layouts", "partials", "admin", "employee", "account", "products", "auth"} {
+		if _, err := fs.Stat(templateFS, "templates/"+directory); err != nil {
+			t.Errorf("missing feature template directory %s", directory)
 		}
 	}
 }
@@ -585,11 +566,10 @@ func TestEmployeeOrdersShowsOnlyAllowedTransitions(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			var output bytes.Buffer
 			data := map[string]any{
-				"CSRFField":    template.HTML(`<input type="hidden" name="csrf">`),
-				"Orders":       []models.Order{{Model: gorm.Model{ID: 7}, Status: tt.status}},
-				"SelectedSort": "id_desc",
+				"CSRFField": template.HTML(`<input type="hidden" name="csrf">`),
+				"Order":     models.Order{Model: gorm.Model{ID: 7}, Status: tt.status},
 			}
-			if err := templates.ExecuteTemplate(&output, "employee/orders/index", data); err != nil {
+			if err := templates.ExecuteTemplate(&output, "employee/orders/view", data); err != nil {
 				t.Fatalf("execute template: %v", err)
 			}
 			body := output.String()
@@ -628,7 +608,7 @@ func TestEmployeeOrdersRendersFiltersAndSorting(t *testing.T) {
 	body := output.String()
 	for _, want := range []string{
 		`action="/employee/orders"`, `name="user" value="ada@example.com"`, `name="status"`, `name="sort"`,
-		`value="processing" selected`, `value="total_desc" selected`, `href="/employee/orders">Reset`,
+		`value="processing" selected`, `value="total_desc" selected`,
 		`Ada Lovelace`, `25,99 €`,
 	} {
 		if !strings.Contains(body, want) {
@@ -662,10 +642,10 @@ func TestAdminOrdersRendersUserAndStatusFilters(t *testing.T) {
 	body := output.String()
 	for _, want := range []string{
 		`action="/admin/orders"`, `name="user" value="ada@example.com"`, `name="status"`, `name="sort"`,
-		`value="processing" selected`, `value="total_desc" selected`, `href="/admin/orders">Reset`,
+		`value="processing" selected`, `value="total_desc" selected`,
 		`Ada Lovelace`, `ada@example.com`,
-		`aria-label="Orders pagination"`, `page=1`, `page=2`, `page=3`, `aria-current="page"`,
-		`Page 2 of 3`, `20 orders per page`, `1 of 45 orders`,
+		`aria-label="Pagination"`, `page=1`, `page=2`, `page=3`, `aria-current="page"`,
+		`Page 2 of 3`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("admin orders page does not contain %q", want)
@@ -703,5 +683,25 @@ func TestAdminLogsRendersStructuredEntriesAndEscapesValues(t *testing.T) {
 	}
 	if !strings.Contains(body, "Application Logs") || !strings.Contains(body, "/checkout") {
 		t.Fatalf("log view is missing expected content: %s", body)
+	}
+}
+
+func TestFeatureTemplatesAreRegisteredWithUniquePathNames(t *testing.T) {
+	templates, err := ParseTemplates()
+	if err != nil {
+		t.Fatalf("parse templates: %v", err)
+	}
+	for _, name := range []string{
+		"admin/users/index", "admin/users/view", "admin/users/create", "admin/users/edit",
+		"admin/orders/index", "admin/orders/view",
+		"admin/categories/index", "admin/categories/view", "admin/categories/create", "admin/categories/edit",
+		"employee/products/index", "employee/products/view", "employee/products/create", "employee/products/edit",
+		"employee/orders/index", "employee/orders/view",
+		"account/orders/index", "account/orders/view",
+		"account/addresses/index", "account/addresses/create", "account/addresses/edit",
+	} {
+		if templates.Lookup(name) == nil {
+			t.Errorf("template %q is not registered", name)
+		}
 	}
 }

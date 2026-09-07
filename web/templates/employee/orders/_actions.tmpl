@@ -1,0 +1,1 @@
+{{define "employee/orders/actions"}}<div class="action-buttons"><a class="btn btn-sm btn-outline-secondary" href="/employee/orders/{{.Order.ID}}">View</a>{{if nextOrderStatuses .Order.Status}}<a class="btn btn-sm btn-outline-primary" href="/employee/orders/{{.Order.ID}}#process-order">Process</a>{{end}}</div>{{end}}

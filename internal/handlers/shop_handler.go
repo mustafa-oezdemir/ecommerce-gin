@@ -222,7 +222,7 @@ func (h *ShopHandler) ListOrders(c *gin.Context) {
 		c.String(http.StatusInternalServerError, "Could not load orders")
 		return
 	}
-	c.HTML(http.StatusOK, "account/orders/index", viewData(c, gin.H{"Orders": orders}))
+	c.HTML(http.StatusOK, "account/orders/index", viewData(c, gin.H{"PageTitle": "My Orders", "Orders": orders}))
 }
 
 func (h *ShopHandler) OrderDetail(c *gin.Context) {
@@ -241,7 +241,7 @@ func (h *ShopHandler) OrderDetail(c *gin.Context) {
 		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}
-	data := gin.H{"Order": order}
+	data := gin.H{"PageTitle": "Order Details", "Order": order}
 	canCancel := order.Status == models.OrderStatusPaid || order.Status == models.OrderStatusPreparing || order.Status == models.OrderStatusReadyForShipping || order.Status == models.OrderStatusProcessing
 	if h.shipping.Enabled() {
 		shipment, shippingErr := h.shipping.RefreshOrderShipment(c.Request.Context(), order.ID, c.GetString(middleware.RequestIDKey))

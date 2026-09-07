@@ -1,0 +1,1 @@
+{{define "partials/breadcrumbs"}}<nav aria-label="Breadcrumb"><ol class="breadcrumb app-breadcrumb mb-3"><li class="breadcrumb-item"><a href="{{.HomeURL}}">{{.HomeLabel}}</a></li>{{if .ParentLabel}}<li class="breadcrumb-item"><a href="{{.ParentURL}}">{{.ParentLabel}}</a></li>{{end}}<li class="breadcrumb-item active" aria-current="page">{{.Current}}</li></ol></nav>{{end}}

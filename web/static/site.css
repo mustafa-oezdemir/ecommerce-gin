@@ -8,6 +8,58 @@
   --pehli-surface: #ffffff;
 }
 
+/* PehliOne workspace design system */
+.workspace { --workspace-accent: var(--pehli-orange); }
+.workspace-admin { --workspace-accent: #f97316; }
+.workspace-employee { --workspace-accent: #ea580c; }
+.workspace-account { --workspace-accent: #fb923c; }
+.app-breadcrumb { font-size: .875rem; }
+.app-breadcrumb a { color: #71717a; text-decoration: none; }
+.app-breadcrumb a:hover { color: var(--pehli-orange-dark); }
+.page-header { display: flex; align-items: center; justify-content: space-between; gap: 1.5rem; margin-bottom: 1.5rem; }
+.page-header h1 { margin: 0; color: var(--pehli-ink); font-size: clamp(1.75rem, 4vw, 2.4rem); font-weight: 800; letter-spacing: -.035em; }
+.page-header p { margin: .35rem 0 0; color: #71717a; }
+.content-card, .form-card, .shipment-card, .address-card, .table-toolbar { border: 1px solid rgba(231,229,228,.9); border-radius: 1.25rem; background: #fff; box-shadow: 0 14px 36px rgba(17,17,17,.07); }
+.content-card, .form-card, .shipment-card, .address-card { padding: clamp(1rem, 3vw, 1.5rem); }
+.table-toolbar { padding: 1rem; margin-bottom: 1rem; }
+.data-table { margin: 0; }
+.data-table thead th { border-bottom-width: 1px; color: #71717a; font-size: .75rem; letter-spacing: .05em; text-transform: uppercase; white-space: nowrap; }
+.data-table tbody td { padding-top: 1rem; padding-bottom: 1rem; }
+.status-badge { display: inline-flex; align-items: center; border: 1px solid transparent; border-radius: 999px; padding: .3rem .65rem; font-size: .75rem; font-weight: 750; line-height: 1; white-space: nowrap; }
+.status-pending, .status-pending_payment, .status-preparing, .status-processing, .status-received, .status-prepared { background: #fff7ed; border-color: #fed7aa; color: #9a3412; }
+.status-paid, .status-ready_for_shipping, .status-shipped, .status-in_transit, .status-out_for_delivery, .status-active { background: #eff6ff; border-color: #bfdbfe; color: #1d4ed8; }
+.status-completed, .status-delivered { background: #ecfdf5; border-color: #a7f3d0; color: #047857; }
+.status-cancelled, .status-payment_failed, .status-failed, .status-inactive { background: #fef2f2; border-color: #fecaca; color: #b91c1c; }
+.status-refunded, .status-return, .status-return_in_transit { background: #faf5ff; border-color: #e9d5ff; color: #7e22ce; }
+.action-buttons { display: inline-flex; flex-wrap: wrap; justify-content: flex-end; gap: .4rem; }
+.empty-state { padding: 3rem 1.25rem; border: 1px dashed #d6d3d1; border-radius: 1rem; text-align: center; }
+.empty-state h2 { margin-bottom: .5rem; font-size: 1.15rem; }
+.empty-state p { color: #71717a; }
+.confirm-dialog { width: min(440px, calc(100% - 2rem)); border: 0; border-radius: 1.25rem; padding: 1.5rem; box-shadow: 0 24px 80px rgba(17,17,17,.24); }
+.confirm-dialog::backdrop { background: rgba(17,17,17,.5); backdrop-filter: blur(3px); }
+.confirm-dialog-close { display: flex; justify-content: flex-end; }
+.app-pagination { margin-top: 1.5rem; }
+.order-summary-grid, .shipment-summary-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem; }
+.summary-item small { display: block; color: #71717a; margin-bottom: .25rem; }
+.timeline-mobile { display: none; }
+.timeline-dot { width: .75rem; height: .75rem; border-radius: 50%; background: var(--pehli-orange); flex: 0 0 auto; margin-top: .35rem; }
+@media (max-width: 767.98px) {
+  .page-header { align-items: flex-start; flex-direction: column; }
+  .page-header .btn { width: 100%; }
+  .order-summary-grid, .shipment-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .timeline-desktop { display: none; }
+  .timeline-mobile { display: block; }
+  .data-table .action-buttons { justify-content: flex-start; }
+}
+
+.stat-card { border: 1px solid var(--pehli-border); border-radius: 1.15rem; box-shadow: 0 12px 28px rgba(17,17,17,.07); }
+.stat-card-link { color: inherit; text-decoration: none; transition: transform .15s ease, box-shadow .15s ease; }
+.stat-card-link:hover { color: inherit; transform: translateY(-2px); box-shadow: 0 18px 38px rgba(17,17,17,.12); }
+.stat-card-link:focus-visible { outline: 3px solid var(--pehli-orange); outline-offset: 3px; }
+.table-product-image, .order-product-image { width: 56px; height: 56px; display: inline-grid; place-items: center; border-radius: .8rem; object-fit: cover; background: var(--pehli-orange-soft); }
+.table-product-placeholder, .order-product-placeholder { color: var(--pehli-orange-dark); font-weight: 800; }
+.order-product-link { color: inherit; text-decoration: none; }
+
 html {
   min-width: 320px;
 }

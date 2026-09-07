@@ -134,8 +134,21 @@ func TestFilteredManagementRoutesRequireAuthentication(t *testing.T) {
 	}
 	for _, path := range []string{
 		"/employee/products?stock_status=low",
+		"/employee/products/new",
+		"/employee/products/7",
+		"/employee/products/7/edit",
 		"/employee/orders?status=pending",
+		"/employee/orders/7",
 		"/admin/orders?status=pending",
+		"/admin/orders/7",
+		"/admin/users/new",
+		"/admin/users/7",
+		"/admin/users/7/edit",
+		"/admin/categories/new",
+		"/admin/categories/7",
+		"/admin/categories/7/edit",
+		"/account/addresses/new",
+		"/account/addresses/7/edit",
 	} {
 		response := httptest.NewRecorder()
 		handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))

@@ -71,6 +71,40 @@ func (h *AdminHandler) ListUsers(c *gin.Context) {
 	h.renderUsers(c, http.StatusOK, "")
 }
 
+func (h *AdminHandler) NewUser(c *gin.Context) {
+	c.HTML(http.StatusOK, "admin/users/create", viewData(c, gin.H{"PageTitle": "Add User", "User": models.User{Role: models.RoleCustomer}}))
+}
+
+func (h *AdminHandler) ViewUser(c *gin.Context) {
+	user, ok := h.adminUserFromParam(c)
+	if !ok {
+		return
+	}
+	c.HTML(http.StatusOK, "admin/users/view", viewData(c, gin.H{"PageTitle": "User Details", "User": user}))
+}
+
+func (h *AdminHandler) EditUser(c *gin.Context) {
+	user, ok := h.adminUserFromParam(c)
+	if !ok {
+		return
+	}
+	c.HTML(http.StatusOK, "admin/users/edit", viewData(c, gin.H{"PageTitle": "Edit User", "User": user}))
+}
+
+func (h *AdminHandler) adminUserFromParam(c *gin.Context) (*models.User, bool) {
+	var uri validation.UserIDURI
+	if err := c.ShouldBindUri(&uri); err != nil {
+		c.AbortWithStatus(http.StatusNotFound)
+		return nil, false
+	}
+	var user models.User
+	if err := h.database.WithContext(c.Request.Context()).First(&user, uri.ID).Error; err != nil {
+		c.AbortWithStatus(http.StatusNotFound)
+		return nil, false
+	}
+	return &user, true
+}
+
 func (h *AdminHandler) renderUsers(c *gin.Context, status int, errorMessage string) {
 	search := strings.TrimSpace(c.Query("q"))
 	if searchRunes := []rune(search); len(searchRunes) > 100 {
@@ -94,7 +128,7 @@ func (h *AdminHandler) renderUsers(c *gin.Context, status int, errorMessage stri
 		c.String(http.StatusInternalServerError, "Could not load users")
 		return
 	}
-	data := gin.H{"Users": users, "Search": search, "SelectedRole": selectedRole}
+	data := gin.H{"PageTitle": "Users", "Users": users, "Search": search, "SelectedRole": selectedRole}
 	if errorMessage != "" {
 		data["Error"] = errorMessage
 	}
@@ -329,7 +363,7 @@ func (h *AdminHandler) ListOrders(c *gin.Context) {
 	if totalPages > 0 && page > totalPages {
 		page = totalPages
 	}
-	if err := query.Preload("Items").Preload("User").Order(orderBy).Limit(pageSize).Offset((page - 1) * pageSize).Find(&orders).Error; err != nil {
+	if err := query.Preload("Items").Preload("User").Preload("Payment").Preload("Shipment").Order(orderBy).Limit(pageSize).Offset((page - 1) * pageSize).Find(&orders).Error; err != nil {
 		c.String(http.StatusInternalServerError, "Could not load orders")
 		return
 	}
@@ -340,6 +374,7 @@ func (h *AdminHandler) ListOrders(c *gin.Context) {
 	}.Encode()
 
 	c.HTML(http.StatusOK, "admin/orders/index", viewData(c, gin.H{
+		"PageTitle":       "Orders",
 		"Orders":          orders,
 		"Statuses":        managementOrderStatuses,
 		"UserSearch":      userSearch,
@@ -354,6 +389,21 @@ func (h *AdminHandler) ListOrders(c *gin.Context) {
 		"PageNumbers":     paginationWindow(page, totalPages),
 		"PaginationQuery": paginationQuery,
 	}))
+}
+
+func (h *AdminHandler) ViewOrder(c *gin.Context) {
+	var uri validation.ProductIDURI
+	if err := c.ShouldBindUri(&uri); err != nil {
+		c.AbortWithStatus(http.StatusNotFound)
+		return
+	}
+	var order models.Order
+	err := h.database.WithContext(c.Request.Context()).Preload("User").Preload("Payment").Preload("Shipment").Preload("Items.Product").Preload("Addresses").First(&order, uri.ID).Error
+	if err != nil {
+		c.AbortWithStatus(http.StatusNotFound)
+		return
+	}
+	c.HTML(http.StatusOK, "admin/orders/view", viewData(c, gin.H{"PageTitle": "Order Details", "Order": order}))
 }
 
 func paginationWindow(current, total int) []int {
@@ -374,13 +424,52 @@ func (h *AdminHandler) ListCategories(c *gin.Context) {
 	h.renderCategories(c, http.StatusOK, "")
 }
 
+func (h *AdminHandler) NewCategory(c *gin.Context) {
+	c.HTML(http.StatusOK, "admin/categories/create", viewData(c, gin.H{"PageTitle": "Add Category", "Category": models.Category{}}))
+}
+
+func (h *AdminHandler) ViewCategory(c *gin.Context) {
+	category, ok := h.adminCategoryFromParam(c)
+	if !ok {
+		return
+	}
+	c.HTML(http.StatusOK, "admin/categories/view", viewData(c, gin.H{"PageTitle": "Category Details", "Category": category}))
+}
+
+func (h *AdminHandler) EditCategory(c *gin.Context) {
+	category, ok := h.adminCategoryFromParam(c)
+	if !ok {
+		return
+	}
+	c.HTML(http.StatusOK, "admin/categories/edit", viewData(c, gin.H{"PageTitle": "Edit Category", "Category": category}))
+}
+
+func (h *AdminHandler) adminCategoryFromParam(c *gin.Context) (*models.Category, bool) {
+	var uri validation.ProductIDURI
+	if err := c.ShouldBindUri(&uri); err != nil {
+		c.AbortWithStatus(http.StatusNotFound)
+		return nil, false
+	}
+	var category models.Category
+	if err := h.database.WithContext(c.Request.Context()).First(&category, uri.ID).Error; err != nil {
+		c.AbortWithStatus(http.StatusNotFound)
+		return nil, false
+	}
+	return &category, true
+}
+
 func (h *AdminHandler) renderCategories(c *gin.Context, status int, errorMessage string) {
+	search := strings.TrimSpace(c.Query("q"))
+	query := h.database.WithContext(c.Request.Context()).Order("name ASC")
+	if search != "" {
+		query = query.Where("name LIKE ?", "%"+search+"%")
+	}
 	var categories []models.Category
-	if err := h.database.WithContext(c.Request.Context()).Order("name ASC").Find(&categories).Error; err != nil {
+	if err := query.Find(&categories).Error; err != nil {
 		c.String(http.StatusInternalServerError, "Could not load categories")
 		return
 	}
-	data := gin.H{"Categories": categories}
+	data := gin.H{"PageTitle": "Categories", "Categories": categories, "Search": search}
 	if errorMessage != "" {
 		data["Error"] = errorMessage
 	}
