@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/mustafa-oezdemir/ecommerce-gin/internal/middleware"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/models"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/services"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/uploads"
@@ -34,16 +35,16 @@ func NewEmployeeHandler(database *gorm.DB, imageStore *uploads.ImageStore) *Empl
 
 func (h *EmployeeHandler) Dashboard(c *gin.Context) {
 	database := h.database.WithContext(c.Request.Context())
-	var pendingOrders, processingOrders, lowStockProducts, outOfStockProducts int64
+	var pendingOrders, processingOrders, lowStockProductCount, outOfStockProducts int64
 	queries := []func() error{
 		func() error {
-			return database.Model(&models.Order{}).Where("status = ?", models.OrderStatusPending).Count(&pendingOrders).Error
+			return applyPendingOrders(database.Model(&models.Order{})).Count(&pendingOrders).Error
 		},
 		func() error {
 			return database.Model(&models.Order{}).Where("status = ?", models.OrderStatusProcessing).Count(&processingOrders).Error
 		},
 		func() error {
-			return database.Model(&models.Product{}).Where("active = ? AND stock BETWEEN ? AND ?", true, 1, 5).Count(&lowStockProducts).Error
+			return applyLowStockProducts(database.Model(&models.Product{})).Count(&lowStockProductCount).Error
 		},
 		func() error {
 			return database.Model(&models.Product{}).Where("active = ? AND stock = ?", true, 0).Count(&outOfStockProducts).Error
@@ -55,7 +56,7 @@ func (h *EmployeeHandler) Dashboard(c *gin.Context) {
 			return
 		}
 	}
-	c.HTML(http.StatusOK, "employee_dashboard.tmpl", viewData(c, gin.H{"PendingOrders": pendingOrders, "ProcessingOrders": processingOrders, "LowStockProducts": lowStockProducts, "OutOfStockProducts": outOfStockProducts}))
+	c.HTML(http.StatusOK, "employee_dashboard.tmpl", viewData(c, gin.H{"PendingOrders": pendingOrders, "ProcessingOrders": processingOrders, "LowStockProducts": lowStockProductCount, "OutOfStockProducts": outOfStockProducts}))
 }
 
 func (h *EmployeeHandler) ListProducts(c *gin.Context) {
@@ -68,6 +69,7 @@ func (h *EmployeeHandler) ListProducts(c *gin.Context) {
 	if !slices.Contains([]string{"all", "active", "inactive"}, selectedAvailability) {
 		selectedAvailability = "all"
 	}
+	selectedStockStatus := normalizeStockStatus(c.Query("stock_status"))
 
 	var products []models.Product
 	query := h.database.WithContext(c.Request.Context()).Preload("Category").Preload("Images", func(database *gorm.DB) *gorm.DB {
@@ -84,6 +86,9 @@ func (h *EmployeeHandler) ListProducts(c *gin.Context) {
 		query = query.Where("products.active = ?", true)
 	case "inactive":
 		query = query.Where("products.active = ?", false)
+	}
+	if selectedStockStatus == stockStatusLow {
+		query = applyLowStockProducts(query)
 	}
 	if err := query.Find(&products).Error; err != nil {
 		c.String(http.StatusInternalServerError, "Could not load products")
@@ -102,6 +107,8 @@ func (h *EmployeeHandler) ListProducts(c *gin.Context) {
 		"Search":               search,
 		"SelectedCategoryID":   uint(selectedCategoryID),
 		"SelectedAvailability": selectedAvailability,
+		"SelectedStockStatus":  selectedStockStatus,
+		"DashboardURL":         managementDashboardURL(c),
 	}
 	if editID, err := strconv.ParseUint(strings.TrimSpace(c.Query("edit")), 10, 64); err == nil && editID > 0 {
 		for index := range products {
@@ -279,20 +286,7 @@ func (h *EmployeeHandler) ListOrders(c *gin.Context) {
 	if searchRunes := []rune(userSearch); len(searchRunes) > 100 {
 		userSearch = string(searchRunes[:100])
 	}
-	selectedStatus := models.OrderStatus(strings.ToLower(strings.TrimSpace(c.Query("status"))))
-	validStatuses := []models.OrderStatus{
-		models.OrderStatusPending,
-		models.OrderStatusPaid,
-		models.OrderStatusPreparing,
-		models.OrderStatusReadyForShipping,
-		models.OrderStatusProcessing,
-		models.OrderStatusShipped,
-		models.OrderStatusCompleted,
-		models.OrderStatusCancelled,
-	}
-	if !slices.Contains(validStatuses, selectedStatus) {
-		selectedStatus = ""
-	}
+	selectedStatus := normalizeManagementOrderStatus(c.Query("status"))
 	selectedSort := strings.ToLower(strings.TrimSpace(c.DefaultQuery("sort", "id_desc")))
 	sortOptions := map[string]string{
 		"id_desc":    "orders.id DESC",
@@ -314,7 +308,9 @@ func (h *EmployeeHandler) ListOrders(c *gin.Context) {
 		like := "%" + userSearch + "%"
 		query = query.Where("(users.name LIKE ? OR users.email LIKE ?)", like, like)
 	}
-	if selectedStatus != "" {
+	if selectedStatus == models.OrderStatusPending {
+		query = applyPendingOrders(query)
+	} else if selectedStatus != "" {
 		query = query.Where("orders.status = ?", selectedStatus)
 	}
 	if err := query.Find(&orders).Error; err != nil {
@@ -323,11 +319,19 @@ func (h *EmployeeHandler) ListOrders(c *gin.Context) {
 	}
 	c.HTML(http.StatusOK, "employee_orders.tmpl", viewData(c, gin.H{
 		"Orders":         orders,
-		"Statuses":       validStatuses,
+		"Statuses":       managementOrderStatuses,
 		"UserSearch":     userSearch,
 		"SelectedStatus": string(selectedStatus),
 		"SelectedSort":   selectedSort,
+		"DashboardURL":   managementDashboardURL(c),
 	}))
+}
+
+func managementDashboardURL(c *gin.Context) string {
+	if user, ok := middleware.CurrentUser(c); ok && user.Role == models.RoleAdmin {
+		return "/admin/dashboard"
+	}
+	return "/employee/dashboard"
 }
 
 func (h *EmployeeHandler) UpdateOrderStatus(c *gin.Context) {

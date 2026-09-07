@@ -46,10 +46,10 @@ func (h *AdminHandler) Dashboard(c *gin.Context) {
 		},
 		func() error { return database.Model(&models.Product{}).Count(&products).Error },
 		func() error {
-			return database.Model(&models.Product{}).Where("active = ? AND stock <= ?", true, 5).Count(&lowStock).Error
+			return applyLowStockProducts(database.Model(&models.Product{})).Count(&lowStock).Error
 		},
 		func() error {
-			return database.Model(&models.Order{}).Where("status = ?", models.OrderStatusPending).Count(&pendingOrders).Error
+			return applyPendingOrders(database.Model(&models.Order{})).Count(&pendingOrders).Error
 		},
 		func() error { return database.Model(&models.Order{}).Count(&totalOrders).Error },
 		func() error {
@@ -248,20 +248,7 @@ func (h *AdminHandler) ListOrders(c *gin.Context) {
 	if searchRunes := []rune(userSearch); len(searchRunes) > 100 {
 		userSearch = string(searchRunes[:100])
 	}
-	selectedStatus := models.OrderStatus(strings.ToLower(strings.TrimSpace(c.Query("status"))))
-	validStatuses := []models.OrderStatus{
-		models.OrderStatusPending,
-		models.OrderStatusPaid,
-		models.OrderStatusPreparing,
-		models.OrderStatusReadyForShipping,
-		models.OrderStatusProcessing,
-		models.OrderStatusShipped,
-		models.OrderStatusCompleted,
-		models.OrderStatusCancelled,
-	}
-	if !slices.Contains(validStatuses, selectedStatus) {
-		selectedStatus = ""
-	}
+	selectedStatus := normalizeManagementOrderStatus(c.Query("status"))
 	selectedSort := strings.ToLower(strings.TrimSpace(c.DefaultQuery("sort", "id_desc")))
 	sortOptions := map[string]string{
 		"id_desc":    "orders.id DESC",
@@ -283,8 +270,10 @@ func (h *AdminHandler) ListOrders(c *gin.Context) {
 		like := "%" + userSearch + "%"
 		query = query.Where("(users.name LIKE ? OR users.email LIKE ?)", like, like)
 	}
-	if selectedStatus != "" {
-		query = query.Where("status = ?", selectedStatus)
+	if selectedStatus == models.OrderStatusPending {
+		query = applyPendingOrders(query)
+	} else if selectedStatus != "" {
+		query = query.Where("orders.status = ?", selectedStatus)
 	}
 	if err := query.Find(&orders).Error; err != nil {
 		c.String(http.StatusInternalServerError, "Could not load orders")
@@ -293,10 +282,11 @@ func (h *AdminHandler) ListOrders(c *gin.Context) {
 
 	c.HTML(http.StatusOK, "admin_orders.tmpl", viewData(c, gin.H{
 		"Orders":         orders,
-		"Statuses":       validStatuses,
+		"Statuses":       managementOrderStatuses,
 		"UserSearch":     userSearch,
 		"SelectedStatus": string(selectedStatus),
 		"SelectedSort":   selectedSort,
+		"DashboardURL":   "/admin/dashboard",
 	}))
 }
 
