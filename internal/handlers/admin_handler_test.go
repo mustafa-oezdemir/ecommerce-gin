@@ -87,6 +87,21 @@ func TestUpdateCategorySavesChanges(t *testing.T) {
 	}
 }
 
+func TestCategoryFromQuerySelectsOnlyExistingValidCategory(t *testing.T) {
+	categories := []models.Category{
+		{Model: gorm.Model{ID: 3}, Name: "Clothes"},
+		{Model: gorm.Model{ID: 7}, Name: "Electronics"},
+	}
+	if got := categoryFromQuery(categories, "7"); got == nil || got.Name != "Electronics" {
+		t.Fatalf("categoryFromQuery selected %#v", got)
+	}
+	for _, value := range []string{"", "invalid", "0", "99"} {
+		if got := categoryFromQuery(categories, value); got != nil {
+			t.Errorf("categoryFromQuery(%q) = %#v, want nil", value, got)
+		}
+	}
+}
+
 func TestDeleteUserSoftDeletesAnotherAccount(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	database, mock := newMockHandlerDatabase(t)

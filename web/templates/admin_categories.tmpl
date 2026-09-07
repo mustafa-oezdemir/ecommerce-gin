@@ -52,6 +52,22 @@
       </div>
     </details>
 
+    {{with .ViewCategory}}
+    <section class="card panel-card mb-4" id="view-category">
+      <div class="card-body p-4">
+        <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
+          <div><span class="text-muted small">Category details</span><h2 class="h4 mb-0">{{.Name}}</h2></div>
+          <a class="btn btn-sm btn-outline-secondary" href="/admin/categories">Close</a>
+        </div>
+        <dl class="row mb-0">
+          <dt class="col-sm-3">ID</dt><dd class="col-sm-9">#{{.ID}}</dd>
+          <dt class="col-sm-3">Name</dt><dd class="col-sm-9">{{.Name}}</dd>
+          <dt class="col-sm-3">Description</dt><dd class="col-sm-9 mb-0">{{if .Description}}{{.Description}}{{else}}<span class="text-muted">No description.</span>{{end}}</dd>
+        </dl>
+      </div>
+    </section>
+    {{end}}
+
     {{with .EditCategory}}
     <section class="card panel-card mb-4" id="edit-category">
       <div class="card-body p-4">
@@ -77,6 +93,22 @@
     </section>
     {{end}}
 
+    {{with .DeleteCategory}}
+    <section class="card panel-card mb-4 border border-danger-subtle" id="delete-category">
+      <div class="card-body p-4">
+        <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
+          <div><span class="text-danger small fw-semibold">Delete category</span><h2 class="h4 mb-0">{{.Name}}</h2></div>
+          <a class="btn btn-sm btn-outline-secondary" href="/admin/categories">Cancel</a>
+        </div>
+        <p class="text-muted">This action removes the category. Products assigned to it will remain available without a category.</p>
+        <form method="post" action="/admin/categories/{{.ID}}/delete">
+          {{$.CSRFField}}
+          <button type="submit" class="btn btn-danger">Confirm delete</button>
+        </form>
+      </div>
+    </section>
+    {{end}}
+
     <section class="card panel-card">
       <div class="card-body p-4">
         <div class="table-responsive">
@@ -89,11 +121,9 @@
                 <td class="fw-semibold">{{.Name}}</td>
                 <td>{{if .Description}}{{.Description}}{{else}}<span class="text-muted">—</span>{{end}}</td>
                 <td class="text-end text-nowrap">
+                  <a class="btn btn-sm btn-outline-secondary" href="/admin/categories?view={{.ID}}#view-category">View</a>
                   <a class="btn btn-sm btn-outline-primary" href="/admin/categories?edit={{.ID}}#edit-category">Edit</a>
-                  <form method="post" action="/admin/categories/{{.ID}}/delete" class="d-inline">
-                    {{$.CSRFField}}
-                    <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
-                  </form>
+                  <a class="btn btn-sm btn-outline-danger" href="/admin/categories?delete={{.ID}}#delete-category">Delete</a>
                 </td>
               </tr>
               {{else}}

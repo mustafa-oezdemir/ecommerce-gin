@@ -384,13 +384,12 @@ func (h *AdminHandler) renderCategories(c *gin.Context, status int, errorMessage
 	if errorMessage != "" {
 		data["Error"] = errorMessage
 	}
-	if editID, err := strconv.ParseUint(strings.TrimSpace(c.Query("edit")), 10, 64); err == nil && editID > 0 {
-		for index := range categories {
-			if categories[index].ID == uint(editID) {
-				data["EditCategory"] = &categories[index]
-				break
-			}
-		}
+	if category := categoryFromQuery(categories, c.Query("view")); category != nil {
+		data["ViewCategory"] = category
+	} else if category := categoryFromQuery(categories, c.Query("edit")); category != nil {
+		data["EditCategory"] = category
+	} else if category := categoryFromQuery(categories, c.Query("delete")); category != nil {
+		data["DeleteCategory"] = category
 	}
 	switch c.Query("status") {
 	case "created":
@@ -401,6 +400,19 @@ func (h *AdminHandler) renderCategories(c *gin.Context, status int, errorMessage
 		data["Success"] = "The category was deleted successfully."
 	}
 	c.HTML(status, "admin_categories.tmpl", viewData(c, data))
+}
+
+func categoryFromQuery(categories []models.Category, value string) *models.Category {
+	id, err := strconv.ParseUint(strings.TrimSpace(value), 10, 64)
+	if err != nil || id == 0 {
+		return nil
+	}
+	for index := range categories {
+		if categories[index].ID == uint(id) {
+			return &categories[index]
+		}
+	}
+	return nil
 }
 
 func (h *AdminHandler) CreateCategory(c *gin.Context) {

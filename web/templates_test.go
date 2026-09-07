@@ -369,7 +369,7 @@ func TestAdminCategoriesRendersTableNewAndEditControls(t *testing.T) {
 	category := models.Category{Model: gorm.Model{ID: 7}, Name: "Electronics", Description: "Devices and accessories"}
 	var output bytes.Buffer
 	if err := templates.ExecuteTemplate(&output, "admin_categories.tmpl", map[string]any{
-		"Categories": []models.Category{category}, "EditCategory": &category,
+		"Categories": []models.Category{category}, "ViewCategory": &category, "EditCategory": &category, "DeleteCategory": &category,
 		"CSRFField": template.HTML(`<input type="hidden" name="csrf">`),
 	}); err != nil {
 		t.Fatalf("execute admin categories template: %v", err)
@@ -377,9 +377,11 @@ func TestAdminCategoriesRendersTableNewAndEditControls(t *testing.T) {
 	body := output.String()
 	for _, want := range []string{
 		`id="new-category"`, `>New Category<`, `>Add category<`, `<table class="table`,
+		`href="/admin/categories?view=7#view-category"`, `id="view-category"`, `>Category details<`,
 		`href="/admin/categories?edit=7#edit-category"`, `id="edit-category"`,
 		`action="/admin/categories/7"`, `value="Electronics"`, `>Save changes<`,
-		`action="/admin/categories/7/delete"`, `>Delete<`,
+		`href="/admin/categories?delete=7#delete-category"`, `id="delete-category"`,
+		`action="/admin/categories/7/delete"`, `>Confirm delete<`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("admin categories page does not contain %q", want)
