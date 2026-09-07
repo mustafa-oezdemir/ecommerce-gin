@@ -1,0 +1,171 @@
+{{define "products/index"}}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="{{.CSRFToken}}">
+  <title>Products | PehliOne</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="/static/site.css" rel="stylesheet">
+  <script src="/static/product-list.js" defer></script>
+  <script src="/static/alpine-csp-3.17.1.min.js" defer></script>
+  <style>
+    [x-cloak] { display: none !important; }
+    body { background: linear-gradient(180deg, #f7f9ff 0%, #eef5ff 100%); }
+    body.filter-drawer-open { overflow: hidden; }
+    .hero { background: linear-gradient(135deg, rgba(79, 70, 229, 0.12), rgba(59, 130, 246, 0.08)); border-radius: 1.5rem; }
+    .product-card { height: 100%; border: 0; border-radius: 1.25rem; box-shadow: 0 15px 35px rgba(15, 23, 42, 0.08); overflow: hidden; }
+    .image-placeholder { height: 200px; background: linear-gradient(135deg, rgba(79, 70, 229, 0.12), rgba(14, 165, 233, 0.08)); display: flex; align-items: center; justify-content: center; font-size: 2.25rem; font-weight: 700; color: #4f46e5; }
+    .product-image { width: 100%; height: 200px; object-fit: cover; background: #eef2ff; }
+    .favorite.active { background: #dc3545; color: #fff; border-color: #dc3545; }
+    .catalog-toolbar { border: 0; border-radius: 1.25rem; box-shadow: 0 12px 30px rgba(15, 23, 42, .07); }
+    .filter-chip { display: inline-flex; align-items: center; gap: .4rem; padding: .45rem .75rem; border-radius: 999px; background: #fff; border: 1px solid #dbe4ff; color: #28366f; text-decoration: none; font-size: .875rem; }
+    .filter-chip:hover { border-color: #4f46e5; color: #3730a3; }
+    .filter-overlay { position: fixed; inset: 0; z-index: 1040; border: 0; background: rgba(15, 23, 42, .48); backdrop-filter: blur(3px); }
+    .filter-drawer { position: fixed; z-index: 1050; top: 0; right: 0; bottom: 0; width: min(480px, 100%); background: #fff; box-shadow: -20px 0 60px rgba(15, 23, 42, .18); display: flex; flex-direction: column; }
+    .filter-drawer-header, .filter-drawer-actions { padding: 1.25rem 1.5rem; border-bottom: 1px solid #e8ecf5; }
+    .filter-drawer-actions { border-top: 1px solid #e8ecf5; border-bottom: 0; box-shadow: 0 -8px 22px rgba(15, 23, 42, .05); }
+    .filter-drawer-body { padding: 1.25rem 1.5rem; overflow-y: auto; }
+    .filter-group { padding-bottom: 1.25rem; margin-bottom: 1.25rem; border-bottom: 1px solid #edf0f6; }
+    .filter-group:last-child { border-bottom: 0; }
+    .filter-options { max-height: 180px; overflow-y: auto; }
+    .size-option:has(input:checked) { color: #fff; background: #4f46e5; border-color: #4f46e5; }
+    .result-count { color: #5d6782; }
+    @media (min-width: 1200px) { .filter-drawer { width: 460px; } }
+  </style>
+</head>
+<body>
+  {{template "site-nav" .}}
+
+  <main class="app-main container py-5" x-data="productFilters" x-on:keydown.escape.window="closePanel">
+    <div class="hero p-4 p-lg-5 mb-4">
+      <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
+        <div>
+          <span class="badge rounded-pill bg-primary-subtle text-primary px-3 py-2 mb-3">New Collection</span>
+          <h1 class="display-6 fw-bold mb-2">Discover our latest products</h1>
+          <p class="text-muted mb-0">Quality products, great prices, and fast delivery.</p>
+        </div>
+        <a href="/cart" class="btn btn-primary btn-lg">My Cart</a>
+      </div>
+    </div>
+
+    <section class="card catalog-toolbar mb-3" aria-label="Product controls">
+      <div class="card-body p-3 p-lg-4 d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3">
+        <div>
+          <strong>{{.ProductResult.Total}}</strong> <span class="result-count">products found</span>
+        </div>
+        <div class="d-flex gap-2 align-items-center">
+          <label class="visually-hidden" for="product-sort">Sort products</label>
+          <select class="form-select product-sort" id="product-sort" aria-label="Sort products">
+            <option value="newest" {{if eq .ProductFilters.Sort "newest"}}selected{{end}}>Newest</option>
+            <option value="oldest" {{if eq .ProductFilters.Sort "oldest"}}selected{{end}}>Oldest</option>
+            <option value="price_asc" {{if eq .ProductFilters.Sort "price_asc"}}selected{{end}}>Price: low to high</option>
+            <option value="price_desc" {{if eq .ProductFilters.Sort "price_desc"}}selected{{end}}>Price: high to low</option>
+            <option value="rating_desc" {{if eq .ProductFilters.Sort "rating_desc"}}selected{{end}}>Rating: high to low</option>
+            <option value="rating_asc" {{if eq .ProductFilters.Sort "rating_asc"}}selected{{end}}>Rating: low to high</option>
+            <option value="reviews_desc" {{if eq .ProductFilters.Sort "reviews_desc"}}selected{{end}}>Most reviewed</option>
+            <option value="reviews_asc" {{if eq .ProductFilters.Sort "reviews_asc"}}selected{{end}}>Least reviewed</option>
+          </select>
+          <button type="button" class="btn btn-primary text-nowrap" x-ref="trigger" x-on:click="openPanel" aria-controls="product-filter-drawer">
+            Filter{{if .ProductFilters.ActiveCount}} ({{.ProductFilters.ActiveCount}}){{end}}
+          </button>
+        </div>
+      </div>
+    </section>
+
+    {{if .ProductFilters.Chips}}
+    <div class="d-flex flex-wrap gap-2 mb-4" aria-label="Applied filters">
+      {{range .ProductFilters.Chips}}<a class="filter-chip" href="{{.RemoveURL}}"><span>{{.Label}}</span><span aria-hidden="true">×</span><span class="visually-hidden">Remove {{.Label}}</span></a>{{end}}
+      <a class="filter-chip" href="/?sort={{.ProductFilters.Sort}}">Clear applied filters</a>
+    </div>
+    {{end}}
+
+    <button type="button" class="filter-overlay" x-cloak x-show="open" x-on:click="closePanel" aria-label="Close filters"></button>
+    <aside class="filter-drawer" id="product-filter-drawer" role="dialog" aria-modal="true" aria-labelledby="filter-title" x-cloak x-show="open">
+      <div class="filter-drawer-header d-flex justify-content-between align-items-center">
+        <div><h2 class="h4 mb-1" id="filter-title">Filter products</h2><p class="small text-muted mb-0">Changes apply only when you confirm.</p></div>
+        <button type="button" class="btn-close" x-ref="closeButton" x-on:click="closePanel" aria-label="Close filters"></button>
+      </div>
+      <form id="product-filter-form" method="get" action="/" x-ref="form" x-on:change="captureDraft" x-on:submit="prepareSubmit" class="d-flex flex-column flex-grow-1 overflow-hidden">
+        <input type="hidden" name="sort" value="{{.ProductFilters.Sort}}">
+        <div class="filter-drawer-body flex-grow-1">
+          <section class="filter-group">
+            <label class="form-label fw-semibold" for="filter-search">Search</label>
+            <input class="form-control" id="filter-search" type="search" name="q" value="{{.ProductFilters.Search}}" maxlength="100" placeholder="Name, SKU, description or brand">
+          </section>
+
+          {{if .ProductFilters.Options.Categories}}<fieldset class="filter-group"><legend class="h6">Category</legend><div class="filter-options">
+            {{range .ProductFilters.Options.Categories}}<label class="form-check mb-2"><input class="form-check-input" type="checkbox" name="category" value="{{.ID}}" {{if index $.ProductFilters.SelectedCategories .ID}}checked{{end}}><span class="form-check-label">{{.Name}}</span></label>{{end}}
+          </div></fieldset>{{end}}
+
+          <fieldset class="filter-group"><legend class="h6">Brand / Marke</legend>{{if .ProductFilters.Options.Brands}}<div class="filter-options">
+            {{range .ProductFilters.Options.Brands}}<label class="form-check mb-2"><input class="form-check-input" type="checkbox" name="brand" value="{{.ID}}" {{if index $.ProductFilters.SelectedBrands .ID}}checked{{end}}><span class="form-check-label">{{.Name}}</span></label>{{end}}
+          </div>{{else}}<p class="small text-muted mb-0">No brand options available.</p>{{end}}</fieldset>
+
+          <fieldset class="filter-group"><legend class="h6">Price range</legend><div class="row g-2">
+            <div class="col"><label class="form-label small" for="min-price">Minimum (€)</label><input class="form-control" id="min-price" name="min_price" inputmode="decimal" value="{{.ProductFilters.MinPrice}}" placeholder="0.00"></div>
+            <div class="col"><label class="form-label small" for="max-price">Maximum (€)</label><input class="form-control" id="max-price" name="max_price" inputmode="decimal" value="{{.ProductFilters.MaxPrice}}" placeholder="250.00"></div>
+          </div></fieldset>
+
+          <fieldset class="filter-group"><legend class="h6">Color</legend>{{if .ProductFilters.Options.Colors}}<div class="filter-options">
+            {{range .ProductFilters.Options.Colors}}<label class="form-check mb-2"><input class="form-check-input" type="checkbox" name="color" value="{{.}}" {{if index $.ProductFilters.SelectedColors .}}checked{{end}}><span class="form-check-label">{{.}}</span></label>{{end}}
+          </div>{{else}}<p class="small text-muted mb-0">No color options available.</p>{{end}}</fieldset>
+
+          <fieldset class="filter-group"><legend class="h6">Clothing size</legend>{{if .ProductFilters.Options.ClothingSizes}}<div class="d-flex flex-wrap gap-2">
+            {{range .ProductFilters.Options.ClothingSizes}}<label class="btn btn-outline-secondary btn-sm size-option"><input class="visually-hidden" type="checkbox" name="clothing_size" value="{{.}}" {{if index $.ProductFilters.SelectedClothing .}}checked{{end}}> {{.}}</label>{{end}}
+          </div>{{else}}<p class="small text-muted mb-0">No clothing sizes available.</p>{{end}}</fieldset>
+
+          <fieldset class="filter-group"><legend class="h6">Shoe size (EU)</legend>{{if .ProductFilters.Options.ShoeSizes}}<div class="d-flex flex-wrap gap-2">
+            {{range .ProductFilters.Options.ShoeSizes}}<label class="btn btn-outline-secondary btn-sm size-option"><input class="visually-hidden" type="checkbox" name="shoe_size" value="{{.}}" {{if index $.ProductFilters.SelectedShoes .}}checked{{end}}> {{.}}</label>{{end}}
+          </div>{{else}}<p class="small text-muted mb-0">No shoe sizes available.</p>{{end}}</fieldset>
+
+          <section class="filter-group"><label class="form-label fw-semibold" for="minimum-rating">Rating</label><select class="form-select" id="minimum-rating" name="rating"><option value="">Any rating</option>{{range listRatings}}<option value="{{.}}" {{if eq $.ProductFilters.Rating .}}selected{{end}}>{{.}}+ out of 10</option>{{end}}</select></section>
+          <fieldset class="filter-group"><legend class="h6">Availability</legend><label class="form-check form-switch"><input class="form-check-input" type="checkbox" role="switch" name="in_stock" value="1" {{if .ProductFilters.InStock}}checked{{end}}><span class="form-check-label">In stock only</span></label></fieldset>
+
+          <div class="filter-group"><h3 class="h6">Category-specific attributes</h3>{{if not .ProductFilters.Options.Attributes}}<p class="small text-muted mb-0">No additional attributes available.</p>{{end}}
+          {{range .ProductFilters.Options.Attributes}}<fieldset class="mt-3"><legend class="small fw-semibold">{{.Name}}</legend><div class="filter-options">
+            {{$attributeName := .Name}}{{range .Values}}<label class="form-check mb-2"><input class="form-check-input" type="checkbox" name="attribute.{{$attributeName}}" value="{{.}}" {{if attributeSelected $.ProductFilters.SelectedAttributes $attributeName .}}checked{{end}}><span class="form-check-label">{{.}}</span></label>{{end}}
+          </div></fieldset>{{end}}</div>
+        </div>
+        <div class="filter-drawer-actions d-flex gap-2">
+          <button type="button" class="btn btn-outline-secondary flex-grow-1" x-on:click="clearDraft">Clear All</button>
+          <button type="submit" class="btn btn-primary flex-grow-1">Apply Filters</button>
+        </div>
+      </form>
+    </aside>
+
+    {{if .Products}}
+    <div class="row g-4">
+      {{range .Products}}
+      <div class="col-md-6 col-xl-4">
+        <div class="card product-card h-100">
+          {{if .ImageFilename}}<img class="product-image" src="/media/products/{{.ImageFilename}}" alt="{{.Name}}" loading="lazy">{{else}}<div class="image-placeholder">{{if .Category}}{{initials .Category.Name}}{{else}}N{{end}}</div>{{end}}
+          <div class="card-body d-flex flex-column">
+            <div class="d-flex justify-content-between align-items-start gap-3 mb-2">
+              <div><h2 class="h5 mb-1"><a class="text-decoration-none text-dark" href="/products/{{.ID}}">{{.Name}}</a></h2><div class="text-muted small">{{if .Brand}}{{.Brand.Name}} · {{end}}{{if .Category}}{{.Category.Name}}{{end}}</div></div>
+              <span class="badge bg-light text-dark rounded-pill fw-semibold">{{money .PriceCents}}</span>
+            </div>
+            <p class="text-muted small mb-3">{{if .Description}}{{.Description}}{{else}}Featured product. Add it to your cart today.{{end}}</p>
+            {{$rating := index $.Ratings .ID}}<div class="small mb-3" style="color:#f59e0b">★ {{printf "%.1f" $rating.Average}}/10 <span class="text-muted">({{$rating.Count}})</span></div>
+            {{if $.CurrentUser}}<button type="button" class="favorite btn btn-sm btn-outline-danger mb-2 {{if index $.Favorites .ID}}active{{end}}" data-id="{{.ID}}" data-active="{{index $.Favorites .ID}}">♥ <span>{{if index $.Favorites .ID}}Favorited{{else}}Favorite{{end}}</span></button>{{end}}
+            <form method="post" action="/cart/add/{{.ID}}" class="mt-auto">{{$.CSRFField}}<div class="d-flex gap-2 align-items-center"><input class="form-control" type="number" name="quantity" value="1" min="1" max="100" required><button type="submit" class="btn btn-primary">Add to Cart</button></div></form>
+          </div>
+        </div>
+      </div>
+      {{end}}
+    </div>
+    {{else}}
+    <div class="alert alert-light border text-center py-5"><h2 class="h5 mb-2">No products match these filters</h2><p class="mb-3 text-muted">Try removing one or more filters.</p><a class="btn btn-outline-primary" href="/?sort={{.ProductFilters.Sort}}">Clear applied filters</a></div>
+    {{end}}
+
+    {{if gt .ProductResult.TotalPages 1}}<nav class="mt-5" aria-label="Product pages"><ul class="pagination justify-content-center">
+      <li class="page-item {{if not .ProductFilters.PreviousURL}}disabled{{end}}"><a class="page-link" {{if .ProductFilters.PreviousURL}}href="{{.ProductFilters.PreviousURL}}"{{end}}>Previous</a></li>
+      {{range .ProductFilters.PageURLs}}<li class="page-item {{if .Current}}active{{end}}"><a class="page-link" href="{{.URL}}" {{if .Current}}aria-current="page"{{end}}>{{.Number}}</a></li>{{end}}
+      <li class="page-item {{if not .ProductFilters.NextURL}}disabled{{end}}"><a class="page-link" {{if .ProductFilters.NextURL}}href="{{.ProductFilters.NextURL}}"{{end}}>Next</a></li>
+    </ul></nav>{{end}}
+  </main>
+  {{template "site-footer" .}}
+</body>
+</html>
+{{end}}

@@ -386,7 +386,7 @@ func (h *AccountHandler) renderAccount(c *gin.Context, status int, extra gin.H) 
 		}
 	}
 	c.Header("Cache-Control", "no-store")
-	c.HTML(status, "account.tmpl", viewData(c, extra))
+	c.HTML(status, "account/profile/view", viewData(c, extra))
 }
 
 func (h *AccountHandler) renderTwoFactor(c *gin.Context, status int, extra gin.H) {
@@ -398,7 +398,7 @@ func (h *AccountHandler) renderTwoFactor(c *gin.Context, status int, extra gin.H
 	}
 	c.Header("Cache-Control", "no-store")
 	c.Header("Pragma", "no-cache")
-	c.HTML(status, "two_factor.tmpl", viewData(c, extra))
+	c.HTML(status, "account/security/two-factor", viewData(c, extra))
 }
 
 func (h *AccountHandler) renderTwoFactorSetup(c *gin.Context, user *models.User, setup *services.TwoFactorSetup, extra gin.H) {
@@ -427,7 +427,7 @@ func (h *AccountHandler) renderTwoFactorSetup(c *gin.Context, user *models.User,
 	}
 	c.Header("Cache-Control", "no-store")
 	c.Header("Pragma", "no-cache")
-	c.HTML(http.StatusOK, "two_factor_setup.tmpl", viewData(c, data))
+	c.HTML(http.StatusOK, "account/security/two-factor-setup", viewData(c, data))
 }
 
 func setSessionSecurityVersion(c *gin.Context, version uint64) {
@@ -447,7 +447,7 @@ func (h *AccountHandler) ListProductLists(c *gin.Context) {
 		c.String(http.StatusInternalServerError, "Could not load lists")
 		return
 	}
-	c.HTML(http.StatusOK, "product_lists.tmpl", viewData(c, gin.H{"Lists": lists}))
+	c.HTML(http.StatusOK, "account/lists/index", viewData(c, gin.H{"Lists": lists}))
 }
 
 func (h *AccountHandler) CreateProductList(c *gin.Context) {
@@ -497,7 +497,7 @@ func (h *AccountHandler) ShowProductList(c *gin.Context) {
 		c.String(http.StatusInternalServerError, "Could not load products")
 		return
 	}
-	c.HTML(http.StatusOK, "product_list_detail.tmpl", viewData(c, gin.H{"List": list, "Products": products}))
+	c.HTML(http.StatusOK, "account/lists/view", viewData(c, gin.H{"List": list, "Products": products}))
 }
 
 func (h *AccountHandler) AddProductToList(c *gin.Context) {

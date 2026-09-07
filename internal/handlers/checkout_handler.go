@@ -66,7 +66,7 @@ func (h *CheckoutHandler) Show(c *gin.Context) {
 		return
 	}
 	c.Header("Cache-Control", "no-store")
-	c.HTML(http.StatusOK, "checkout.tmpl", viewData(c, gin.H{"Summary": summary, "Addresses": addresses, "IdempotencyKey": key}))
+	c.HTML(http.StatusOK, "checkout/index", viewData(c, gin.H{"Summary": summary, "Addresses": addresses, "IdempotencyKey": key}))
 }
 
 func (h *CheckoutHandler) Place(c *gin.Context) {
@@ -115,7 +115,7 @@ func (h *CheckoutHandler) Success(c *gin.Context) {
 		return
 	}
 	c.Header("Cache-Control", "no-store")
-	c.HTML(http.StatusOK, "order_success.tmpl", viewData(c, gin.H{"Order": order}))
+	c.HTML(http.StatusOK, "checkout/success", viewData(c, gin.H{"Order": order}))
 }
 
 func (h *CheckoutHandler) ListAddresses(c *gin.Context) {
@@ -129,7 +129,7 @@ func (h *CheckoutHandler) ListAddresses(c *gin.Context) {
 		c.String(http.StatusInternalServerError, "Could not load addresses")
 		return
 	}
-	c.HTML(http.StatusOK, "addresses.tmpl", viewData(c, gin.H{"Addresses": addresses}))
+	c.HTML(http.StatusOK, "account/addresses/index", viewData(c, gin.H{"Addresses": addresses}))
 }
 
 func (h *CheckoutHandler) CreateAddress(c *gin.Context) {

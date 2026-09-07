@@ -5,13 +5,15 @@ import (
 	"fmt"
 	"html/template"
 	"io/fs"
+	"path/filepath"
+	"sort"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/models"
 )
 
-//go:embed templates/*.tmpl
+//go:embed templates
 var templateFS embed.FS
 
 //go:embed static/*
@@ -22,7 +24,7 @@ func StaticFS() (fs.FS, error) {
 }
 
 func ParseTemplates() (*template.Template, error) {
-	return template.New("root").Funcs(template.FuncMap{
+	templates := template.New("root").Funcs(template.FuncMap{
 		"money":             formatCents,
 		"priceInput":        formatPriceInput,
 		"mulCents":          mulCents,
@@ -33,7 +35,30 @@ func ParseTemplates() (*template.Template, error) {
 		"sub":               func(a, b int) int { return a - b },
 		"listRatings":       func() []int { return []int{10, 9, 8, 7, 6, 5, 4, 3, 2, 1} },
 		"attributeSelected": func(selected map[string]bool, name, value string) bool { return selected[name+"\x00"+value] },
-	}).ParseFS(templateFS, "templates/*.tmpl")
+	})
+	var filenames []string
+	if err := fs.WalkDir(templateFS, "templates", func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !entry.IsDir() && filepath.Ext(path) == ".tmpl" {
+			filenames = append(filenames, path)
+		}
+		return nil
+	}); err != nil {
+		return nil, fmt.Errorf("walk templates: %w", err)
+	}
+	sort.Strings(filenames)
+	for _, filename := range filenames {
+		contents, err := fs.ReadFile(templateFS, filename)
+		if err != nil {
+			return nil, fmt.Errorf("read template %s: %w", filename, err)
+		}
+		if _, err := templates.Parse(string(contents)); err != nil {
+			return nil, fmt.Errorf("parse template %s: %w", filename, err)
+		}
+	}
+	return templates, nil
 }
 
 func orderStatusLabel(status models.OrderStatus) string {

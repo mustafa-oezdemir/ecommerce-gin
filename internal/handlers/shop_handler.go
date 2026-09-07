@@ -64,7 +64,7 @@ func (h *ShopHandler) renderProducts(c *gin.Context) {
 		favorites, _ = h.engagement.FavoriteProductIDs(c.Request.Context(), user.ID)
 	}
 	filterView := newProductFilterView(c.Request.URL.Query(), filters, result)
-	c.HTML(http.StatusOK, "product_list.tmpl", viewData(c, gin.H{
+	c.HTML(http.StatusOK, "products/index", viewData(c, gin.H{
 		"Products": result.Products, "Categories": result.Options.Categories, "Ratings": ratings,
 		"Favorites": favorites, "ProductFilters": filterView, "ProductResult": result,
 	}))
@@ -106,7 +106,7 @@ func (h *ShopHandler) ProductDetail(c *gin.Context) {
 		}
 		data["Lists"] = customLists
 	}
-	c.HTML(http.StatusOK, "product_detail.tmpl", viewData(c, data))
+	c.HTML(http.StatusOK, "products/view", viewData(c, data))
 }
 
 func (h *ShopHandler) AddToCart(c *gin.Context) {
@@ -151,7 +151,7 @@ func (h *ShopHandler) ViewCart(c *gin.Context) {
 	for _, item := range cart.Items {
 		totalCents += item.Product.PriceCents * int64(item.Quantity)
 	}
-	c.HTML(http.StatusOK, "cart.tmpl", viewData(c, gin.H{"Cart": cart, "Items": cart.Items, "TotalCents": totalCents}))
+	c.HTML(http.StatusOK, "cart/index", viewData(c, gin.H{"Cart": cart, "Items": cart.Items, "TotalCents": totalCents}))
 }
 
 func (h *ShopHandler) UpdateCartItem(c *gin.Context) {
@@ -222,7 +222,7 @@ func (h *ShopHandler) ListOrders(c *gin.Context) {
 		c.String(http.StatusInternalServerError, "Could not load orders")
 		return
 	}
-	c.HTML(http.StatusOK, "order_list.tmpl", viewData(c, gin.H{"Orders": orders}))
+	c.HTML(http.StatusOK, "account/orders/index", viewData(c, gin.H{"Orders": orders}))
 }
 
 func (h *ShopHandler) OrderDetail(c *gin.Context) {
@@ -281,7 +281,7 @@ func (h *ShopHandler) OrderDetail(c *gin.Context) {
 		data["ReturnQRCodeURL"] = h.shipping.QRCodeURL(returnShipment.TrackingNumber)
 	}
 	data["CanCancelOrder"] = canCancel
-	c.HTML(http.StatusOK, "order_detail.tmpl", viewData(c, data))
+	c.HTML(http.StatusOK, "account/orders/view", viewData(c, data))
 }
 
 func (h *ShopHandler) ConfirmDelivery(c *gin.Context) {

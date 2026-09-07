@@ -56,7 +56,7 @@ func (h *EmployeeHandler) Dashboard(c *gin.Context) {
 			return
 		}
 	}
-	c.HTML(http.StatusOK, "employee_dashboard.tmpl", viewData(c, gin.H{"PendingOrders": pendingOrders, "ProcessingOrders": processingOrders, "LowStockProducts": lowStockProductCount, "OutOfStockProducts": outOfStockProducts}))
+	c.HTML(http.StatusOK, "employee/dashboard/index", viewData(c, gin.H{"PendingOrders": pendingOrders, "ProcessingOrders": processingOrders, "LowStockProducts": lowStockProductCount, "OutOfStockProducts": outOfStockProducts}))
 }
 
 func (h *EmployeeHandler) ListProducts(c *gin.Context) {
@@ -127,7 +127,7 @@ func (h *EmployeeHandler) ListProducts(c *gin.Context) {
 	case "cover-updated":
 		data["Success"] = "The cover image was updated."
 	}
-	c.HTML(http.StatusOK, "employee_products.tmpl", viewData(c, data))
+	c.HTML(http.StatusOK, "employee/products/index", viewData(c, data))
 }
 
 func (h *EmployeeHandler) CreateProduct(c *gin.Context) {
@@ -318,7 +318,7 @@ func (h *EmployeeHandler) ListOrders(c *gin.Context) {
 		c.String(http.StatusInternalServerError, "Could not load orders")
 		return
 	}
-	c.HTML(http.StatusOK, "employee_orders.tmpl", viewData(c, gin.H{
+	c.HTML(http.StatusOK, "employee/orders/index", viewData(c, gin.H{
 		"Orders":         orders,
 		"Statuses":       managementOrderStatuses,
 		"UserSearch":     userSearch,

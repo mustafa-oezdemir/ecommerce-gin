@@ -1,0 +1,104 @@
+{{ define "checkout/index" }}
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<title>Checkout | PehliOne</title>
+		<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+		<link href="/static/site.css" rel="stylesheet">
+  <script src="/static/checkout.js" defer></script>
+  <style>
+    body { background: #f4f7fb; }
+    .checkout-card { border: 0; border-radius: 1.25rem; box-shadow: 0 12px 32px rgba(15,23,42,.07); }
+    .step { width: 2rem; height: 2rem; border-radius: 50%; display: inline-grid; place-items: center; background: #4f46e5; color: white; font-weight: 800; }
+    .address-option, .payment-option { border: 1px solid #dbe3ee; border-radius: .9rem; padding: 1rem; cursor: pointer; }
+  </style>
+	</head>
+	<body>
+		{{ template "site-nav" . }}
+		<main class="app-main container py-5">
+			<div class="mb-4"><span class="badge text-bg-primary">Secure checkout</span><h1 class="display-6 fw-bold mt-2">Checkout</h1></div>
+			<form method="post" action="/checkout" data-checkout-form>
+				{{ .CSRFField }}
+				<input type="hidden" name="idempotency_key" value="{{ .IdempotencyKey }}">
+				<div class="row g-4">
+					<div class="col-lg-8">
+						<section class="card checkout-card mb-4"><div class="card-body p-4">
+								<h2 class="h5"><span class="step me-2">1</span> Shipping Address</h2>
+								{{ if .Addresses }}
+									<div class="row g-3 mt-1">
+										{{ range .Addresses }}
+											<div class="col-md-6">
+												<label class="address-option d-block h-100">
+													<input class="form-check-input me-2" type="radio" name="shipping_address_id" value="{{ .ID }}" {{ if .IsDefault }}checked{{ end }} required><strong>{{ .FirstName }} {{ .LastName }}</strong><br>
+													<span class="text-muted">{{ .Street }} {{ .HouseNumber }}<br>{{ .PostalCode }} {{ .City }}, {{ .CountryCode }}</span>
+												</label>
+											</div>
+										{{ end }}</div>
+								{{ else }}<div class="alert alert-warning mt-3">Add a shipping address before placing your order.</div>
+								{{ end }}
+								<a class="btn btn-sm btn-outline-primary mt-3" href="/account/addresses">Add or manage addresses</a>
+							</div>
+						</section>
+
+						<section class="card checkout-card mb-4"><div class="card-body p-4">
+								<h2 class="h5"><span class="step me-2">2</span> Billing Address</h2>
+								<label class="form-check mt-3"><input class="form-check-input" type="checkbox" name="billing_same_as_shipping" value="true" checked data-billing-same><span class="form-check-label">Billing address is the same as shipping address</span></label>
+								<div class="row g-3 mt-1" data-billing-panel hidden>
+									{{ range .Addresses }}<div class="col-md-6">
+											<label class="address-option d-block h-100">
+												<input class="form-check-input me-2" type="radio" name="billing_address_id" value="{{ .ID }}">
+												<strong>{{ .FirstName }} {{ .LastName }}</strong>
+												<br>
+												<span class="text-muted">{{ .Street }} {{ .HouseNumber }}<br>{{ .PostalCode }} {{ .City }}, {{ .CountryCode }}</span>
+											</label>
+										</div>
+									{{ end }}</div>
+							</div>
+						</section>
+
+						<section class="card checkout-card"><div class="card-body p-4">
+								<h2 class="h5"><span class="step me-2">3</span> Payment Method</h2>
+								<p class="small text-muted">Card details are entered only in provider-hosted fields. PehliOne never stores card numbers or CVC values.</p>
+								<div class="row g-3">
+									<div class="col-md-6"><label class="payment-option d-block"><input class="form-check-input me-2" type="radio" name="payment_method" value="debit_card" required> Debit Card</label></div>
+									<div class="col-md-6">
+										<label class="payment-option d-block"><input class="form-check-input me-2" type="radio" name="payment_method" value="credit_card" required> Credit Card</label>
+									</div>
+									<div class="col-md-6">
+										<label class="payment-option d-block"><input class="form-check-input me-2" type="radio" name="payment_method" value="paypal" required> PayPal</label>
+									</div>
+									<div class="col-md-6">
+										<label class="payment-option d-block"><input class="form-check-input me-2" type="radio" name="payment_method" value="klarna" required> Klarna</label>
+									</div>
+								</div>
+							</div>
+						</section>
+					</div>
+					<div class="col-lg-4">
+						<section class="card checkout-card position-sticky" style="top: 1rem;"><div class="card-body p-4">
+								<h2 class="h5"><span class="step me-2">4</span> Order Summary</h2>
+								<div class="mt-3">
+									{{ range .Summary.Cart.Items }}<div class="d-flex justify-content-between gap-3 mb-2"><span>{{ .Product.Name }} × {{ .Quantity }}</span><span>{{ money (mulCents .Product.PriceCents .Quantity) }}</span>
+										</div>
+									{{ end }}</div>
+								<hr><div class="d-flex justify-content-between"><span>Subtotal</span>
+									<span>{{ money .Summary.SubtotalCents }}</span>
+								</div>
+								<div class="d-flex justify-content-between"><span>Shipping</span>
+									<span>{{ money .Summary.ShippingCents }}</span></div>
+								<div class="d-flex justify-content-between fw-bold fs-5 mt-2"><span>Total</span><span>{{ money .Summary.TotalCents }}</span></div>
+								<h2 class="h6 mt-4"><span class="step me-2">5</span> Place Order</h2>
+								<button class="btn btn-primary btn-lg w-100 mt-2" type="submit" data-place-order {{ if not .Addresses }}disabled{{ end }}>Place Order</button>
+								<p class="small text-muted mt-2 mb-0">Prices and stock are checked again securely when you submit.</p>
+							</div>
+						</section>
+					</div>
+				</div>
+			</form>
+		</main>
+		{{ template "site-footer" . }}
+	</body>
+</html>
+{{ end }}

@@ -38,13 +38,13 @@ func NewAuthHandler(database *gorm.DB, security *services.AccountSecurityService
 }
 
 func (h *AuthHandler) ShowLogin(c *gin.Context) {
-	c.HTML(http.StatusOK, "login.tmpl", viewData(c, nil))
+	c.HTML(http.StatusOK, "auth/login", viewData(c, nil))
 }
 
 func (h *AuthHandler) Login(c *gin.Context) {
 	var req validation.LoginRequest
 	if err := c.ShouldBind(&req); err != nil {
-		c.HTML(http.StatusUnauthorized, "login.tmpl", viewData(c, gin.H{"error": "Invalid email or password"}))
+		c.HTML(http.StatusUnauthorized, "auth/login", viewData(c, gin.H{"error": "Invalid email or password"}))
 		return
 	}
 	email := strings.ToLower(strings.TrimSpace(req.Email))
@@ -55,7 +55,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		if metric := metrics.Default(); metric != nil {
 			metric.LoginFailures.Inc()
 		}
-		c.HTML(http.StatusUnauthorized, "login.tmpl", viewData(c, gin.H{"error": "Invalid email or password"}))
+		c.HTML(http.StatusUnauthorized, "auth/login", viewData(c, gin.H{"error": "Invalid email or password"}))
 		return
 	}
 
@@ -63,7 +63,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		if metric := metrics.Default(); metric != nil {
 			metric.LoginFailures.Inc()
 		}
-		c.HTML(http.StatusUnauthorized, "login.tmpl", viewData(c, gin.H{"error": "Invalid email or password"}))
+		c.HTML(http.StatusUnauthorized, "auth/login", viewData(c, gin.H{"error": "Invalid email or password"}))
 		return
 	}
 
@@ -88,7 +88,7 @@ func (h *AuthHandler) ShowTwoFactorChallenge(c *gin.Context) {
 		return
 	}
 	c.Header("Cache-Control", "no-store")
-	c.HTML(http.StatusOK, "two_factor_challenge.tmpl", viewData(c, nil))
+	c.HTML(http.StatusOK, "auth/two-factor-challenge", viewData(c, nil))
 }
 
 func (h *AuthHandler) VerifyTwoFactorChallenge(c *gin.Context) {
@@ -103,7 +103,7 @@ func (h *AuthHandler) VerifyTwoFactorChallenge(c *gin.Context) {
 	user, err := h.security.VerifySecondFactor(c.Request.Context(), userID, code, recovery)
 	if err != nil {
 		c.Header("Cache-Control", "no-store")
-		c.HTML(http.StatusUnauthorized, "two_factor_challenge.tmpl", viewData(c, gin.H{"error": "Invalid or expired authentication code"}))
+		c.HTML(http.StatusUnauthorized, "auth/two-factor-challenge", viewData(c, gin.H{"error": "Invalid or expired authentication code"}))
 		return
 	}
 	session.Clear()

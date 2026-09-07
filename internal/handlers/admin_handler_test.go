@@ -26,7 +26,7 @@ func TestListOrdersPaginatesSortedResultsTwentyAtATime(t *testing.T) {
 
 	handler := &AdminHandler{database: database}
 	router := gin.New()
-	router.SetHTMLTemplate(template.Must(template.New("admin_orders.tmpl").Parse(`{{define "admin_orders.tmpl"}}{{.Page}}|{{.TotalOrders}}|{{.TotalPages}}|{{.PaginationQuery}}{{end}}`)))
+	router.SetHTMLTemplate(template.Must(template.New("admin/orders/index").Parse(`{{define "admin/orders/index"}}{{.Page}}|{{.TotalOrders}}|{{.TotalPages}}|{{.PaginationQuery}}{{end}}`)))
 	router.GET("/admin/orders", handler.ListOrders)
 	recorder := httptest.NewRecorder()
 	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/admin/orders?sort=total_desc&page=2", nil))

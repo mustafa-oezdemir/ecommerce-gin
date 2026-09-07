@@ -31,7 +31,7 @@ func (h *NotificationHandler) List(c *gin.Context) {
 		c.String(http.StatusInternalServerError, "Could not load notifications")
 		return
 	}
-	c.HTML(http.StatusOK, "notifications.tmpl", viewData(c, gin.H{"Notifications": notifications}))
+	c.HTML(http.StatusOK, "account/notifications/index", viewData(c, gin.H{"Notifications": notifications}))
 }
 
 func (h *NotificationHandler) MarkRead(c *gin.Context) {

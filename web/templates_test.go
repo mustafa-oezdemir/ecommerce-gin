@@ -30,7 +30,7 @@ func TestStaticFSContainsCSPCompatibleScripts(t *testing.T) {
 }
 
 func TestProductListUsesDraftFirstFilterDrawer(t *testing.T) {
-	templateContents, err := fs.ReadFile(templateFS, "templates/product_list.tmpl")
+	templateContents, err := fs.ReadFile(templateFS, "templates/products/index.tmpl")
 	if err != nil {
 		t.Fatalf("read product list template: %v", err)
 	}
@@ -72,7 +72,7 @@ func TestAccountTemplateUsesExternalScriptWithoutInlineHandlers(t *testing.T) {
 	}
 	var output bytes.Buffer
 	user := models.User{FirstName: "Mustafa", LastName: "Özdemir", Email: "customer@example.com", Role: models.RoleCustomer}
-	if err := templates.ExecuteTemplate(&output, "account.tmpl", map[string]any{
+	if err := templates.ExecuteTemplate(&output, "account/profile/view", map[string]any{
 		"User":        user,
 		"CurrentUser": &user,
 		"CSRFField":   template.HTML(`<input type="hidden" name="_csrf">`),
@@ -113,7 +113,7 @@ func TestAccountAndNavbarRenderStoredProfileImage(t *testing.T) {
 	}
 	user := models.User{Name: "Ada Lovelace", FirstName: "Ada", LastName: "Lovelace", Email: "ada@example.com", Role: models.RoleCustomer, ProfileImageFilename: "0123456789abcdef0123456789abcdef.png"}
 	var output bytes.Buffer
-	if err := templates.ExecuteTemplate(&output, "account.tmpl", map[string]any{"User": &user, "CurrentUser": &user, "CSRFField": template.HTML(`<input name="_csrf">`)}); err != nil {
+	if err := templates.ExecuteTemplate(&output, "account/profile/view", map[string]any{"User": &user, "CurrentUser": &user, "CSRFField": template.HTML(`<input name="_csrf">`)}); err != nil {
 		t.Fatal(err)
 	}
 	body := output.String()
@@ -139,7 +139,7 @@ func TestTwoFactorManagementTemplateShowsEnabledState(t *testing.T) {
 	}
 	user := models.User{TwoFactorEnabled: true}
 	var output bytes.Buffer
-	if err := templates.ExecuteTemplate(&output, "two_factor.tmpl", map[string]any{
+	if err := templates.ExecuteTemplate(&output, "account/security/two-factor", map[string]any{
 		"User":      &user,
 		"CSRFField": template.HTML(`<input type="hidden" name="_csrf">`),
 	}); err != nil {
@@ -171,7 +171,7 @@ func TestCheckoutTemplateUsesServerSummaryAndSafePaymentOptions(t *testing.T) {
 		TotalCents    int64
 	}{Cart: &models.Cart{Items: []models.CartItem{{Product: product, Quantity: 2}}}, SubtotalCents: 4000, ShippingCents: 499, TotalCents: 4499}
 	var output bytes.Buffer
-	if err := templates.ExecuteTemplate(&output, "checkout.tmpl", map[string]any{"CurrentUser": &user, "Addresses": []models.UserAddress{address}, "Summary": summary, "IdempotencyKey": strings.Repeat("a", 64), "CSRFField": template.HTML("csrf")}); err != nil {
+	if err := templates.ExecuteTemplate(&output, "checkout/index", map[string]any{"CurrentUser": &user, "Addresses": []models.UserAddress{address}, "Summary": summary, "IdempotencyKey": strings.Repeat("a", 64), "CSRFField": template.HTML("csrf")}); err != nil {
 		t.Fatal(err)
 	}
 	body := output.String()
@@ -229,7 +229,7 @@ func TestOrderDetailUsesEachActiveProductsCoverAndLink(t *testing.T) {
 		},
 	}
 	var output bytes.Buffer
-	if err := templates.ExecuteTemplate(&output, "order_detail.tmpl", map[string]any{"Order": order}); err != nil {
+	if err := templates.ExecuteTemplate(&output, "account/orders/view", map[string]any{"Order": order}); err != nil {
 		t.Fatalf("execute order detail template: %v", err)
 	}
 	body := output.String()
@@ -305,7 +305,7 @@ func TestAdminUsersTemplateRendersSecureEditForms(t *testing.T) {
 	admin := models.User{Model: gorm.Model{ID: 1}, Name: "Admin User", Email: "admin@example.com", Role: models.RoleAdmin}
 	employee := models.User{Model: gorm.Model{ID: 7}, Name: "Employee User", Email: "employee@example.com", Role: models.RoleEmployee}
 	var output bytes.Buffer
-	if err := templates.ExecuteTemplate(&output, "admin_users.tmpl", map[string]any{
+	if err := templates.ExecuteTemplate(&output, "admin/users/index", map[string]any{
 		"CurrentUser":  &admin,
 		"Users":        []models.User{admin, employee},
 		"CSRFField":    template.HTML(`<input type="hidden" name="_csrf" value="test">`),
@@ -367,7 +367,7 @@ func TestEmployeeProductsTemplateRendersMultiImageManagement(t *testing.T) {
 		},
 	}
 	var output bytes.Buffer
-	if err := templates.ExecuteTemplate(&output, "employee_products.tmpl", map[string]any{
+	if err := templates.ExecuteTemplate(&output, "employee/products/index", map[string]any{
 		"CurrentUser":          &employee,
 		"Products":             []models.Product{product},
 		"EditProduct":          &product,
@@ -404,7 +404,7 @@ func TestAdminCategoriesRendersTableNewAndEditControls(t *testing.T) {
 	}
 	category := models.Category{Model: gorm.Model{ID: 7}, Name: "Electronics", Description: "Devices and accessories"}
 	var output bytes.Buffer
-	if err := templates.ExecuteTemplate(&output, "admin_categories.tmpl", map[string]any{
+	if err := templates.ExecuteTemplate(&output, "admin/categories/index", map[string]any{
 		"Categories": []models.Category{category}, "ViewCategory": &category, "EditCategory": &category, "DeleteCategory": &category,
 		"CSRFField": template.HTML(`<input type="hidden" name="csrf">`),
 	}); err != nil {
@@ -433,7 +433,7 @@ func TestEmployeeProductsTemplateRendersInactiveProductActivation(t *testing.T) 
 	employee := models.User{Model: gorm.Model{ID: 2}, Name: "Employee User", Role: models.RoleEmployee}
 	product := models.Product{Model: gorm.Model{ID: 8}, Name: "Inactive Product", PriceCents: 4530, Active: false}
 	var output bytes.Buffer
-	if err := templates.ExecuteTemplate(&output, "employee_products.tmpl", map[string]any{
+	if err := templates.ExecuteTemplate(&output, "employee/products/index", map[string]any{
 		"CurrentUser": &employee, "Products": []models.Product{product}, "EditProduct": &product,
 		"CSRFField": template.HTML("csrf"), "ImageMaxMB": 5, "ImageLimit": 8, "SelectedAvailability": "all",
 	}); err != nil {
@@ -459,12 +459,12 @@ func TestDashboardLowStockAndPendingCardsAreAccessibleLinks(t *testing.T) {
 		want     []string
 	}{
 		{
-			name: "employee", template: "employee_dashboard.tmpl",
+			name: "employee", template: "employee/dashboard/index",
 			data: map[string]any{"PendingOrders": int64(12), "LowStockProducts": int64(8)},
 			want: []string{`class="card stat-card stat-card-link h-100" href="/employee/orders?status=pending"`, `aria-label="View 12 pending orders"`, `href="/employee/products?stock_status=low"`, `aria-label="View 8 low-stock products"`},
 		},
 		{
-			name: "admin", template: "admin_dashboard.tmpl",
+			name: "admin", template: "admin/dashboard/index",
 			data: map[string]any{"PendingOrders": int64(12), "LowStock": int64(8), "RevenueCents": int64(0)},
 			want: []string{`class="card stat-card stat-card-link h-100" href="/admin/orders?status=pending"`, `aria-label="View 12 pending orders"`, `href="/employee/products?stock_status=low"`, `aria-label="View 8 low-stock products"`},
 		},
@@ -496,17 +496,17 @@ func TestManagementTemplatesShowRemovableFiltersAndEmptyStates(t *testing.T) {
 		want     []string
 	}{
 		{
-			name: "low stock products", template: "employee_products.tmpl",
+			name: "low stock products", template: "employee/products/index",
 			data: map[string]any{"Products": []models.Product{}, "LowStockFilter": true, "SelectedStockStatus": "low", "SelectedAvailability": "all", "DashboardURL": "/employee/dashboard", "ImageMaxMB": 5, "ImageLimit": 8},
 			want: []string{"Low Stock Products", `name="stock_status"`, `value="low" selected`, `aria-label="Remove low-stock filter"`, `href="/employee/dashboard"`, "No low-stock products."},
 		},
 		{
-			name: "employee pending orders", template: "employee_orders.tmpl",
+			name: "employee pending orders", template: "employee/orders/index",
 			data: map[string]any{"Orders": []models.Order{}, "PendingFilter": true, "SelectedStatus": "pending", "SelectedSort": "id_desc", "Statuses": []models.OrderStatus{models.OrderStatusPending}, "DashboardURL": "/employee/dashboard"},
 			want: []string{"Pending Orders", `value="pending" selected`, `aria-label="Remove pending filter"`, `href="/employee/dashboard"`, "No pending orders."},
 		},
 		{
-			name: "admin pending orders", template: "admin_orders.tmpl",
+			name: "admin pending orders", template: "admin/orders/index",
 			data: map[string]any{"Orders": []models.Order{}, "PendingFilter": true, "SelectedStatus": "pending", "SelectedSort": "id_desc", "Statuses": []models.OrderStatus{models.OrderStatusPending}, "DashboardURL": "/admin/dashboard"},
 			want: []string{"Pending Orders", `value="pending" selected`, `aria-label="Remove pending filter"`, `href="/admin/dashboard"`, "No pending orders."},
 		},
@@ -589,7 +589,7 @@ func TestEmployeeOrdersShowsOnlyAllowedTransitions(t *testing.T) {
 				"Orders":       []models.Order{{Model: gorm.Model{ID: 7}, Status: tt.status}},
 				"SelectedSort": "id_desc",
 			}
-			if err := templates.ExecuteTemplate(&output, "employee_orders.tmpl", data); err != nil {
+			if err := templates.ExecuteTemplate(&output, "employee/orders/index", data); err != nil {
 				t.Fatalf("execute template: %v", err)
 			}
 			body := output.String()
@@ -622,7 +622,7 @@ func TestEmployeeOrdersRendersFiltersAndSorting(t *testing.T) {
 		"SelectedSort":   "total_desc",
 		"CSRFField":      template.HTML(`<input type="hidden" name="csrf">`),
 	}
-	if err := templates.ExecuteTemplate(&output, "employee_orders.tmpl", data); err != nil {
+	if err := templates.ExecuteTemplate(&output, "employee/orders/index", data); err != nil {
 		t.Fatalf("execute employee orders template: %v", err)
 	}
 	body := output.String()
@@ -656,7 +656,7 @@ func TestAdminOrdersRendersUserAndStatusFilters(t *testing.T) {
 		"PageNumbers":     []int{1, 2, 3},
 		"PaginationQuery": "sort=total_desc&status=processing&user=ada%40example.com",
 	}
-	if err := templates.ExecuteTemplate(&output, "admin_orders.tmpl", data); err != nil {
+	if err := templates.ExecuteTemplate(&output, "admin/orders/index", data); err != nil {
 		t.Fatalf("execute admin orders template: %v", err)
 	}
 	body := output.String()
@@ -694,7 +694,7 @@ func TestAdminLogsRendersStructuredEntriesAndEscapesValues(t *testing.T) {
 		"Limit":  100,
 		"Search": "",
 	}
-	if err := templates.ExecuteTemplate(&output, "admin_logs.tmpl", data); err != nil {
+	if err := templates.ExecuteTemplate(&output, "admin/logs/index", data); err != nil {
 		t.Fatalf("execute log template: %v", err)
 	}
 	body := output.String()

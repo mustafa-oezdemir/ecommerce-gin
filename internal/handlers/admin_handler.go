@@ -64,7 +64,7 @@ func (h *AdminHandler) Dashboard(c *gin.Context) {
 			return
 		}
 	}
-	c.HTML(http.StatusOK, "admin_dashboard.tmpl", viewData(c, gin.H{"Customers": customers, "Employees": employees, "Products": products, "PendingOrders": pendingOrders, "LowStock": lowStock, "TotalOrders": totalOrders, "RevenueCents": revenue.Total}))
+	c.HTML(http.StatusOK, "admin/dashboard/index", viewData(c, gin.H{"Customers": customers, "Employees": employees, "Products": products, "PendingOrders": pendingOrders, "LowStock": lowStock, "TotalOrders": totalOrders, "RevenueCents": revenue.Total}))
 }
 
 func (h *AdminHandler) ListUsers(c *gin.Context) {
@@ -106,7 +106,7 @@ func (h *AdminHandler) renderUsers(c *gin.Context, status int, errorMessage stri
 	case "deleted":
 		data["Success"] = "The user was deleted successfully."
 	}
-	c.HTML(status, "admin_users.tmpl", viewData(c, data))
+	c.HTML(status, "admin/users/index", viewData(c, data))
 }
 
 func (h *AdminHandler) Logs(c *gin.Context) {
@@ -133,7 +133,7 @@ func (h *AdminHandler) Logs(c *gin.Context) {
 		}
 	}
 	c.Header("Cache-Control", "no-store")
-	c.HTML(http.StatusOK, "admin_logs.tmpl", viewData(c, gin.H{
+	c.HTML(http.StatusOK, "admin/logs/index", viewData(c, gin.H{
 		"Snapshot":    snapshot,
 		"Level":       level,
 		"Limit":       limit,
@@ -339,7 +339,7 @@ func (h *AdminHandler) ListOrders(c *gin.Context) {
 		"sort":   []string{selectedSort},
 	}.Encode()
 
-	c.HTML(http.StatusOK, "admin_orders.tmpl", viewData(c, gin.H{
+	c.HTML(http.StatusOK, "admin/orders/index", viewData(c, gin.H{
 		"Orders":          orders,
 		"Statuses":        managementOrderStatuses,
 		"UserSearch":      userSearch,
@@ -399,7 +399,7 @@ func (h *AdminHandler) renderCategories(c *gin.Context, status int, errorMessage
 	case "deleted":
 		data["Success"] = "The category was deleted successfully."
 	}
-	c.HTML(status, "admin_categories.tmpl", viewData(c, data))
+	c.HTML(status, "admin/categories/index", viewData(c, data))
 }
 
 func categoryFromQuery(categories []models.Category, value string) *models.Category {
