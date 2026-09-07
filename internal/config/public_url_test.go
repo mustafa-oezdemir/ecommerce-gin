@@ -32,3 +32,12 @@ func TestValidatePublicURL(t *testing.T) {
 		})
 	}
 }
+
+func TestRenderPortTakesPrecedence(t *testing.T) {
+	t.Setenv("PORT", "10000")
+	t.Setenv("APP_PORT", "8080")
+
+	if got := firstEnvironment("PORT", "APP_PORT"); got != "10000" {
+		t.Fatalf("expected Render PORT, got %q", got)
+	}
+}
