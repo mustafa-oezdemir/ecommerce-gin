@@ -9,6 +9,8 @@
 
 A secure, server-rendered e-commerce demo built with Go, Gin, GORM, and MySQL. It includes customer shopping flows, operational tooling for employees, and an admin back office—ready to run as a local Docker stack.
 
+The application works together with the independent Go/Gin `shipping-service` microservice for shipment creation, returns, tracking, labels, QR codes, and delivery status updates. The two services communicate through authenticated REST APIs and keep separate databases; neither service accesses the other's database directly.
+
 ## Highlights
 
 - **Customer experience** — browse products, manage a cart, complete checkout, and view orders.
@@ -24,23 +26,23 @@ A secure, server-rendered e-commerce demo built with Go, Gin, GORM, and MySQL. I
 
 ## Stack
 
-| Area | Technology |
-| --- | --- |
-| Application | Go, Gin, GORM |
-| Database | MySQL 8 |
-| UI | Server-rendered HTML templates |
-| Filter UI | Alpine.js CSP build (self-hosted) |
-| Local platform | Docker Compose, MailHog |
-| Monitoring | Prometheus, Grafana |
+| Area            | Technology                               |
+| --------------- | ---------------------------------------- |
+| Application     | Go, Gin, GORM                            |
+| Database        | MySQL 8                                  |
+| UI              | Server-rendered HTML templates           |
+| Filter UI       | Alpine.js CSP build (self-hosted)        |
+| Local platform  | Docker Compose, MailHog                  |
+| Monitoring      | Prometheus, Grafana                      |
 | Upload security | ClamAV (`clamd`) and image re-encoding |
 
 ## Roles
 
-| Role | Capabilities |
-| --- | --- |
+| Role     | Capabilities                                                                                                                        |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------- |
 | Customer | Browse products, manage own cart, favorites and lists, checkout, review verified purchases, manage account security, see own orders |
-| Employee | Operational dashboard, products, inventory and order status transitions |
-| Admin | Employee capabilities plus dashboards, users and category management |
+| Employee | Operational dashboard, products, inventory and order status transitions                                                             |
+| Admin    | Employee capabilities plus dashboards, users and category management                                                                |
 
 ## Quick start
 
@@ -61,30 +63,30 @@ docker compose run --rm app /app/seed
 
 ### 3. Open the services
 
-| Service | Address |
-| --- | --- |
+| Service    | Address               |
+| ---------- | --------------------- |
 | Storefront | http://localhost:8080 |
-| MailHog | http://localhost:8025 |
+| MailHog    | http://localhost:8025 |
 | Prometheus | http://localhost:9090 |
-| Grafana | http://localhost:3000 |
+| Grafana    | http://localhost:3000 |
 
 ## URL environments
 
 Public browser origins and private service addresses are separate configuration values:
 
-| Environment | E-Commerce | Shipping |
-| --- | --- | --- |
-| Local browser | `http://localhost:8080` | `http://localhost:8090` |
-| Docker internal | `http://ecommerce-app:8080` | `http://shipping-app:8090` |
+| Environment               | E-Commerce                         | Shipping                          |
+| ------------------------- | ---------------------------------- | --------------------------------- |
+| Local browser             | `http://localhost:8080`          | `http://localhost:8090`         |
+| Docker internal           | `http://ecommerce-app:8080`      | `http://shipping-app:8090`      |
 | Planned production target | `https://pehlione-ecommerce.com` | `https://pehlione-shipping.com` |
 
 The production target domains are not assumed to be live. They become usable only after DNS, reverse-proxy, TLS, and server deployment are complete. Browser links use `APP_URL` and `SHIPPING_PUBLIC_URL`; service calls use `SHIPPING_API_URL` and the Bearer API token. A process running directly on the host can override the private Shipping address with `http://localhost:8090`.
 
 Seed users exist only for development/test:
 
-| Role | Email | Password |
-| --- | --- | --- |
-| Admin | `admin@example.com` | `AdminPass123!` |
+| Role     | Email                    | Password             |
+| -------- | ------------------------ | -------------------- |
+| Admin    | `admin@example.com`    | `AdminPass123!`    |
 | Employee | `employee@example.com` | `EmployeePass123!` |
 | Customer | `customer@example.com` | `CustomerPass123!` |
 
@@ -92,56 +94,56 @@ Never use these seed accounts or their passwords in production. The seed command
 
 ## Application areas
 
-| Area | Routes | Access |
-| --- | --- | --- |
-| Shop | `/`, `/products`, `/cart`, `/checkout` | Customer actions require sign-in |
-| Account security | `/account`, `/account/two-factor` | Any signed-in user |
-| Customer account | `/account/orders`, `/account/lists`, `/account/addresses` | Signed-in customer |
-| Payment webhooks | `/webhooks/payments/:provider` | Provider HMAC signature required |
-| Product engagement | `/products/:id/favorite`, `/products/:id/lists`, `/products/:id/reviews`, `/reviews/:id` | Signed-in customer; JSON/AJAX |
-| Two-factor challenge | `/auth/two-factor-challenge` | Password-verified session awaiting TOTP/recovery code |
-| Employee | `/employee/*` | Employee or admin |
-| Admin | `/admin/*` | Admin only |
-| Health | `/health/live`, `/health/ready` (`/healthz`, `/readyz` aliases) | Public |
+| Area                 | Routes                                                                                           | Access                                                |
+| -------------------- | ------------------------------------------------------------------------------------------------ | ----------------------------------------------------- |
+| Shop                 | `/`, `/products`, `/cart`, `/checkout`                                                   | Customer actions require sign-in                      |
+| Account security     | `/account`, `/account/two-factor`                                                            | Any signed-in user                                    |
+| Customer account     | `/account/orders`, `/account/lists`, `/account/addresses`                                  | Signed-in customer                                    |
+| Payment webhooks     | `/webhooks/payments/:provider`                                                                 | Provider HMAC signature required                      |
+| Product engagement   | `/products/:id/favorite`, `/products/:id/lists`, `/products/:id/reviews`, `/reviews/:id` | Signed-in customer; JSON/AJAX                         |
+| Two-factor challenge | `/auth/two-factor-challenge`                                                                   | Password-verified session awaiting TOTP/recovery code |
+| Employee             | `/employee/*`                                                                                  | Employee or admin                                     |
+| Admin                | `/admin/*`                                                                                     | Admin only                                            |
+| Health               | `/health/live`, `/health/ready` (`/healthz`, `/readyz` aliases)                          | Public                                                |
 
 ## Configuration
 
 Copy `.env.example` and keep `.env` private. Docker passes only application-required values to the app container; the MySQL root password is not exposed to it. `SMTP_*` targets MailHog only and is disabled by the application in production.
 
-| Variable | Purpose |
-| --- | --- |
-| `APP_ENV` | `development`, `test`, or `production` |
-| `TRUSTED_PROXIES` | Comma-separated proxy IPs/CIDRs; leave empty for direct traffic |
-| `APP_URL` | Canonical browser origin; required and HTTPS-only in production |
-| `APP_PORT` | Application HTTP port |
-| `ECOMMERCE_HOST_PORT` | Docker host port for the main application (default `8080`) |
-| `METRICS_PORT` | Internal Prometheus metrics port |
-| `LOG_LEVEL` | Minimum log level: `debug`, `info`, `warn`, or `error` |
-| `LOG_CONSOLE_FORMAT` | Console output format: `text` or `json` |
-| `LOG_FILE` | Rotating application log path; Docker uses `/app/logs/ecommerce.log` |
-| `LOG_MAX_SIZE_MB`, `LOG_MAX_BACKUPS`, `LOG_MAX_AGE_DAYS` | File rotation and retention limits |
-| `LOG_COMPRESS`, `LOG_ADD_SOURCE` | Compress rotated files and optionally include source locations |
-| `HTTP_READ_HEADER_TIMEOUT`, `HTTP_READ_TIMEOUT`, `HTTP_WRITE_TIMEOUT`, `HTTP_IDLE_TIMEOUT` | Public and metrics server connection timeouts |
-| `HTTP_SHUTDOWN_TIMEOUT` | Maximum graceful-shutdown duration before connections are forced closed |
-| `HTTP_MAX_HEADER_BYTES` | Maximum accepted HTTP request-header size |
-| `PRODUCT_IMAGE_DIRECTORY` | Private storage directory for sanitized product images |
-| `PRODUCT_IMAGE_MAX_BYTES` | Maximum uploaded and sanitized image size in bytes |
-| `PRODUCT_IMAGE_MAX_WIDTH`, `PRODUCT_IMAGE_MAX_HEIGHT`, `PRODUCT_IMAGE_MAX_PIXELS` | Decoded-image limits that prevent image bombs |
-| `PROFILE_IMAGE_DIRECTORY` | Private storage directory for sanitized user profile photos |
-| `PROFILE_IMAGE_MAX_BYTES` | Maximum uploaded and sanitized profile-photo size in bytes |
-| `PROFILE_IMAGE_MAX_WIDTH`, `PROFILE_IMAGE_MAX_HEIGHT`, `PROFILE_IMAGE_MAX_PIXELS` | Profile-photo decode limits that prevent image bombs |
-| `CLAMAV_ADDRESS`, `CLAMAV_SCAN_TIMEOUT` | Internal `clamd` endpoint and fail-closed scan timeout |
-| `MYSQL_*` | MySQL connection settings |
-| `DB_MAX_OPEN_CONNS`, `DB_MAX_IDLE_CONNS` | Database connection pool limits |
-| `DB_CONN_MAX_LIFETIME`, `DB_CONN_MAX_IDLE_TIME` | Connection rotation and idle limits |
-| `DB_CONNECT_TIMEOUT`, `DB_READ_TIMEOUT`, `DB_WRITE_TIMEOUT`, `DB_PING_TIMEOUT` | Database network and startup health timeouts |
-| `SESSION_SECRET` | Cookie-session signing secret |
-| `SESSION_SECURE` | Set to `true` in production |
-| `PAYMENT_WEBHOOK_SECRET` | At least 32 random characters used to authenticate payment webhook bodies |
-| `CSRF_SECRET` | Base64-encoded 32-byte CSRF key |
-| `SECURITY_ENCRYPTION_KEY` | Independent base64-encoded 32-byte AES/HMAC key for TOTP secrets and one-time code hashes; mandatory in production |
-| `SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM` | Outbound email endpoint and sender; Compose points these to MailHog |
-| `SMTP_USERNAME`, `SMTP_PASSWORD` | Production SMTP credentials; required before production email delivery is enabled |
+| Variable                                                                                           | Purpose                                                                                                            |
+| -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `APP_ENV`                                                                                        | `development`, `test`, or `production`                                                                       |
+| `TRUSTED_PROXIES`                                                                                | Comma-separated proxy IPs/CIDRs; leave empty for direct traffic                                                    |
+| `APP_URL`                                                                                        | Canonical browser origin; required and HTTPS-only in production                                                    |
+| `APP_PORT`                                                                                       | Application HTTP port                                                                                              |
+| `ECOMMERCE_HOST_PORT`                                                                            | Docker host port for the main application (default`8080`)                                                        |
+| `METRICS_PORT`                                                                                   | Internal Prometheus metrics port                                                                                   |
+| `LOG_LEVEL`                                                                                      | Minimum log level:`debug`, `info`, `warn`, or `error`                                                      |
+| `LOG_CONSOLE_FORMAT`                                                                             | Console output format:`text` or `json`                                                                         |
+| `LOG_FILE`                                                                                       | Rotating application log path; Docker uses`/app/logs/ecommerce.log`                                              |
+| `LOG_MAX_SIZE_MB`, `LOG_MAX_BACKUPS`, `LOG_MAX_AGE_DAYS`                                     | File rotation and retention limits                                                                                 |
+| `LOG_COMPRESS`, `LOG_ADD_SOURCE`                                                               | Compress rotated files and optionally include source locations                                                     |
+| `HTTP_READ_HEADER_TIMEOUT`, `HTTP_READ_TIMEOUT`, `HTTP_WRITE_TIMEOUT`, `HTTP_IDLE_TIMEOUT` | Public and metrics server connection timeouts                                                                      |
+| `HTTP_SHUTDOWN_TIMEOUT`                                                                          | Maximum graceful-shutdown duration before connections are forced closed                                            |
+| `HTTP_MAX_HEADER_BYTES`                                                                          | Maximum accepted HTTP request-header size                                                                          |
+| `PRODUCT_IMAGE_DIRECTORY`                                                                        | Private storage directory for sanitized product images                                                             |
+| `PRODUCT_IMAGE_MAX_BYTES`                                                                        | Maximum uploaded and sanitized image size in bytes                                                                 |
+| `PRODUCT_IMAGE_MAX_WIDTH`, `PRODUCT_IMAGE_MAX_HEIGHT`, `PRODUCT_IMAGE_MAX_PIXELS`            | Decoded-image limits that prevent image bombs                                                                      |
+| `PROFILE_IMAGE_DIRECTORY`                                                                        | Private storage directory for sanitized user profile photos                                                        |
+| `PROFILE_IMAGE_MAX_BYTES`                                                                        | Maximum uploaded and sanitized profile-photo size in bytes                                                         |
+| `PROFILE_IMAGE_MAX_WIDTH`, `PROFILE_IMAGE_MAX_HEIGHT`, `PROFILE_IMAGE_MAX_PIXELS`            | Profile-photo decode limits that prevent image bombs                                                               |
+| `CLAMAV_ADDRESS`, `CLAMAV_SCAN_TIMEOUT`                                                        | Internal`clamd` endpoint and fail-closed scan timeout                                                            |
+| `MYSQL_*`                                                                                        | MySQL connection settings                                                                                          |
+| `DB_MAX_OPEN_CONNS`, `DB_MAX_IDLE_CONNS`                                                       | Database connection pool limits                                                                                    |
+| `DB_CONN_MAX_LIFETIME`, `DB_CONN_MAX_IDLE_TIME`                                                | Connection rotation and idle limits                                                                                |
+| `DB_CONNECT_TIMEOUT`, `DB_READ_TIMEOUT`, `DB_WRITE_TIMEOUT`, `DB_PING_TIMEOUT`             | Database network and startup health timeouts                                                                       |
+| `SESSION_SECRET`                                                                                 | Cookie-session signing secret                                                                                      |
+| `SESSION_SECURE`                                                                                 | Set to`true` in production                                                                                       |
+| `PAYMENT_WEBHOOK_SECRET`                                                                         | At least 32 random characters used to authenticate payment webhook bodies                                          |
+| `CSRF_SECRET`                                                                                    | Base64-encoded 32-byte CSRF key                                                                                    |
+| `SECURITY_ENCRYPTION_KEY`                                                                        | Independent base64-encoded 32-byte AES/HMAC key for TOTP secrets and one-time code hashes; mandatory in production |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM`                                                        | Outbound email endpoint and sender; Compose points these to MailHog                                                |
+| `SMTP_USERNAME`, `SMTP_PASSWORD`                                                               | Production SMTP credentials; required before production email delivery is enabled                                  |
 
 Use `MYSQL_HOST=127.0.0.1` and `MYSQL_PORT=3307` for a host process; the Docker application receives `MYSQL_HOST=mysql` and port `3306`.
 
@@ -178,25 +180,25 @@ flowchart TD
 
 The local endpoints are:
 
-| Component | Host URL | Container target |
-| --- | --- | --- |
-| E-Commerce | `http://localhost:8080` | `app:8080` |
-| Shipping | `http://localhost:8090` | `shipping-app:8090` |
-| Prometheus | `http://localhost:9090` | `prometheus:9090` |
-| Grafana | `http://localhost:3000` | `grafana:3000` |
-| E-Commerce metrics | not published | `app:9091` |
-| Shipping metrics | not published | `shipping-app:9092` |
+| Component          | Host URL                  | Container target      |
+| ------------------ | ------------------------- | --------------------- |
+| E-Commerce         | `http://localhost:8080` | `app:8080`          |
+| Shipping           | `http://localhost:8090` | `shipping-app:8090` |
+| Prometheus         | `http://localhost:9090` | `prometheus:9090`   |
+| Grafana            | `http://localhost:3000` | `grafana:3000`      |
+| E-Commerce metrics | not published             | `app:9091`          |
+| Shipping metrics   | not published             | `shipping-app:9092` |
 
 Grafana provisions one datasource and the `PehliOne Monitoring` folder from version-controlled files. Every dashboard defaults to the last 15 minutes, refreshes every five seconds, and is arranged for a 1920×1080 operations screen:
 
-| Order | Dashboard | UID |
-| --- | --- | --- |
-| 01 | PehliOne System Overview | `pehlione-overview` |
-| 02 | E-Commerce Operations | `pehlione-ecommerce` |
-| 03 | Shipping Operations | `pehlione-shipping` |
-| 04 | E-Commerce ↔ Shipping Integration | `pehlione-integration` |
-| 05 | Infrastructure & Reliability | `pehlione-infra` |
-| 06 | Security & Authentication | `pehlione-security` |
+| Order | Dashboard                          | UID                      |
+| ----- | ---------------------------------- | ------------------------ |
+| 01    | PehliOne System Overview           | `pehlione-overview`    |
+| 02    | E-Commerce Operations              | `pehlione-ecommerce`   |
+| 03    | Shipping Operations                | `pehlione-shipping`    |
+| 04    | E-Commerce ↔ Shipping Integration | `pehlione-integration` |
+| 05    | Infrastructure & Reliability       | `pehlione-infra`       |
+| 06    | Security & Authentication          | `pehlione-security`    |
 
 The one-shot `grafana-playlist-provisioner` service creates or updates `PehliOne Operations` with a 15-second rotation. To run it again after editing dashboard order:
 
