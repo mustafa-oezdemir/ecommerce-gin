@@ -83,7 +83,7 @@ func Load() *Config {
 	_ = godotenv.Load("../.env")
 
 	appEnv := strings.TrimSpace(os.Getenv("APP_ENV"))
-	appPort := strings.TrimSpace(os.Getenv("APP_PORT"))
+	appPort := firstEnvironment("PORT", "APP_PORT")
 	appURL := strings.TrimSpace(os.Getenv("APP_URL"))
 	metricsPort := strings.TrimSpace(os.Getenv("METRICS_PORT"))
 	ginMode := strings.TrimSpace(os.Getenv("GIN_MODE"))
