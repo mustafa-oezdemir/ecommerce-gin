@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/middleware"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/models"
+	"github.com/mustafa-oezdemir/ecommerce-gin/internal/repositories"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/services"
 	shippingapi "github.com/mustafa-oezdemir/ecommerce-gin/internal/shipping"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/validation"
@@ -22,6 +23,7 @@ type ShopHandler struct {
 	engagement   *services.ProductEngagementService
 	listService  *services.ProductListService
 	shipping     *services.ShippingService
+	discovery    *services.ProductDiscoveryService
 }
 
 func NewShopHandler(database *gorm.DB, shippingService *services.ShippingService) *ShopHandler {
@@ -31,29 +33,26 @@ func NewShopHandler(database *gorm.DB, shippingService *services.ShippingService
 	if shippingService == nil {
 		panic("handlers: shipping service is required")
 	}
-	return &ShopHandler{database: database, cartService: services.NewCartService(database), orderService: services.NewOrderService(database), engagement: services.NewProductEngagementService(database), listService: services.NewProductListService(database), shipping: shippingService}
+	return &ShopHandler{database: database, cartService: services.NewCartService(database), orderService: services.NewOrderService(database), engagement: services.NewProductEngagementService(database), listService: services.NewProductListService(database), shipping: shippingService, discovery: services.NewProductDiscoveryService(repositories.NewProductRepository(database))}
 }
 
 func (h *ShopHandler) Home(c *gin.Context)         { h.renderProducts(c) }
 func (h *ShopHandler) ListProducts(c *gin.Context) { h.renderProducts(c) }
 
 func (h *ShopHandler) renderProducts(c *gin.Context) {
-	var products []models.Product
-	selectedCategoryID := uint(0)
-	if categoryID, err := strconv.ParseUint(c.Query("category"), 10, 64); err == nil && categoryID > 0 {
-		selectedCategoryID = uint(categoryID)
+	filters, err := parseProductFilters(c.Request.URL.Query())
+	if err != nil {
+		c.String(http.StatusBadRequest, "Invalid product filters")
+		return
 	}
-	query := h.database.WithContext(c.Request.Context()).Preload("Category").Where("active = ?", true).Order("created_at DESC")
-	if selectedCategoryID > 0 {
-		query = query.Where("category_id = ?", selectedCategoryID)
-	}
-	if err := query.Find(&products).Error; err != nil {
+	result, err := h.discovery.Search(c.Request.Context(), filters.discoveryRequest())
+	if err != nil {
 		c.String(http.StatusInternalServerError, "Could not load products")
 		return
 	}
-	productIDs := make([]uint, len(products))
-	for i := range products {
-		productIDs[i] = products[i].ID
+	productIDs := make([]uint, len(result.Products))
+	for i := range result.Products {
+		productIDs[i] = result.Products[i].ID
 	}
 	ratings, err := h.engagement.ReviewSummaries(c.Request.Context(), productIDs)
 	if err != nil {
@@ -64,12 +63,11 @@ func (h *ShopHandler) renderProducts(c *gin.Context) {
 	if user, ok := middleware.CurrentUser(c); ok {
 		favorites, _ = h.engagement.FavoriteProductIDs(c.Request.Context(), user.ID)
 	}
-	var categories []models.Category
-	if err := h.database.WithContext(c.Request.Context()).Order("name ASC").Find(&categories).Error; err != nil {
-		c.String(http.StatusInternalServerError, "Could not load products")
-		return
-	}
-	c.HTML(http.StatusOK, "product_list.tmpl", viewData(c, gin.H{"Products": products, "Categories": categories, "CategoryID": selectedCategoryID, "Ratings": ratings, "Favorites": favorites}))
+	filterView := newProductFilterView(c.Request.URL.Query(), filters, result)
+	c.HTML(http.StatusOK, "product_list.tmpl", viewData(c, gin.H{
+		"Products": result.Products, "Categories": result.Options.Categories, "Ratings": ratings,
+		"Favorites": favorites, "ProductFilters": filterView, "ProductResult": result,
+	}))
 }
 
 func (h *ShopHandler) ProductDetail(c *gin.Context) {
