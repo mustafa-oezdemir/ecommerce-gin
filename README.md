@@ -68,6 +68,18 @@ docker compose run --rm app /app/seed
 | Prometheus | http://localhost:9090 |
 | Grafana | http://localhost:3000 |
 
+## URL environments
+
+Public browser origins and private service addresses are separate configuration values:
+
+| Environment | E-Commerce | Shipping |
+| --- | --- | --- |
+| Local browser | `http://localhost:8080` | `http://localhost:8090` |
+| Docker internal | `http://ecommerce-app:8080` | `http://shipping-app:8090` |
+| Planned production target | `https://pehlione-ecommerce.com` | `https://pehlione-shipping.com` |
+
+The production target domains are not assumed to be live. They become usable only after DNS, reverse-proxy, TLS, and server deployment are complete. Browser links use `APP_URL` and `SHIPPING_PUBLIC_URL`; service calls use `SHIPPING_API_URL` and the Bearer API token. A process running directly on the host can override the private Shipping address with `http://localhost:8090`.
+
 Seed users exist only for development/test:
 
 | Role | Email | Password |
@@ -292,6 +304,10 @@ sequenceDiagram
 
 Shipping configuration uses `SHIPPING_API_URL` for the backend-only service address, `SHIPPING_PUBLIC_URL` for the browser-reachable tracking origin, `SHIPPING_API_TOKEN` for E-Commerce → Shipping authentication, `SHIPPING_TO_ECOMMERCE_TOKEN` for callbacks, optional `SHIPPING_TO_ECOMMERCE_PREVIOUS_TOKEN` during rotation, and `SHIPPING_API_TIMEOUT` for the bounded HTTP client timeout.
 
+### Internal Service API
+
+Shipping routes under `/api/v1/...` are trusted service-to-service endpoints, not a public browser API. E-Commerce authenticates every call with `Authorization: Bearer <API_TOKEN>` and uses the private `http://shipping-app:8090` Docker address in both development and production Compose environments. Missing or incorrect tokens return HTTP 401. Tokens remain server-side and are never included in templates, browser links, QR codes, or API responses.
+
 When the repositories are started with their separate development Compose files, create the shared private network once with `docker network create pehlione-backend`. The ignored `docker-compose.override.yml` attaches the application as `ecommerce-app` and configures Shipping at `http://shipping-app:8090`; browser links continue to use `http://localhost:8090`.
 
 Employee handover calls `POST /api/v1/shipments` with a stable per-order idempotency key. Customer order details refresh through `GET /api/v1/shipments/order/:orderID` and load `GET /api/v1/shipments/:trackingNumber/events`. Cached shipment data keeps the order page available during a Shipping outage. Callbacks arrive at `POST /api/v1/internal/shipping/events`, use timing-safe bearer-token authentication, and are deduplicated by a database-unique `event_id`.
@@ -319,9 +335,9 @@ docker compose config
 
 CI runs formatting, vetting, tests, race detection, and builds. The security workflow runs `govulncheck` and `gosec`; Dependabot tracks Go, Docker and GitHub Actions updates.
 
-## Production notes
+## Planned production deployment
 
-The repository includes a production stack for both repositories. It terminates TLS with Caddy and exposes only ports 80/443; E-Commerce, Shipping, metrics, ClamAV, and both MySQL databases remain on Docker networks.
+The repository includes a target production stack for both repositories. The `pehlione-*` domains in that configuration are deployment targets, not a claim that they are currently online. After deployment, Caddy terminates TLS and exposes only ports 80/443; E-Commerce, Shipping, metrics, ClamAV, and both MySQL databases remain on Docker networks.
 
 Prerequisites:
 
@@ -343,7 +359,7 @@ docker compose --env-file .env.production -f docker-compose.production.yml ps
 docker compose --env-file .env.production -f docker-compose.production.yml logs caddy
 ```
 
-Production routing is intentionally split:
+Target production routing is intentionally split:
 
 - Browser E-Commerce URL: `https://pehlione-ecommerce.com`
 - Browser Shipping/tracking URL and QR origin: `https://pehlione-shipping.com`
@@ -352,7 +368,7 @@ Production routing is intentionally split:
 
 The application rejects non-HTTPS `APP_URL` and `SHIPPING_PUBLIC_URL` values in production. Session and CSRF cookies are host-only, `Secure`, `HttpOnly`, and `SameSite=Lax`; CSRF origin validation uses the request's exact public host, which Caddy preserves. `TRUSTED_PROXIES` is limited to the fixed `10.231.17.0/24` edge network rather than trusting arbitrary clients. If that subnet overlaps the deployment host's existing Docker/VPN routes, choose another private subnet and update both `edge.ipam` and the two `TRUSTED_PROXIES` values together.
 
-Verify after DNS propagation:
+Verify only after the production server, DNS, reverse proxy, and TLS certificate are ready:
 
 ```bash
 curl -I http://pehlione-ecommerce.com
@@ -364,3 +380,15 @@ curl -fsS https://pehlione-shipping.com/ready
 ```
 
 HTTP must redirect to HTTPS. The health endpoints must return success without authentication, while internal APIs still require their bearer tokens. Order notification links are resolved from `APP_URL`, never from the request `Host` header; email-address verification continues to use short-lived codes. Supply unique secrets through a secrets manager, configure database/volume backups and monitoring, and use a reviewed production SMTP provider. MailHog is intentionally development/test only.
+
+The planned edge routing is:
+
+```text
+Internet -> https://pehlione-ecommerce.com -> Caddy/Nginx -> ecommerce-app:8080
+Internet -> https://pehlione-shipping.com  -> Caddy/Nginx -> shipping-app:8090
+
+ecommerce-app -> http://shipping-app:8090/api/v1/... (Bearer token)
+shipping-app  -> http://ecommerce-app:8080/api/v1/internal/shipping/events (Bearer token)
+```
+
+Production domains require A/AAAA records pointing to the server, reachable TCP ports 80/443, a configured Caddy/Nginx reverse proxy, a valid TLS certificate, and production `APP_URL`/public URL values. A domain that does not resolve before those steps is a deployment-state issue, not an application routing failure.
