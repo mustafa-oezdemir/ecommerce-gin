@@ -81,6 +81,7 @@ func run() (runErr error) {
 	if sqlDB, err := db.SQL(database); err == nil {
 		prometheus.MustRegister(collectors.NewDBStatsCollector(sqlDB, "ecommerce"))
 	}
+	prometheus.MustRegister(metrics.NewStateCollector(database))
 	appMetrics.HealthLive.Set(1)
 	metrics.SetDefault(appMetrics)
 	malwareScanner, err := uploads.NewClamAVScanner(cfg.ClamAVAddress, cfg.ClamAVScanTimeout)

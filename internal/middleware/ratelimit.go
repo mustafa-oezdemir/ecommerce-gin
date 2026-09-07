@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/mustafa-oezdemir/ecommerce-gin/internal/metrics"
 )
 
 type loginAttempt struct {
@@ -25,11 +26,16 @@ type LoginRateLimiter struct {
 	now         func() time.Time
 	lastCleanup time.Time
 	maxEntries  int
+	scope       string
 }
 
-func NewLoginRateLimiter(limit int, window time.Duration) *LoginRateLimiter {
+func NewLoginRateLimiter(limit int, window time.Duration, scopes ...string) *LoginRateLimiter {
 	if limit < 1 || window <= 0 {
 		panic("middleware: rate limit and window must be positive")
+	}
+	scope := "login"
+	if len(scopes) > 0 && strings.TrimSpace(scopes[0]) != "" {
+		scope = strings.TrimSpace(scopes[0])
 	}
 	return &LoginRateLimiter{
 		entries:    make(map[string]loginAttempt),
@@ -37,6 +43,7 @@ func NewLoginRateLimiter(limit int, window time.Duration) *LoginRateLimiter {
 		window:     window,
 		now:        time.Now,
 		maxEntries: 10_000,
+		scope:      scope,
 	}
 }
 
@@ -51,6 +58,9 @@ func (l *LoginRateLimiter) Middleware() gin.HandlerFunc {
 			entry = loginAttempt{resetAt: now.Add(l.window)}
 		}
 		if entry.count >= l.limit || (!exists && len(l.entries) >= l.maxEntries) {
+			if metric := metrics.Default(); metric != nil {
+				metric.RateLimitRejections.WithLabelValues(l.scope).Inc()
+			}
 			retryAfter := max(int(entry.resetAt.Sub(now).Seconds()+0.999), 1)
 			if !exists && len(l.entries) >= l.maxEntries {
 				retryAfter = max(int(l.window.Seconds()), 1)

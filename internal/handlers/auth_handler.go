@@ -44,6 +44,7 @@ func (h *AuthHandler) ShowLogin(c *gin.Context) {
 func (h *AuthHandler) Login(c *gin.Context) {
 	var req validation.LoginRequest
 	if err := c.ShouldBind(&req); err != nil {
+		recordLoginResult("failure")
 		c.HTML(http.StatusUnauthorized, "auth/login", viewData(c, gin.H{"error": "Invalid email or password"}))
 		return
 	}
@@ -54,6 +55,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	if err := h.database.WithContext(c.Request.Context()).Where("email = ?", email).First(&user).Error; err != nil {
 		if metric := metrics.Default(); metric != nil {
 			metric.LoginFailures.Inc()
+			metric.LoginAttempts.WithLabelValues("failure").Inc()
 		}
 		c.HTML(http.StatusUnauthorized, "auth/login", viewData(c, gin.H{"error": "Invalid email or password"}))
 		return
@@ -62,6 +64,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
 		if metric := metrics.Default(); metric != nil {
 			metric.LoginFailures.Inc()
+			metric.LoginAttempts.WithLabelValues("failure").Inc()
 		}
 		c.HTML(http.StatusUnauthorized, "auth/login", viewData(c, gin.H{"error": "Invalid email or password"}))
 		return
@@ -70,6 +73,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	session := sessions.Default(c)
 	session.Clear()
 	if user.TwoFactorEnabled {
+		recordLoginResult("two_factor_required")
 		session.Set(sessionTwoFactorUserID, strconv.FormatUint(uint64(user.ID), 10))
 		session.Set(sessionTwoFactorExpiry, strconv.FormatInt(time.Now().Add(5*time.Minute).Unix(), 10))
 		if err := session.Save(); err != nil {
@@ -102,11 +106,17 @@ func (h *AuthHandler) VerifyTwoFactorChallenge(c *gin.Context) {
 	recovery := c.PostForm("method") == "recovery"
 	user, err := h.security.VerifySecondFactor(c.Request.Context(), userID, code, recovery)
 	if err != nil {
+		if metric := metrics.Default(); metric != nil {
+			metric.TwoFactorChallenges.WithLabelValues("failure").Inc()
+		}
 		c.Header("Cache-Control", "no-store")
 		c.HTML(http.StatusUnauthorized, "auth/two-factor-challenge", viewData(c, gin.H{"error": "Invalid or expired authentication code"}))
 		return
 	}
 	session.Clear()
+	if metric := metrics.Default(); metric != nil {
+		metric.TwoFactorChallenges.WithLabelValues("success").Inc()
+	}
 	h.completeLogin(c, session, user)
 }
 
@@ -117,6 +127,7 @@ func (h *AuthHandler) completeLogin(c *gin.Context, session sessions.Session, us
 		c.String(http.StatusInternalServerError, "Could not create session")
 		return
 	}
+	recordLoginResult("success")
 	switch user.Role {
 	case models.RoleAdmin:
 		c.Redirect(http.StatusFound, "/admin/dashboard")
@@ -124,6 +135,12 @@ func (h *AuthHandler) completeLogin(c *gin.Context, session sessions.Session, us
 		c.Redirect(http.StatusFound, "/employee/dashboard")
 	default:
 		c.Redirect(http.StatusFound, "/")
+	}
+}
+
+func recordLoginResult(result string) {
+	if metric := metrics.Default(); metric != nil {
+		metric.LoginAttempts.WithLabelValues(result).Inc()
 	}
 }
 

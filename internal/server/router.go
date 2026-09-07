@@ -116,6 +116,7 @@ func NewRouter(config RouterConfig) (http.Handler, error) {
 		csrf.FieldName("_csrf"),
 		csrf.RequestHeader("X-CSRF-Token"),
 		csrf.ErrorHandler(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+			config.Metrics.CSRFRejections.Inc()
 			config.Logger.Warn("csrf validation failed", "reason", csrf.FailureReason(request))
 			http.Error(writer, "Forbidden", http.StatusForbidden)
 		})),
@@ -185,7 +186,7 @@ func registerRoutes(router *gin.Engine, database *gorm.DB, appMetrics *metrics.M
 	customer.POST("/account/notifications/:id/read", notifications.MarkRead)
 	customer.POST("/account/notifications/read-all", notifications.MarkAllRead)
 	account := handlers.NewAccountHandler(database, securityService, profileImageStore)
-	securityLimiter := middleware.NewLoginRateLimiter(20, time.Minute)
+	securityLimiter := middleware.NewLoginRateLimiter(20, time.Minute, "account_security")
 	accountGroup := router.Group("/account")
 	accountGroup.Use(requireAuth)
 	accountGroup.GET("", account.Show)
@@ -220,7 +221,7 @@ func registerRoutes(router *gin.Engine, database *gorm.DB, appMetrics *metrics.M
 	router.GET("/login", auth.ShowLogin)
 	loginLimiter := middleware.NewLoginRateLimiter(10, time.Minute)
 	router.POST("/login", loginLimiter.Middleware(), auth.Login)
-	twoFactorLimiter := middleware.NewLoginRateLimiter(8, time.Minute)
+	twoFactorLimiter := middleware.NewLoginRateLimiter(8, time.Minute, "two_factor")
 	router.GET("/two-factor-challenge", func(c *gin.Context) { c.Redirect(http.StatusPermanentRedirect, "/auth/two-factor-challenge") })
 	router.GET("/auth/two-factor-challenge", auth.ShowTwoFactorChallenge)
 	router.POST("/auth/two-factor-challenge", twoFactorLimiter.Middleware(), auth.VerifyTwoFactorChallenge)

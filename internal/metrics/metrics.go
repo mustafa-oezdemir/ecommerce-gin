@@ -20,6 +20,10 @@ type Metrics struct {
 	IdempotencyReplays       prometheus.Counter
 	OrderValueCents          prometheus.Histogram
 	LoginFailures            prometheus.Counter
+	LoginAttempts            *prometheus.CounterVec
+	TwoFactorChallenges      *prometheus.CounterVec
+	CSRFRejections           prometheus.Counter
+	RateLimitRejections      *prometheus.CounterVec
 	HealthLive               prometheus.Gauge
 	HealthReady              prometheus.Gauge
 	ShippingAPIRequests      *prometheus.CounterVec
@@ -44,6 +48,10 @@ func New(registerer prometheus.Registerer) *Metrics {
 		IdempotencyReplays:       prometheus.NewCounter(prometheus.CounterOpts{Name: "ecommerce_idempotency_replay_total", Help: "Checkout idempotency replays."}),
 		OrderValueCents:          prometheus.NewHistogram(prometheus.HistogramOpts{Name: "ecommerce_order_value_cents", Help: "Successful order values in cents.", Buckets: []float64{1000, 5000, 10000, 25000, 50000, 100000, 250000}}),
 		LoginFailures:            prometheus.NewCounter(prometheus.CounterOpts{Name: "ecommerce_login_failures_total", Help: "Failed login attempts."}),
+		LoginAttempts:            prometheus.NewCounterVec(prometheus.CounterOpts{Name: "ecommerce_login_attempts_total", Help: "Aggregate login outcomes."}, []string{"result"}),
+		TwoFactorChallenges:      prometheus.NewCounterVec(prometheus.CounterOpts{Name: "ecommerce_two_factor_challenges_total", Help: "Aggregate two-factor challenge outcomes."}, []string{"result"}),
+		CSRFRejections:           prometheus.NewCounter(prometheus.CounterOpts{Name: "ecommerce_csrf_rejections_total", Help: "Requests rejected by CSRF validation."}),
+		RateLimitRejections:      prometheus.NewCounterVec(prometheus.CounterOpts{Name: "ecommerce_rate_limit_rejections_total", Help: "Requests rejected by security rate limits."}, []string{"scope"}),
 		HealthLive:               prometheus.NewGauge(prometheus.GaugeOpts{Name: "ecommerce_health_live", Help: "Whether the application process is live (1) or not (0)."}),
 		HealthReady:              prometheus.NewGauge(prometheus.GaugeOpts{Name: "ecommerce_health_ready", Help: "Whether the application is ready to serve traffic (1) or not (0)."}),
 		ShippingAPIRequests:      prometheus.NewCounterVec(prometheus.CounterOpts{Name: "shipping_api_requests_total", Help: "E-Commerce requests to Shipping Service."}, []string{"method", "route", "status"}),
@@ -52,7 +60,7 @@ func New(registerer prometheus.Registerer) *Metrics {
 		ShippingCallbacks:        prometheus.NewCounter(prometheus.CounterOpts{Name: "shipping_callback_total", Help: "Shipping callbacks received by E-Commerce."}),
 		ShippingCallbackFailures: prometheus.NewCounter(prometheus.CounterOpts{Name: "shipping_callback_failures_total", Help: "Shipping callbacks rejected or not processed."}),
 	}
-	registerer.MustRegister(m.HTTPRequestsTotal, m.HTTPRequestDuration, m.HTTPRequestsInFlight, m.HTTPResponseSize, m.OrdersCreated, m.CheckoutFailures, m.CheckoutStarted, m.CheckoutCompleted, m.PaymentFailures, m.StockConflicts, m.IdempotencyReplays, m.OrderValueCents, m.LoginFailures, m.HealthLive, m.HealthReady, m.ShippingAPIRequests, m.ShippingAPIErrors, m.ShippingAPIDuration, m.ShippingCallbacks, m.ShippingCallbackFailures)
+	registerer.MustRegister(m.HTTPRequestsTotal, m.HTTPRequestDuration, m.HTTPRequestsInFlight, m.HTTPResponseSize, m.OrdersCreated, m.CheckoutFailures, m.CheckoutStarted, m.CheckoutCompleted, m.PaymentFailures, m.StockConflicts, m.IdempotencyReplays, m.OrderValueCents, m.LoginFailures, m.LoginAttempts, m.TwoFactorChallenges, m.CSRFRejections, m.RateLimitRejections, m.HealthLive, m.HealthReady, m.ShippingAPIRequests, m.ShippingAPIErrors, m.ShippingAPIDuration, m.ShippingCallbacks, m.ShippingCallbackFailures)
 	return m
 }
 
