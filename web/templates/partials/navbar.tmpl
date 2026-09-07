@@ -1,29 +1,45 @@
 {{define "site-brand"}}<span class="brand-pehli">Pehli</span><span class="brand-one">One</span>{{end}}
 {{define "partials/navbar"}}
 <header class="site-header">
-  <nav class="navbar navbar-expand-lg site-navbar" aria-label="Primary navigation">
+  <nav class="site-navbar" aria-label="Primary navigation">
     <div class="container site-nav-container">
-      <a class="navbar-brand site-brand" href="/" aria-label="PehliOne home">{{template "site-brand" .}}</a>
-      <div class="site-nav-links ms-auto">
-        {{if .CurrentUser}}
-          {{if eq .CurrentUser.Role "admin"}}
-            <a class="site-nav-link" href="/admin/dashboard">Dashboard</a><a class="site-nav-link" href="/admin/users">Users</a><a class="site-nav-link" href="/admin/orders">Orders</a><a class="site-nav-link" href="/admin/categories">Categories</a><a class="site-nav-link" href="/admin/logs">Logs</a>
-          {{else if eq .CurrentUser.Role "employee"}}
-            <a class="site-nav-link" href="/employee/dashboard">Dashboard</a><a class="site-nav-link" href="/employee/products">Products</a><a class="site-nav-link" href="/employee/orders">Orders</a>
-          {{else}}
-            <a class="site-nav-link" href="/">Products</a><a class="site-nav-link" href="/cart">Cart</a><a class="site-nav-link" href="/account/orders">Orders</a><a class="site-nav-link" href="/account/notifications" aria-label="Notifications">Notifications{{with .UnreadNotificationCount}}{{if gt . 0}} <span class="badge text-bg-danger">{{.}}</span>{{end}}{{end}}</a>
-          {{end}}
-          <details class="account-dropdown">
-            <summary class="account-trigger"><span class="account-trigger-label">Account</span>{{if .CurrentUser.ProfileImageFilename}}<img class="account-avatar account-avatar-image" src="/media/profiles/{{.CurrentUser.ProfileImageFilename}}" alt="">{{else}}<span class="account-avatar" aria-hidden="true">{{if .CurrentUser.Name}}{{initials .CurrentUser.Name}}{{else}}A{{end}}</span>{{end}}</summary>
-            <div class="account-dropdown-menu" role="group" aria-label="Account menu">
-              <div class="account-dropdown-header">{{if .CurrentUser.ProfileImageFilename}}<img class="account-avatar account-avatar-large account-avatar-image" src="/media/profiles/{{.CurrentUser.ProfileImageFilename}}" alt="">{{else}}<span class="account-avatar account-avatar-large" aria-hidden="true">{{if .CurrentUser.Name}}{{initials .CurrentUser.Name}}{{else}}A{{end}}</span>{{end}}<span><strong>{{if .CurrentUser.Name}}{{.CurrentUser.Name}}{{else}}Your account{{end}}</strong><small>{{.CurrentUser.Email}}</small></span></div>
-              <a class="account-dropdown-link" href="/account">Profile & security</a>
-              {{if eq .CurrentUser.Role "customer"}}<a class="account-dropdown-link" href="/account/addresses">Addresses</a><a class="account-dropdown-link" href="/account/orders">Orders</a><a class="account-dropdown-link" href="/account/lists">Lists</a>{{end}}
-              <a class="account-dropdown-link" href="/">Store</a><div class="account-dropdown-divider"></div>
-              <form method="post" action="/logout">{{.CSRFField}}<button class="account-dropdown-action" type="submit">Log out</button></form>
+      <a class="site-brand" href="/" aria-label="PehliOne home">{{template "site-brand" .}}</a>
+      <div class="site-nav-menu" data-nav-menu>
+        <button class="site-menu-toggle" type="button" aria-label="Toggle navigation" aria-expanded="false" data-nav-toggle><span class="site-menu-icon" aria-hidden="true"><span></span><span></span><span></span></span></button>
+        <div class="site-nav-links" data-nav-panel>
+          {{if .CurrentUser}}
+            <div class="site-nav-primary">
+              {{if eq .CurrentUser.Role "admin"}}
+                <a class="site-nav-link{{if eq $.ActiveNav "dashboard"}} active{{end}}" href="/admin/dashboard"{{if eq $.ActiveNav "dashboard"}} aria-current="page"{{end}}>Dashboard</a>
+                <a class="site-nav-link{{if eq $.ActiveNav "users"}} active{{end}}" href="/admin/users"{{if eq $.ActiveNav "users"}} aria-current="page"{{end}}>Users</a>
+                <a class="site-nav-link{{if eq $.ActiveNav "orders"}} active{{end}}" href="/admin/orders"{{if eq $.ActiveNav "orders"}} aria-current="page"{{end}}>Orders</a>
+                <a class="site-nav-link{{if eq $.ActiveNav "categories"}} active{{end}}" href="/admin/categories"{{if eq $.ActiveNav "categories"}} aria-current="page"{{end}}>Categories</a>
+                <a class="site-nav-link{{if eq $.ActiveNav "logs"}} active{{end}}" href="/admin/logs"{{if eq $.ActiveNav "logs"}} aria-current="page"{{end}}>Logs</a>
+              {{else if eq .CurrentUser.Role "employee"}}
+                <a class="site-nav-link{{if eq $.ActiveNav "dashboard"}} active{{end}}" href="/employee/dashboard"{{if eq $.ActiveNav "dashboard"}} aria-current="page"{{end}}>Dashboard</a>
+                <a class="site-nav-link{{if eq $.ActiveNav "products"}} active{{end}}" href="/employee/products"{{if eq $.ActiveNav "products"}} aria-current="page"{{end}}>Products</a>
+                <a class="site-nav-link{{if eq $.ActiveNav "orders"}} active{{end}}" href="/employee/orders"{{if eq $.ActiveNav "orders"}} aria-current="page"{{end}}>Orders</a>
+              {{else}}
+                <a class="site-nav-link{{if eq $.ActiveNav "products"}} active{{end}}" href="/"{{if eq $.ActiveNav "products"}} aria-current="page"{{end}}>Products</a>
+                <a class="site-nav-link{{if eq $.ActiveNav "cart"}} active{{end}}" href="/cart"{{if eq $.ActiveNav "cart"}} aria-current="page"{{end}}>Cart</a>
+                <a class="site-nav-link{{if eq $.ActiveNav "orders"}} active{{end}}" href="/account/orders"{{if eq $.ActiveNav "orders"}} aria-current="page"{{end}}>Orders</a>
+                <a class="site-nav-link notification-link{{if eq $.ActiveNav "notifications"}} active{{end}}" href="/account/notifications" aria-label="Notifications"{{if eq $.ActiveNav "notifications"}} aria-current="page"{{end}}>Notifications{{with .UnreadNotificationCount}}{{if gt . 0}}<span class="nav-count-badge">{{if gt . 99}}99+{{else}}{{.}}{{end}}</span>{{end}}{{end}}</a>
+              {{end}}
             </div>
-          </details>
-        {{else}}<a class="site-nav-link" href="/">Products</a><a class="btn btn-sm btn-brand" href="/login">Log in</a>{{end}}
+            <details class="account-dropdown" data-overlay-menu>
+              <summary class="account-trigger{{if eq $.ActiveNav "account"}} active{{end}}"><span class="account-trigger-label">Account</span>{{if .CurrentUser.ProfileImageFilename}}<img class="account-avatar account-avatar-image" src="/media/profiles/{{.CurrentUser.ProfileImageFilename}}" alt="" width="28" height="28">{{else}}<span class="account-avatar" aria-hidden="true">{{if .CurrentUser.Name}}{{initials .CurrentUser.Name}}{{else}}A{{end}}</span>{{end}}</summary>
+              <div class="account-dropdown-menu" role="group" aria-label="Account menu">
+                <div class="account-dropdown-header">{{if .CurrentUser.ProfileImageFilename}}<img class="account-avatar account-avatar-large account-avatar-image" src="/media/profiles/{{.CurrentUser.ProfileImageFilename}}" alt="" width="38" height="38">{{else}}<span class="account-avatar account-avatar-large" aria-hidden="true">{{if .CurrentUser.Name}}{{initials .CurrentUser.Name}}{{else}}A{{end}}</span>{{end}}<span><strong>{{if .CurrentUser.Name}}{{.CurrentUser.Name}}{{else}}Your account{{end}}</strong><small>{{.CurrentUser.Email}}</small></span></div>
+                <a class="account-dropdown-link" href="/account">Profile &amp; security</a>
+                {{if eq .CurrentUser.Role "customer"}}<a class="account-dropdown-link" href="/account/addresses">Addresses</a><a class="account-dropdown-link" href="/account/orders">Orders</a><a class="account-dropdown-link" href="/account/lists">Lists</a>{{end}}
+                <a class="account-dropdown-link" href="/">Store</a><div class="account-dropdown-divider"></div>
+                <form method="post" action="/logout">{{.CSRFField}}<button class="account-dropdown-action" type="submit">Log out</button></form>
+              </div>
+            </details>
+          {{else}}
+            <div class="site-nav-primary"><a class="site-nav-link{{if eq .ActiveNav "products"}} active{{end}}" href="/"{{if eq .ActiveNav "products"}} aria-current="page"{{end}}>Products</a></div><a class="btn btn-sm btn-brand site-nav-login" href="/login">Log in</a>
+          {{end}}
+        </div>
       </div>
     </div>
   </nav>
