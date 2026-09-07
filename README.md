@@ -1,5 +1,12 @@
 # Ecommerce Gin
 
+![Go 1.26.6](https://img.shields.io/badge/GO-1.26.6-00ADD8?style=for-the-badge&logo=go&logoColor=white)
+![Gin 1.12.0](https://img.shields.io/badge/GIN-1.12.0-008ECF?style=for-the-badge&logo=gin&logoColor=white)
+![MySQL 8.0](https://img.shields.io/badge/MYSQL-8.0-4479A1?style=for-the-badge&logo=mysql&logoColor=white)
+![Docker Compose V2](https://img.shields.io/badge/DOCKER-COMPOSE_V2-2496ED?style=for-the-badge&logo=docker&logoColor=white)
+![Prometheus](https://img.shields.io/badge/PROMETHEUS-MONITORING-E6522C?style=for-the-badge&logo=prometheus&logoColor=white)
+![Grafana](https://img.shields.io/badge/GRAFANA-DASHBOARDS-F46800?style=for-the-badge&logo=grafana&logoColor=white)
+
 A secure, server-rendered e-commerce demo built with Go, Gin, GORM, and MySQL. It includes customer shopping flows, operational tooling for employees, and an admin back office—ready to run as a local Docker stack.
 
 ## Highlights
