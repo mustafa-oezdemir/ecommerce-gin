@@ -30,7 +30,7 @@ func TestParseProductFiltersBuildsDatabaseRequest(t *testing.T) {
 }
 
 func TestProductFilterChipRemovesOnlySelectedValueAndKeepsSort(t *testing.T) {
-	values, _ := url.ParseQuery("brand=4&brand=7&color=Black&sort=rating_desc&page=3")
+	values, _ := url.ParseQuery("brand=4&brand=7&color=Black&sort=rating_desc&page=3&min_price=&rating=")
 	filters, err := parseProductFilters(values)
 	if err != nil {
 		t.Fatalf("parse filters: %v", err)
@@ -48,6 +48,9 @@ func TestProductFilterChipRemovesOnlySelectedValueAndKeepsSort(t *testing.T) {
 	}
 	if view.Chips[0].Label != "Nike" || !strings.Contains(view.Chips[0].RemoveURL, "brand=7") || strings.Contains(view.Chips[0].RemoveURL, "brand=4") || !strings.Contains(view.Chips[0].RemoveURL, "sort=rating_desc") {
 		t.Fatalf("unexpected removal URL: %#v", view.Chips[0])
+	}
+	if strings.Contains(view.Chips[0].RemoveURL, "min_price=") || strings.Contains(view.Chips[0].RemoveURL, "rating=") {
+		t.Fatalf("empty controls leaked into chip URL: %q", view.Chips[0].RemoveURL)
 	}
 	if strings.Contains(view.NextURL, "page=3") || !strings.Contains(view.NextURL, "page=4") {
 		t.Fatalf("unexpected next URL: %q", view.NextURL)

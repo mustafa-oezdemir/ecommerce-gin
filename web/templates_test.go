@@ -58,7 +58,7 @@ func TestProductListUsesDraftFirstFilterDrawer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, expected := range []string{"captureDraft()", "this.$refs.form.reset()", "clearDraft()", `window.Alpine.data("productFilters"`} {
+	for _, expected := range []string{"captureDraft()", "this.$refs.form.reset()", "clearDraft()", "prepareSubmit()", `window.Alpine.data("productFilters"`} {
 		if !strings.Contains(string(script), expected) {
 			t.Errorf("product filter script is missing %q", expected)
 		}

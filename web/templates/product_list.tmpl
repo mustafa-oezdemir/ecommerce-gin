@@ -87,7 +87,7 @@
         <div><h2 class="h4 mb-1" id="filter-title">Filter products</h2><p class="small text-muted mb-0">Changes apply only when you confirm.</p></div>
         <button type="button" class="btn-close" x-ref="closeButton" x-on:click="closePanel" aria-label="Close filters"></button>
       </div>
-      <form id="product-filter-form" method="get" action="/" x-ref="form" x-on:change="captureDraft" x-on:submit="captureDraft" class="d-flex flex-column flex-grow-1 overflow-hidden">
+      <form id="product-filter-form" method="get" action="/" x-ref="form" x-on:change="captureDraft" x-on:submit="prepareSubmit" class="d-flex flex-column flex-grow-1 overflow-hidden">
         <input type="hidden" name="sort" value="{{.ProductFilters.Sort}}">
         <div class="filter-drawer-body flex-grow-1">
           <section class="filter-group">

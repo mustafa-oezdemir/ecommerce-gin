@@ -45,6 +45,14 @@
         }
         this.draft = draft;
       },
+      prepareSubmit() {
+        for (const element of this.$refs.form.elements) {
+          if (element.type !== "hidden" && element.name && typeof element.value === "string" && element.value.trim() === "") {
+            element.disabled = true;
+          }
+        }
+        this.captureDraft();
+      },
     }));
   });
 

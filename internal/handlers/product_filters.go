@@ -131,6 +131,7 @@ func newProductFilterView(values url.Values, filters productFilters, result serv
 	}
 	base := cloneQuery(values)
 	base.Del("page")
+	removeEmptyQueryValues(base)
 	if filters.Search != "" {
 		view.addChip("Search: "+filters.Search, base, "q", filters.Search)
 	}
@@ -296,6 +297,21 @@ func cloneQuery(values url.Values) url.Values {
 		cloned[key] = append([]string(nil), list...)
 	}
 	return cloned
+}
+func removeEmptyQueryValues(values url.Values) {
+	for key, candidates := range values {
+		kept := candidates[:0]
+		for _, candidate := range candidates {
+			if strings.TrimSpace(candidate) != "" {
+				kept = append(kept, candidate)
+			}
+		}
+		if len(kept) == 0 {
+			values.Del(key)
+		} else {
+			values[key] = kept
+		}
+	}
 }
 func queryURL(values url.Values) string {
 	encoded := values.Encode()
