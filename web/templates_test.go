@@ -296,6 +296,10 @@ func TestAdminUsersTemplateRendersSecureEditForms(t *testing.T) {
 		`name="role"`,
 		`value="employee" selected`,
 		`href="/admin/users">Reset`,
+		`src="/static/admin-users.js"`,
+		`action="/admin/users/7/delete"`,
+		`class="delete-user-form`,
+		`Delete user`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("admin users page does not contain %q", want)
@@ -303,6 +307,9 @@ func TestAdminUsersTemplateRendersSecureEditForms(t *testing.T) {
 	}
 	if strings.Contains(body, "onsubmit=") || strings.Contains(body, "onclick=") {
 		t.Fatal("admin users template contains CSP-incompatible inline handlers")
+	}
+	if strings.Contains(body, `action="/admin/users/1/delete"`) {
+		t.Fatal("admin users template allows the current administrator to delete itself")
 	}
 }
 

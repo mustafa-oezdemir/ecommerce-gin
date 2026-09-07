@@ -102,6 +102,8 @@ func (h *AdminHandler) renderUsers(c *gin.Context, status int, errorMessage stri
 		data["Success"] = "The user was created successfully."
 	case "updated":
 		data["Success"] = "The user was updated successfully."
+	case "deleted":
+		data["Success"] = "The user was deleted successfully."
 	}
 	c.HTML(status, "admin_users.tmpl", viewData(c, data))
 }
@@ -240,6 +242,43 @@ func (h *AdminHandler) UpdateUser(c *gin.Context) {
 
 	slog.InfoContext(c.Request.Context(), "admin user updated", "administrator_id", currentUser.ID, "target_user_id", user.ID, "role", role, "password_changed", passwordChanged)
 	c.Redirect(http.StatusSeeOther, "/admin/users?status=updated")
+}
+
+func (h *AdminHandler) DeleteUser(c *gin.Context) {
+	currentUser, ok := middleware.CurrentUser(c)
+	if !ok {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+	var uri validation.UserIDURI
+	if err := c.ShouldBindUri(&uri); err != nil {
+		c.AbortWithStatus(http.StatusNotFound)
+		return
+	}
+	if currentUser.ID == uri.ID {
+		h.renderUsers(c, http.StatusConflict, "You cannot delete your own administrator account.")
+		return
+	}
+
+	database := h.database.WithContext(c.Request.Context())
+	var user models.User
+	if err := database.First(&user, uri.ID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.AbortWithStatus(http.StatusNotFound)
+			return
+		}
+		slog.ErrorContext(c.Request.Context(), "admin user lookup for deletion failed", "target_user_id", uri.ID, "error", err)
+		h.renderUsers(c, http.StatusInternalServerError, "The user could not be loaded. Please try again.")
+		return
+	}
+	if err := database.Delete(&user).Error; err != nil {
+		slog.ErrorContext(c.Request.Context(), "admin user deletion failed", "target_user_id", user.ID, "error", err)
+		h.renderUsers(c, http.StatusInternalServerError, "The user could not be deleted. Please try again.")
+		return
+	}
+
+	slog.InfoContext(c.Request.Context(), "admin user deleted", "administrator_id", currentUser.ID, "target_user_id", user.ID, "role", user.Role)
+	c.Redirect(http.StatusSeeOther, "/admin/users?status=deleted")
 }
 
 func (h *AdminHandler) ListOrders(c *gin.Context) {

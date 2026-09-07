@@ -94,6 +94,7 @@ func TestAccountRoutesRequireAuthenticationAndCSRF(t *testing.T) {
 		"/account/addresses/1",
 		"/account/addresses/1/delete",
 		"/checkout",
+		"/admin/users/7/delete",
 	} {
 		request := httptest.NewRequest(http.MethodPost, path, strings.NewReader("first_name=Other&last_name=User&user_id=99"))
 		request.Header.Set("Content-Type", "application/x-www-form-urlencoded")

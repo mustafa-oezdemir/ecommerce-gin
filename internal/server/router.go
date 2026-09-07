@@ -234,6 +234,7 @@ func registerRoutes(router *gin.Engine, database *gorm.DB, appMetrics *metrics.M
 	adminGroup.GET("/users", admin.ListUsers)
 	adminGroup.POST("/users", admin.CreateUser)
 	adminGroup.POST("/users/:id", admin.UpdateUser)
+	adminGroup.POST("/users/:id/delete", admin.DeleteUser)
 	adminGroup.GET("/orders", admin.ListOrders)
 	adminGroup.GET("/categories", admin.ListCategories)
 	adminGroup.POST("/categories", admin.CreateCategory)
