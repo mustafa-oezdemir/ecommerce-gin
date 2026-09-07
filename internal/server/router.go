@@ -238,6 +238,7 @@ func registerRoutes(router *gin.Engine, database *gorm.DB, appMetrics *metrics.M
 	adminGroup.GET("/orders", admin.ListOrders)
 	adminGroup.GET("/categories", admin.ListCategories)
 	adminGroup.POST("/categories", admin.CreateCategory)
+	adminGroup.POST("/categories/:id", admin.UpdateCategory)
 	adminGroup.POST("/categories/:id/delete", admin.DeleteCategory)
 
 	employee := handlers.NewEmployeeHandler(database, imageStore)

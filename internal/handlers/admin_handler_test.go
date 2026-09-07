@@ -60,6 +60,33 @@ func TestPaginationWindowUsesAtMostFivePages(t *testing.T) {
 	}
 }
 
+func TestUpdateCategorySavesChanges(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	database, mock := newMockHandlerDatabase(t)
+	mock.ExpectExec("UPDATE `categories` SET .*`description`=\\?.*`name`=\\?.* WHERE id = \\?.*`deleted_at` IS NULL").
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	handler := &AdminHandler{database: database}
+	recorder := httptest.NewRecorder()
+	context, _ := gin.CreateTestContext(recorder)
+	context.Request = httptest.NewRequest(http.MethodPost, "/admin/categories/7", strings.NewReader("name=Updated+Category&description=Updated+description"))
+	context.Request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	context.Params = gin.Params{{Key: "id", Value: "7"}}
+
+	handler.UpdateCategory(context)
+	context.Writer.WriteHeaderNow()
+
+	if recorder.Code != http.StatusSeeOther {
+		t.Fatalf("got status %d, want %d: %s", recorder.Code, http.StatusSeeOther, recorder.Body.String())
+	}
+	if location := recorder.Header().Get("Location"); location != "/admin/categories?status=updated" {
+		t.Fatalf("got redirect %q", location)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("database expectations: %v", err)
+	}
+}
+
 func TestDeleteUserSoftDeletesAnotherAccount(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	database, mock := newMockHandlerDatabase(t)

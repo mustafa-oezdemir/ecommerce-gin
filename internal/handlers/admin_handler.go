@@ -371,30 +371,93 @@ func paginationWindow(current, total int) []int {
 }
 
 func (h *AdminHandler) ListCategories(c *gin.Context) {
+	h.renderCategories(c, http.StatusOK, "")
+}
+
+func (h *AdminHandler) renderCategories(c *gin.Context, status int, errorMessage string) {
 	var categories []models.Category
 	if err := h.database.WithContext(c.Request.Context()).Order("name ASC").Find(&categories).Error; err != nil {
 		c.String(http.StatusInternalServerError, "Could not load categories")
 		return
 	}
-	c.HTML(http.StatusOK, "admin_categories.tmpl", viewData(c, gin.H{"Categories": categories}))
+	data := gin.H{"Categories": categories}
+	if errorMessage != "" {
+		data["Error"] = errorMessage
+	}
+	if editID, err := strconv.ParseUint(strings.TrimSpace(c.Query("edit")), 10, 64); err == nil && editID > 0 {
+		for index := range categories {
+			if categories[index].ID == uint(editID) {
+				data["EditCategory"] = &categories[index]
+				break
+			}
+		}
+	}
+	switch c.Query("status") {
+	case "created":
+		data["Success"] = "The category was created successfully."
+	case "updated":
+		data["Success"] = "The category was updated successfully."
+	case "deleted":
+		data["Success"] = "The category was deleted successfully."
+	}
+	c.HTML(status, "admin_categories.tmpl", viewData(c, data))
 }
 
 func (h *AdminHandler) CreateCategory(c *gin.Context) {
 	var req validation.CreateCategoryRequest
 	if err := c.ShouldBind(&req); err != nil {
-		c.String(http.StatusBadRequest, "Invalid category data")
+		h.renderCategories(c, http.StatusBadRequest, "Enter a valid category name and description.")
 		return
 	}
 	category := models.Category{Name: strings.TrimSpace(req.Name), Description: strings.TrimSpace(req.Description)}
 	if category.Name == "" {
-		c.String(http.StatusBadRequest, "Invalid category data")
+		h.renderCategories(c, http.StatusBadRequest, "Enter a valid category name and description.")
 		return
 	}
 	if err := h.database.WithContext(c.Request.Context()).Create(&category).Error; err != nil {
-		c.String(http.StatusConflict, "Could not create category")
+		if errors.Is(err, gorm.ErrDuplicatedKey) {
+			h.renderCategories(c, http.StatusConflict, "A category with that name already exists.")
+			return
+		}
+		h.renderCategories(c, http.StatusInternalServerError, "The category could not be created. Please try again.")
 		return
 	}
-	c.Redirect(http.StatusFound, "/admin/categories")
+	c.Redirect(http.StatusSeeOther, "/admin/categories?status=created")
+}
+
+func (h *AdminHandler) UpdateCategory(c *gin.Context) {
+	var uri validation.ProductIDURI
+	if err := c.ShouldBindUri(&uri); err != nil {
+		c.AbortWithStatus(http.StatusNotFound)
+		return
+	}
+	var req validation.CreateCategoryRequest
+	if err := c.ShouldBind(&req); err != nil {
+		h.renderCategories(c, http.StatusBadRequest, "Enter a valid category name and description.")
+		return
+	}
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		h.renderCategories(c, http.StatusBadRequest, "Enter a valid category name and description.")
+		return
+	}
+	result := h.database.WithContext(c.Request.Context()).Model(&models.Category{}).Where("id = ?", uri.ID).Updates(map[string]any{
+		"name":        name,
+		"description": strings.TrimSpace(req.Description),
+	})
+	if result.Error != nil {
+		if errors.Is(result.Error, gorm.ErrDuplicatedKey) {
+			h.renderCategories(c, http.StatusConflict, "A category with that name already exists.")
+			return
+		}
+		h.renderCategories(c, http.StatusInternalServerError, "The category could not be updated. Please try again.")
+		return
+	}
+	if result.RowsAffected != 1 {
+		c.AbortWithStatus(http.StatusNotFound)
+		return
+	}
+	c.Redirect(http.StatusSeeOther, "/admin/categories?status=updated")
 }
 
 func (h *AdminHandler) DeleteCategory(c *gin.Context) {
@@ -412,5 +475,5 @@ func (h *AdminHandler) DeleteCategory(c *gin.Context) {
 		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}
-	c.Redirect(http.StatusFound, "/admin/categories")
+	c.Redirect(http.StatusSeeOther, "/admin/categories?status=deleted")
 }

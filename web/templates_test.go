@@ -361,6 +361,32 @@ func TestEmployeeProductsTemplateRendersMultiImageManagement(t *testing.T) {
 	}
 }
 
+func TestAdminCategoriesRendersTableNewAndEditControls(t *testing.T) {
+	templates, err := ParseTemplates()
+	if err != nil {
+		t.Fatalf("parse templates: %v", err)
+	}
+	category := models.Category{Model: gorm.Model{ID: 7}, Name: "Electronics", Description: "Devices and accessories"}
+	var output bytes.Buffer
+	if err := templates.ExecuteTemplate(&output, "admin_categories.tmpl", map[string]any{
+		"Categories": []models.Category{category}, "EditCategory": &category,
+		"CSRFField": template.HTML(`<input type="hidden" name="csrf">`),
+	}); err != nil {
+		t.Fatalf("execute admin categories template: %v", err)
+	}
+	body := output.String()
+	for _, want := range []string{
+		`id="new-category"`, `>New Category<`, `>Add category<`, `<table class="table`,
+		`href="/admin/categories?edit=7#edit-category"`, `id="edit-category"`,
+		`action="/admin/categories/7"`, `value="Electronics"`, `>Save changes<`,
+		`action="/admin/categories/7/delete"`, `>Delete<`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("admin categories page does not contain %q", want)
+		}
+	}
+}
+
 func TestEmployeeProductsTemplateRendersInactiveProductActivation(t *testing.T) {
 	templates, err := ParseTemplates()
 	if err != nil {
