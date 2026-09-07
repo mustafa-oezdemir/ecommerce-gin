@@ -1,0 +1,74 @@
+groups:
+  - name: ecommerce-service
+    rules:
+      - alert: EcommerceDown
+        expr: up{job="ecommerce-app"} == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: E-Commerce service is unavailable
+          description: Prometheus has been unable to scrape E-Commerce for two minutes.
+
+      - alert: EcommerceDatabaseUnavailable
+        expr: ecommerce_health_ready == 0
+        for: 3m
+        labels: {severity: critical}
+        annotations:
+          summary: E-Commerce database readiness is failing
+          description: E-Commerce cannot reach a required dependency.
+
+      - alert: EcommerceHighErrorRate
+        expr: sum(rate(http_requests_total{status=~"5.."}[5m])) / clamp_min(sum(rate(http_requests_total[5m])), 0.01) > 0.05 and sum(rate(http_requests_total[5m])) > 0.1
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: E-Commerce HTTP error rate is high
+          description: More than 5% of E-Commerce requests return 5xx responses.
+
+      - alert: EcommerceHighLatency
+        expr: histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket[5m]))) > 1
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: E-Commerce p95 latency is high
+          description: E-Commerce p95 HTTP latency has exceeded one second.
+
+      - alert: EcommerceCheckoutFailureSpike
+        expr: sum(increase(ecommerce_checkouts_failed_total[15m])) >= 5
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: Checkout failures increased
+          description: At least five checkout failures occurred in fifteen minutes.
+
+      - alert: EcommerceStockConflictSpike
+        expr: increase(ecommerce_stock_conflict_total[15m]) >= 5
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: Checkout stock conflicts increased
+          description: Repeated inventory conflicts are preventing checkout completion.
+
+      - alert: EcommerceLoginFailureSpike
+        expr: increase(ecommerce_login_attempts_total{result="failure"}[5m]) >= 10
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: E-Commerce login failures increased
+          description: Repeated failed login attempts were observed without recording user identity.
+
+      - alert: EcommerceSecurityRejectionSpike
+        expr: increase(ecommerce_csrf_rejections_total[5m]) + sum(increase(ecommerce_rate_limit_rejections_total[5m])) >= 10
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: E-Commerce security rejections increased
+          description: CSRF or rate-limit rejections exceeded the operational threshold.
+
+      - alert: ShippingAPIRequestFailures
+        expr: sum(increase(shipping_api_errors_total[10m])) >= 3
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: E-Commerce requests to Shipping are failing
+          description: At least three E-Commerce to Shipping API failures occurred.

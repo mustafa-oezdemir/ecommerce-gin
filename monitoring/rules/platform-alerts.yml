@@ -1,0 +1,42 @@
+groups:
+  - name: pehlione-platform
+    rules:
+      - alert: GrafanaDown
+        expr: up{job="grafana"} == 0
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: Grafana is unavailable
+          description: Prometheus has been unable to scrape Grafana for five minutes.
+
+      - alert: EcommerceDatabasePoolSaturation
+        expr: go_sql_in_use_connections{db_name="ecommerce"} / clamp_min(go_sql_max_open_connections{db_name="ecommerce"}, 1) > 0.8
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: E-Commerce database pool is saturated
+          description: More than 80% of configured E-Commerce database connections are in use.
+
+      - alert: ShippingDatabasePoolSaturation
+        expr: go_sql_in_use_connections{db_name="shipping"} / clamp_min(go_sql_max_open_connections{db_name="shipping"}, 1) > 0.8
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: Shipping database pool is saturated
+          description: More than 80% of configured Shipping database connections are in use.
+
+      - alert: EcommerceDatabaseWaitSpike
+        expr: rate(go_sql_wait_count_total{db_name="ecommerce"}[5m]) > 1
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: E-Commerce database waits increased
+          description: The E-Commerce connection pool is repeatedly making callers wait.
+
+      - alert: ShippingDatabaseWaitSpike
+        expr: rate(go_sql_wait_count_total{db_name="shipping"}[5m]) > 1
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: Shipping database waits increased
+          description: The Shipping connection pool is repeatedly making callers wait.

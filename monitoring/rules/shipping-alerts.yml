@@ -49,6 +49,15 @@ groups:
           summary: Shipping callbacks to E-Commerce are failing
           description: At least three callback failures occurred in the last ten minutes and the condition persists.
 
+      - alert: EcommerceCallbackDependencyUnavailable
+        expr: shipping_ecommerce_dependency_up == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: Shipping cannot reach E-Commerce callbacks
+          description: The most recent callback attempts have failed for five minutes.
+
       - alert: ShippingOutboxBacklog
         expr: shipping_outbox_current{status="pending"} > 25
         for: 10m
@@ -66,6 +75,15 @@ groups:
         annotations:
           summary: Shipping outbox delivery is stuck
           description: The oldest pending callback event is more than fifteen minutes old.
+
+      - alert: ShippingOutboxFailedEvents
+        expr: shipping_outbox_current{status="failed"} > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Shipping outbox contains failed events
+          description: One or more integration events exhausted their delivery attempts.
 
       - alert: ShippingDeliveryFailureSpike
         expr: increase(shipping_delivery_failures_total[15m]) >= 5

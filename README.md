@@ -13,7 +13,7 @@ A secure, server-rendered e-commerce demo built with Go, Gin, GORM, and MySQL. I
 - **Security by default** — signed sessions, RBAC, ownership checks, CSRF protection, secure headers, validated requests, and rate-limited sign-in.
 - **Safe product media** — employee image uploads are size-limited, virus-scanned, decoded, sanitized, and stored under generated names.
 - **Reliable commerce data** — integer-cent pricing, transactional checkout, immutable order item snapshots, foreign keys, and indexed migrations.
-- **Observability** — liveness/readiness probes, structured request logs, Prometheus metrics, and a provisioned Grafana dashboard.
+- **Observability** — liveness/readiness probes, structured request logs, low-cardinality Prometheus metrics, alerts, and six provisioned Grafana operations dashboards.
 
 ## Stack
 
@@ -147,19 +147,56 @@ curl http://localhost:8080/health/ready
 
 ## Monitoring
 
-The application exposes Prometheus metrics only on its internal Docker port `9091`; it is scraped by Prometheus as `app:9091` and is not published by Compose. The same Prometheus instance also scrapes Shipping privately at `shipping-app:9092` over `pehlione-backend`; Shipping does not create a second Prometheus/Grafana stack. Grafana is provisioned automatically with one Prometheus datasource and the **Ecommerce Operations Overview**, **Shipping Service Overview**, and **E-Commerce + Shipping Overview** dashboards. Metric labels use Gin route templates rather than raw URLs and never include customer or secret values.
+The E-Commerce repository owns the single shared Prometheus and Grafana stack. E-Commerce metrics are scraped from `app:9091`; Shipping metrics are scraped from `shipping-app:9092` over the external `pehlione-backend` Docker network. Neither metrics listener is published to the host. Prometheus also scrapes itself and Grafana for infrastructure visibility.
 
 ```mermaid
 flowchart TD
-    P["Shared Prometheus"] -->|"app:9091"| E["E-Commerce metrics"]
-    P -->|"shipping-app:9092"| S["Shipping metrics"]
-    P --> G["Shared Grafana"]
-    G --> ED["E-Commerce dashboard"]
-    G --> SD["Shipping dashboard"]
-    G --> CD["Combined integration dashboard"]
+    E["ecommerce-gin :9091"] --> P["Shared Prometheus :9090"]
+    S["shipping-service :9092"] --> P
+    P --> G["Shared Grafana :3000"]
+    G --> D["PehliOne Monitoring: six dashboards"]
 ```
 
-Shipping scrape and alert configuration is version-controlled in `monitoring/prometheus.yml` and `monitoring/rules/shipping-alerts.yml`. The provisioned Shipping dashboards are under `monitoring/grafana/dashboards/`. Prometheus and Grafana host ports are intended for local development; production monitoring should remain internal, VPN-only, or otherwise access-controlled.
+The local endpoints are:
+
+| Component | Host URL | Container target |
+| --- | --- | --- |
+| E-Commerce | `http://localhost:8080` | `app:8080` |
+| Shipping | `http://localhost:8090` | `shipping-app:8090` |
+| Prometheus | `http://localhost:9090` | `prometheus:9090` |
+| Grafana | `http://localhost:3000` | `grafana:3000` |
+| E-Commerce metrics | not published | `app:9091` |
+| Shipping metrics | not published | `shipping-app:9092` |
+
+Grafana provisions one datasource and the `PehliOne Monitoring` folder from version-controlled files. Every dashboard defaults to the last 15 minutes, refreshes every five seconds, and is arranged for a 1920×1080 operations screen:
+
+| Order | Dashboard | UID |
+| --- | --- | --- |
+| 01 | PehliOne System Overview | `pehlione-overview` |
+| 02 | E-Commerce Operations | `pehlione-ecommerce` |
+| 03 | Shipping Operations | `pehlione-shipping` |
+| 04 | E-Commerce ↔ Shipping Integration | `pehlione-integration` |
+| 05 | Infrastructure & Reliability | `pehlione-infra` |
+| 06 | Security & Authentication | `pehlione-security` |
+
+The one-shot `grafana-playlist-provisioner` service creates or updates `PehliOne Operations` with a 15-second rotation. To run it again after editing dashboard order:
+
+```bash
+docker compose run --rm grafana-playlist-provisioner
+```
+
+For a wall display, open Grafana, select **Dashboards → Playlists → PehliOne Operations → Start playlist**, and add `?kiosk` to the playback URL (or use the Grafana kiosk button). The generated playlist UID can also be obtained without logging credentials:
+
+```bash
+curl -s -u "$GRAFANA_ADMIN_USER:$GRAFANA_ADMIN_PASSWORD" \
+  "http://localhost:3000/api/playlists?query=PehliOne%20Operations"
+```
+
+Prometheus rules cover service and database readiness, 5xx ratio, p95 latency, connection-pool pressure, checkout/stock failures, Shipping API/callback/outbox failures, delivery failures, and authentication/security rejection spikes. Review active rules at `http://localhost:9090/alerts`. No notification receiver is bundled; connect Alertmanager or the deployment platform's alert channel before production use.
+
+Metric labels are limited to controlled values such as normalized Gin route templates, HTTP status, lifecycle status, shipment type, result, and security scope. They never contain email addresses, order/shipment/customer identifiers, tracking numbers, request IDs, tokens, cookies, addresses, or other PII. Grafana and Prometheus host ports are for local development only; keep them internal, VPN-only, or behind authenticated administrative access in production.
+
+The authoritative files are `monitoring/prometheus.yml`, `monitoring/rules/*.yml`, `monitoring/grafana/provisioning/`, and `monitoring/grafana/dashboards/`.
 
 ## Middleware
 

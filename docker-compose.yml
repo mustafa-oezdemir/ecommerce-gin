@@ -172,6 +172,26 @@ services:
     depends_on:
       - prometheus
 
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:3000/api/health >/dev/null 2>&1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  grafana-playlist-provisioner:
+    image: curlimages/curl:8.12.1
+    restart: "no"
+    environment:
+      GRAFANA_URL: http://grafana:3000
+      GRAFANA_ADMIN_USER: ${GRAFANA_ADMIN_USER}
+      GRAFANA_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+    volumes:
+      - ./monitoring/grafana/provisioning/playlists/provision-playlist.sh:/provision/provision-playlist.sh:ro
+    depends_on:
+      grafana:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "/provision/provision-playlist.sh"]
+
 volumes:
   mysql_data:
   grafana_data:
