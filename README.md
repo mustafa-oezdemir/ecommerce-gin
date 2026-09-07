@@ -147,7 +147,7 @@ curl http://localhost:8080/health/ready
 
 ## Monitoring
 
-The application exposes Prometheus metrics only on its internal Docker port `9091`; it is scraped by Prometheus as `app:9091` and is not published by Compose. The same Prometheus instance also scrapes Shipping privately at `shipping-app:9092` over `pehlione-backend`; Shipping does not create a second Prometheus/Grafana stack. Grafana is provisioned automatically with one Prometheus datasource and the **Ecommerce Overview**, **Shipping Service Overview**, and **E-Commerce + Shipping Overview** dashboards. Metric labels use Gin route templates rather than raw URLs and never include customer or secret values.
+The application exposes Prometheus metrics only on its internal Docker port `9091`; it is scraped by Prometheus as `app:9091` and is not published by Compose. The same Prometheus instance also scrapes Shipping privately at `shipping-app:9092` over `pehlione-backend`; Shipping does not create a second Prometheus/Grafana stack. Grafana is provisioned automatically with one Prometheus datasource and the **Shipping Service Overview** and **E-Commerce + Shipping Overview** dashboards. Metric labels use Gin route templates rather than raw URLs and never include customer or secret values.
 
 ```mermaid
 flowchart TD
