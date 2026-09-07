@@ -4,6 +4,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -282,6 +283,7 @@ func (h *AdminHandler) DeleteUser(c *gin.Context) {
 }
 
 func (h *AdminHandler) ListOrders(c *gin.Context) {
+	const pageSize = 20
 	database := h.database.WithContext(c.Request.Context())
 	userSearch := strings.TrimSpace(c.Query("user"))
 	if searchRunes := []rune(userSearch); len(searchRunes) > 100 {
@@ -302,9 +304,13 @@ func (h *AdminHandler) ListOrders(c *gin.Context) {
 		selectedSort = "id_desc"
 		orderBy = sortOptions[selectedSort]
 	}
+	page, err := strconv.Atoi(c.DefaultQuery("page", "1"))
+	if err != nil || page < 1 {
+		page = 1
+	}
 
 	var orders []models.Order
-	query := database.Preload("Items").Preload("User").Joins("JOIN users ON users.id = orders.user_id").Order(orderBy)
+	query := database.Model(&models.Order{}).Joins("JOIN users ON users.id = orders.user_id")
 	if userSearch != "" {
 		like := "%" + userSearch + "%"
 		query = query.Where("(users.name LIKE ? OR users.email LIKE ?)", like, like)
@@ -314,20 +320,54 @@ func (h *AdminHandler) ListOrders(c *gin.Context) {
 	} else if selectedStatus != "" {
 		query = query.Where("orders.status = ?", selectedStatus)
 	}
-	if err := query.Find(&orders).Error; err != nil {
+	var totalOrders int64
+	if err := query.Count(&totalOrders).Error; err != nil {
 		c.String(http.StatusInternalServerError, "Could not load orders")
 		return
 	}
+	totalPages := int((totalOrders + pageSize - 1) / pageSize)
+	if totalPages > 0 && page > totalPages {
+		page = totalPages
+	}
+	if err := query.Preload("Items").Preload("User").Order(orderBy).Limit(pageSize).Offset((page - 1) * pageSize).Find(&orders).Error; err != nil {
+		c.String(http.StatusInternalServerError, "Could not load orders")
+		return
+	}
+	paginationQuery := url.Values{
+		"user":   []string{userSearch},
+		"status": []string{string(selectedStatus)},
+		"sort":   []string{selectedSort},
+	}.Encode()
 
 	c.HTML(http.StatusOK, "admin_orders.tmpl", viewData(c, gin.H{
-		"Orders":         orders,
-		"Statuses":       managementOrderStatuses,
-		"UserSearch":     userSearch,
-		"SelectedStatus": string(selectedStatus),
-		"SelectedSort":   selectedSort,
-		"PendingFilter":  selectedStatus == models.OrderStatusPending,
-		"DashboardURL":   "/admin/dashboard",
+		"Orders":          orders,
+		"Statuses":        managementOrderStatuses,
+		"UserSearch":      userSearch,
+		"SelectedStatus":  string(selectedStatus),
+		"SelectedSort":    selectedSort,
+		"PendingFilter":   selectedStatus == models.OrderStatusPending,
+		"DashboardURL":    "/admin/dashboard",
+		"Page":            page,
+		"PageSize":        pageSize,
+		"TotalOrders":     totalOrders,
+		"TotalPages":      totalPages,
+		"PageNumbers":     paginationWindow(page, totalPages),
+		"PaginationQuery": paginationQuery,
 	}))
+}
+
+func paginationWindow(current, total int) []int {
+	if total <= 0 {
+		return nil
+	}
+	start := max(1, current-2)
+	end := min(total, start+4)
+	start = max(1, end-4)
+	pages := make([]int, 0, end-start+1)
+	for page := start; page <= end; page++ {
+		pages = append(pages, page)
+	}
+	return pages
 }
 
 func (h *AdminHandler) ListCategories(c *gin.Context) {

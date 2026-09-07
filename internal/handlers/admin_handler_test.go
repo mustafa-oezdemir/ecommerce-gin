@@ -1,8 +1,11 @@
 package handlers
 
 import (
+	"fmt"
+	"html/template"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
@@ -11,6 +14,51 @@ import (
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/models"
 	"gorm.io/gorm"
 )
+
+func TestListOrdersPaginatesSortedResultsTwentyAtATime(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	database, mock := newMockHandlerDatabase(t)
+	mock.ExpectQuery("SELECT count\\(\\*\\) FROM `orders` JOIN users ON users.id = orders.user_id.*").
+		WillReturnRows(sqlmock.NewRows([]string{"count(*)"}).AddRow(45))
+	mock.ExpectQuery("SELECT .* FROM `orders` JOIN users ON users.id = orders.user_id.*ORDER BY orders.total_cents DESC, orders.id DESC LIMIT \\? OFFSET \\?").
+		WithArgs(20, 20).
+		WillReturnRows(sqlmock.NewRows([]string{"id"}))
+
+	handler := &AdminHandler{database: database}
+	router := gin.New()
+	router.SetHTMLTemplate(template.Must(template.New("admin_orders.tmpl").Parse(`{{define "admin_orders.tmpl"}}{{.Page}}|{{.TotalOrders}}|{{.TotalPages}}|{{.PaginationQuery}}{{end}}`)))
+	router.GET("/admin/orders", handler.ListOrders)
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/admin/orders?sort=total_desc&page=2", nil))
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("got status %d, want %d: %s", recorder.Code, http.StatusOK, recorder.Body.String())
+	}
+	if body := strings.TrimSpace(recorder.Body.String()); body != "2|45|3|sort=total_desc&amp;status=&amp;user=" {
+		t.Fatalf("unexpected pagination data %q", body)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("database expectations: %v", err)
+	}
+}
+
+func TestPaginationWindowUsesAtMostFivePages(t *testing.T) {
+	tests := []struct {
+		current int
+		total   int
+		want    string
+	}{
+		{current: 1, total: 3, want: "[1 2 3]"},
+		{current: 1, total: 12, want: "[1 2 3 4 5]"},
+		{current: 6, total: 12, want: "[4 5 6 7 8]"},
+		{current: 12, total: 12, want: "[8 9 10 11 12]"},
+	}
+	for _, test := range tests {
+		if got := fmt.Sprint(paginationWindow(test.current, test.total)); got != test.want {
+			t.Errorf("paginationWindow(%d, %d) = %s, want %s", test.current, test.total, got, test.want)
+		}
+	}
+}
 
 func TestDeleteUserSoftDeletesAnotherAccount(t *testing.T) {
 	gin.SetMode(gin.TestMode)

@@ -581,11 +581,16 @@ func TestAdminOrdersRendersUserAndStatusFilters(t *testing.T) {
 	user := models.User{Model: gorm.Model{ID: 7}, Name: "Ada Lovelace", Email: "ada@example.com"}
 	var output bytes.Buffer
 	data := map[string]any{
-		"Orders":         []models.Order{{Model: gorm.Model{ID: 11}, User: user, Status: models.OrderStatusProcessing}},
-		"Statuses":       []models.OrderStatus{models.OrderStatusPending, models.OrderStatusProcessing},
-		"UserSearch":     "ada@example.com",
-		"SelectedStatus": "processing",
-		"SelectedSort":   "total_desc",
+		"Orders":          []models.Order{{Model: gorm.Model{ID: 11}, User: user, Status: models.OrderStatusProcessing}},
+		"Statuses":        []models.OrderStatus{models.OrderStatusPending, models.OrderStatusProcessing},
+		"UserSearch":      "ada@example.com",
+		"SelectedStatus":  "processing",
+		"SelectedSort":    "total_desc",
+		"Page":            2,
+		"TotalOrders":     int64(45),
+		"TotalPages":      3,
+		"PageNumbers":     []int{1, 2, 3},
+		"PaginationQuery": "sort=total_desc&status=processing&user=ada%40example.com",
 	}
 	if err := templates.ExecuteTemplate(&output, "admin_orders.tmpl", data); err != nil {
 		t.Fatalf("execute admin orders template: %v", err)
@@ -595,6 +600,8 @@ func TestAdminOrdersRendersUserAndStatusFilters(t *testing.T) {
 		`action="/admin/orders"`, `name="user" value="ada@example.com"`, `name="status"`, `name="sort"`,
 		`value="processing" selected`, `value="total_desc" selected`, `href="/admin/orders">Reset`,
 		`Ada Lovelace`, `ada@example.com`,
+		`aria-label="Orders pagination"`, `page=1`, `page=2`, `page=3`, `aria-current="page"`,
+		`Page 2 of 3`, `20 orders per page`, `1 of 45 orders`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("admin orders page does not contain %q", want)
