@@ -354,6 +354,28 @@ func TestEmployeeProductsTemplateRendersMultiImageManagement(t *testing.T) {
 	}
 }
 
+func TestEmployeeProductsTemplateRendersInactiveProductActivation(t *testing.T) {
+	templates, err := ParseTemplates()
+	if err != nil {
+		t.Fatalf("parse templates: %v", err)
+	}
+	employee := models.User{Model: gorm.Model{ID: 2}, Name: "Employee User", Role: models.RoleEmployee}
+	product := models.Product{Model: gorm.Model{ID: 8}, Name: "Inactive Product", PriceCents: 4530, Active: false}
+	var output bytes.Buffer
+	if err := templates.ExecuteTemplate(&output, "employee_products.tmpl", map[string]any{
+		"CurrentUser": &employee, "Products": []models.Product{product}, "EditProduct": &product,
+		"CSRFField": template.HTML("csrf"), "ImageMaxMB": 5, "ImageLimit": 8, "SelectedAvailability": "all",
+	}); err != nil {
+		t.Fatalf("execute employee products template: %v", err)
+	}
+	body := output.String()
+	for _, want := range []string{`<h3 class="h5 mb-1">Availability</h3>`, `action="/employee/products/8/activate"`, `>Activate product</button>`, `>Activate</button>`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("inactive product controls do not contain %q", want)
+		}
+	}
+}
+
 func TestEveryPageTemplateUsesSharedShell(t *testing.T) {
 	entries, err := fs.ReadDir(templateFS, "templates")
 	if err != nil {

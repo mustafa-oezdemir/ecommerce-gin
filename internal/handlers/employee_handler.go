@@ -256,6 +256,24 @@ func (h *EmployeeHandler) DeactivateProduct(c *gin.Context) {
 	c.Redirect(http.StatusFound, "/employee/products")
 }
 
+func (h *EmployeeHandler) ActivateProduct(c *gin.Context) {
+	var uri validation.ProductIDURI
+	if err := c.ShouldBindUri(&uri); err != nil {
+		c.AbortWithStatus(http.StatusNotFound)
+		return
+	}
+	result := h.database.WithContext(c.Request.Context()).Model(&models.Product{}).Where("id = ?", uri.ID).Update("active", true)
+	if result.Error != nil {
+		c.String(http.StatusInternalServerError, "Could not activate product")
+		return
+	}
+	if result.RowsAffected != 1 {
+		c.AbortWithStatus(http.StatusNotFound)
+		return
+	}
+	c.Redirect(http.StatusSeeOther, "/employee/products?edit="+strconv.FormatUint(uint64(uri.ID), 10)+"#edit-product")
+}
+
 func (h *EmployeeHandler) ListOrders(c *gin.Context) {
 	userSearch := strings.TrimSpace(c.Query("user"))
 	if searchRunes := []rune(userSearch); len(searchRunes) > 100 {

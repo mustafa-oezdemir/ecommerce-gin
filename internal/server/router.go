@@ -251,6 +251,7 @@ func registerRoutes(router *gin.Engine, database *gorm.DB, appMetrics *metrics.M
 	employeeGroup.POST("/products/:id/images/:imageID/cover", employee.SetProductCoverImage)
 	employeeGroup.POST("/products/:id/images/:imageID/delete", employee.DeleteProductImage)
 	employeeGroup.POST("/products/:id/deactivate", employee.DeactivateProduct)
+	employeeGroup.POST("/products/:id/activate", employee.ActivateProduct)
 	employeeGroup.POST("/products/:id/stock", employee.UpdateStock)
 	employeeGroup.GET("/orders", employee.ListOrders)
 	employeeGroup.POST("/orders/:id/status", employee.UpdateOrderStatus)

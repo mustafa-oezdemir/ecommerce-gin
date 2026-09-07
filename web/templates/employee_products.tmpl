@@ -115,6 +115,19 @@
         </form>
 
         <hr class="my-4">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+          <div>
+            <h3 class="h5 mb-1">Availability</h3>
+            {{if .Active}}<span class="badge bg-success-subtle text-success">Active</span><p class="text-muted small mb-0 mt-1">This product is visible in the shop.</p>{{else}}<span class="badge bg-secondary-subtle text-secondary">Inactive</span><p class="text-muted small mb-0 mt-1">Activate this product to make it available in the shop again.</p>{{end}}
+          </div>
+          {{if .Active}}
+          <form method="post" action="/employee/products/{{.ID}}/deactivate">{{$.CSRFField}}<button type="submit" class="btn btn-outline-danger">Deactivate product</button></form>
+          {{else}}
+          <form method="post" action="/employee/products/{{.ID}}/activate">{{$.CSRFField}}<button type="submit" class="btn btn-success">Activate product</button></form>
+          {{end}}
+        </div>
+
+        <hr class="my-4">
         <h3 class="h5 mb-3">Product images</h3>
         {{if .Images}}
         <div class="d-flex flex-wrap gap-3 mb-3">
@@ -187,7 +200,7 @@
                 <td class="text-end text-nowrap">
                   <a class="btn btn-sm btn-outline-secondary" href="/products/{{.ID}}">View</a>
                   <a class="btn btn-sm btn-outline-primary" href="/employee/products?edit={{.ID}}#edit-product">Edit</a>
-                  {{if .Active}}<form method="post" action="/employee/products/{{.ID}}/deactivate" class="d-inline">{{$.CSRFField}}<button type="submit" class="btn btn-sm btn-outline-danger">Delete</button></form>{{end}}
+                  {{if .Active}}<form method="post" action="/employee/products/{{.ID}}/deactivate" class="d-inline">{{$.CSRFField}}<button type="submit" class="btn btn-sm btn-outline-danger">Delete</button></form>{{else}}<form method="post" action="/employee/products/{{.ID}}/activate" class="d-inline">{{$.CSRFField}}<button type="submit" class="btn btn-sm btn-outline-success">Activate</button></form>{{end}}
                 </td>
               </tr>
               {{else}}
