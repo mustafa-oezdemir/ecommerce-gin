@@ -64,6 +64,9 @@ var allowEmptyReturnHandoverCodesSchema string
 //go:embed 000019_product_discovery.sql
 var productDiscoverySchema string
 
+//go:embed 000020_warehouse_return_confirmation.sql
+var warehouseReturnConfirmationSchema string
+
 type migration struct {
 	version string
 	sql     string
@@ -94,6 +97,7 @@ func Apply(db *gorm.DB) error {
 			{version: "000017_ensure_return_items", sql: ensureReturnItemsSchema},
 			{version: "000018_allow_empty_return_handover_codes", sql: allowEmptyReturnHandoverCodesSchema},
 			{version: "000019_product_discovery", sql: productDiscoverySchema},
+			{version: "000020_warehouse_return_confirmation", sql: warehouseReturnConfirmationSchema},
 		} {
 			var count int64
 			if err := tx.Raw("SELECT COUNT(*) FROM schema_migrations WHERE version = ?", migration.version).Scan(&count).Error; err != nil {

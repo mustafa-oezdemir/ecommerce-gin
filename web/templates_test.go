@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/logging"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/models"
@@ -471,7 +472,7 @@ func TestDashboardLowStockAndPendingCardsAreAccessibleLinks(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-			t.Run(tt.name, func(t *testing.T) {
+		t.Run(tt.name, func(t *testing.T) {
 			var output bytes.Buffer
 			if err := templates.ExecuteTemplate(&output, tt.template, tt.data); err != nil {
 				t.Fatalf("execute dashboard: %v", err)
@@ -563,14 +564,14 @@ func TestEmployeeOrdersShowsOnlyAllowedTransitions(t *testing.T) {
 		{
 			name:      "pending",
 			status:    models.OrderStatusPending,
-			want:      []string{`value="preparing"`, `value="cancelled"`},
-			doNotWant: []string{`value="shipped"`, `value="completed"`},
+			want:      []string{`value="preparing"`},
+			doNotWant: []string{`value="cancelled"`, `value="shipped"`, `value="completed"`, `Cancel order`},
 		},
 		{
 			name:      "ready for shipping",
 			status:    models.OrderStatusReadyForShipping,
 			want:      []string{"Hand over to shipping", `action="/employee/orders/7/shipment"`},
-			doNotWant: []string{`value="shipped"`, `value="completed"`},
+			doNotWant: []string{`value="cancelled"`, `value="shipped"`, `value="completed"`, `Cancel order`},
 		},
 		{
 			name:      "completed",
@@ -600,6 +601,91 @@ func TestEmployeeOrdersShowsOnlyAllowedTransitions(t *testing.T) {
 				if strings.Contains(body, unwanted) {
 					t.Errorf("output unexpectedly contains %q", unwanted)
 				}
+			}
+		})
+	}
+}
+
+func TestEmployeeReturnReceiptActionRequiresWarehouseArrival(t *testing.T) {
+	templates, err := ParseTemplates()
+	if err != nil {
+		t.Fatalf("parse templates: %v", err)
+	}
+	now := time.Now().UTC()
+	tests := []struct {
+		name       string
+		status     string
+		confirmed  *time.Time
+		canConfirm bool
+		want       string
+		doNotWant  string
+	}{
+		{name: "return requested", status: "return_requested", want: "Waiting for the return shipment", doNotWant: "Geri Teslim Alındı"},
+		{name: "return in transit", status: "return_in_transit", want: "Waiting for the return shipment", doNotWant: "Geri Teslim Alındı"},
+		{name: "warehouse arrival", status: "return_received_at_warehouse", canConfirm: true, want: "Geri Teslim Alındı"},
+		{name: "already confirmed", status: "return_received_at_warehouse", confirmed: &now, want: "warehouse receipt has been confirmed", doNotWant: "Geri Teslim Alındı"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			request := &models.ReturnRequest{Status: test.status, ReturnTrackingNumber: "RET-DE-TEST", WarehouseReturnConfirmedAt: test.confirmed}
+			shipment := &models.OrderShipment{Status: test.status, StatusLabel: statusLabel(test.status), TrackingNumber: "RET-DE-TEST", ShipmentType: "return"}
+			data := map[string]any{
+				"CSRFField":                 template.HTML(`<input type="hidden" name="csrf">`),
+				"Order":                     models.Order{Model: gorm.Model{ID: 68}, Status: models.OrderStatusShipped, ReturnRequest: request},
+				"ReturnShipment":            shipment,
+				"CanConfirmWarehouseReturn": test.canConfirm,
+				"WarehouseReturnConfirmed":  test.confirmed != nil,
+			}
+			var output bytes.Buffer
+			if err := templates.ExecuteTemplate(&output, "employee/orders/view", data); err != nil {
+				t.Fatalf("execute template: %v", err)
+			}
+			body := output.String()
+			if !strings.Contains(body, test.want) {
+				t.Errorf("output does not contain %q", test.want)
+			}
+			if test.doNotWant != "" && strings.Contains(body, test.doNotWant) {
+				t.Errorf("output unexpectedly contains %q", test.doNotWant)
+			}
+			if strings.Contains(strings.ToLower(body), "cancel order") || strings.Contains(body, `value="cancelled"`) {
+				t.Error("employee order page exposes cancellation")
+			}
+		})
+	}
+}
+
+func TestCustomerOrderActionsSeparateCancellationAndReturn(t *testing.T) {
+	templates, err := ParseTemplates()
+	if err != nil {
+		t.Fatalf("parse templates: %v", err)
+	}
+	tests := []struct {
+		name      string
+		data      map[string]any
+		want      string
+		doNotWant string
+	}{
+		{
+			name: "eligible cancellation",
+			data: map[string]any{"Order": &models.Order{Model: gorm.Model{ID: 11}, Status: models.OrderStatusPaid}, "CanCancelOrder": true},
+			want: "Cancel Order", doNotWant: "Return Order",
+		},
+		{
+			name: "delivered return",
+			data: map[string]any{"Order": &models.Order{Model: gorm.Model{ID: 12}, Status: models.OrderStatusShipped}, "CanRequestReturn": true},
+			want: "Return Order", doNotWant: "Cancel Order",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			test.data["CSRFField"] = template.HTML(`<input type="hidden" name="csrf">`)
+			var output bytes.Buffer
+			if err := templates.ExecuteTemplate(&output, "account/orders/view", test.data); err != nil {
+				t.Fatalf("execute customer order template: %v", err)
+			}
+			body := output.String()
+			if !strings.Contains(body, test.want) || strings.Contains(body, test.doNotWant) {
+				t.Fatalf("actions mismatch: want %q without %q", test.want, test.doNotWant)
 			}
 		})
 	}

@@ -1,1 +1,79 @@
-{{define "employee/orders/view"}}{{template "layouts/employee/start" .}}{{template "partials/breadcrumbs" (dict "HomeURL" "/employee/dashboard" "HomeLabel" "Dashboard" "ParentURL" "/employee/orders" "ParentLabel" "Orders" "Current" (printf "#%d" .Order.ID))}}{{template "partials/page-header" (dict "Title" (printf "Order #%d" .Order.ID) "Description" .Order.User.Email)}}<section class="content-card mb-4"><div class="order-summary-grid"><div class="summary-item"><small>Customer</small><strong>{{if .Order.User.Name}}{{.Order.User.Name}}{{else}}{{.Order.User.Email}}{{end}}</strong></div><div class="summary-item"><small>Payment</small>{{if .Order.Payment.ID}}{{template "partials/status-badge" .Order.Payment.Status}}{{else}}—{{end}}</div><div class="summary-item"><small>Fulfillment</small>{{template "partials/status-badge" .Order.Status}}</div><div class="summary-item"><small>Total</small><strong>{{money .Order.TotalCents}}</strong></div></div></section>{{if nextOrderStatuses .Order.Status}}<section class="form-card mb-4" id="process-order"><h2 class="h5">Process order</h2><form method="post" action="/employee/orders/{{.Order.ID}}/status" class="row g-3 align-items-end">{{.CSRFField}}<div class="col-md-9"><label class="form-label" for="next-status">Next status</label><select class="form-select" id="next-status" name="status" required>{{range nextOrderStatuses .Order.Status}}<option value="{{.}}">{{statusLabel .}}</option>{{end}}</select></div><div class="col-md-3 d-grid"><button class="btn btn-primary" type="submit">Update status</button></div></form></section>{{end}}{{if eq .Order.Status "ready_for_shipping"}}<section class="form-card mb-4"><h2 class="h5">Shipping handover</h2><form method="post" action="/employee/orders/{{.Order.ID}}/shipment">{{.CSRFField}}<button class="btn btn-primary" type="submit">Hand over to shipping</button></form></section>{{else if not (nextOrderStatuses .Order.Status)}}<div class="alert alert-light border">No further actions</div>{{end}}<section class="content-card"><h2 class="h5 mb-3">Items</h2><div class="table-responsive"><table class="table data-table"><thead><tr><th>Product</th><th>SKU</th><th>Quantity</th><th>Total</th></tr></thead><tbody>{{range .Order.Items}}<tr><td>{{.ProductName}}</td><td>{{.ProductSKU}}</td><td>{{.Quantity}}</td><td>{{money .SubtotalCents}}</td></tr>{{end}}</tbody></table></div></section>{{template "layouts/employee/end" .}}{{end}}
+{{define "employee/orders/view"}}
+{{template "layouts/employee/start" .}}
+{{template "partials/breadcrumbs" (dict "HomeURL" "/employee/dashboard" "HomeLabel" "Dashboard" "ParentURL" "/employee/orders" "ParentLabel" "Orders" "Current" (printf "#%d" .Order.ID))}}
+{{template "partials/page-header" (dict "Title" (printf "Order #%d" .Order.ID) "Description" .Order.User.Email)}}
+
+{{if eq .Status "return-confirmed"}}<div class="alert alert-success" role="status">Return receipt confirmed. Inspection, refund and restock can now continue in E-Commerce.</div>{{end}}
+
+<section class="content-card mb-4">
+  <div class="order-summary-grid">
+    <div class="summary-item"><small>Customer</small><strong>{{if .Order.User.Name}}{{.Order.User.Name}}{{else}}{{.Order.User.Email}}{{end}}</strong></div>
+    <div class="summary-item"><small>Payment</small>{{if .Order.Payment.ID}}{{template "partials/status-badge" .Order.Payment.Status}}{{else}}—{{end}}</div>
+    <div class="summary-item"><small>Fulfillment</small>{{template "partials/status-badge" .Order.Status}}</div>
+    <div class="summary-item"><small>Total</small><strong>{{money .Order.TotalCents}}</strong></div>
+  </div>
+</section>
+
+{{if .Order.Shipment.ID}}
+<section class="shipment-card mb-4">
+  <div class="d-flex flex-wrap align-items-start justify-content-between gap-3">
+    <div>
+      <h2 class="h5 mb-2">Shipping</h2>
+      <div><small class="text-muted">Tracking</small><strong class="d-block font-monospace">{{.Order.Shipment.TrackingNumber}}</strong></div>
+      <div class="mt-2"><small class="text-muted">Status</small><div><span class="status-badge status-{{.Order.Shipment.Status}}">{{.Order.Shipment.StatusLabel}}</span></div></div>
+    </div>
+    {{if .ShipmentTrackingURL}}<a class="btn btn-outline-primary" href="{{.ShipmentTrackingURL}}">View shipment</a>{{end}}
+  </div>
+</section>
+{{end}}
+
+{{if .Order.ReturnRequest}}
+<section class="shipment-card mb-4" id="return">
+  <div class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-3">
+    <div>
+      <h2 class="h5 mb-1">Return</h2>
+      <p class="text-muted mb-0">Customer-requested return shipment</p>
+    </div>
+    {{if .ReturnTrackingURL}}<a class="btn btn-outline-primary" href="{{.ReturnTrackingURL}}">Track return</a>{{end}}
+  </div>
+  <div class="shipment-summary-grid mb-3">
+    <div class="summary-item"><small>Tracking</small><strong class="font-monospace">{{.Order.ReturnRequest.ReturnTrackingNumber}}</strong></div>
+    <div class="summary-item"><small>Shipping Status</small>{{if .ReturnShipment}}<span class="status-badge status-{{.ReturnShipment.Status}}">{{.ReturnShipment.StatusLabel}}</span>{{else}}<span class="status-badge status-{{.Order.ReturnRequest.Status}}">{{statusLabel .Order.ReturnRequest.Status}}</span>{{end}}</div>
+  </div>
+  {{if .CanConfirmWarehouseReturn}}
+  <form method="post" action="/employee/orders/{{.Order.ID}}/return-received">
+    {{.CSRFField}}
+    <button class="btn btn-success" type="submit">Geri Teslim Alındı</button>
+  </form>
+  {{else if .WarehouseReturnConfirmed}}
+  <div class="alert alert-success mb-0" role="status">Return Received — warehouse receipt has been confirmed in E-Commerce.</div>
+  {{else}}
+  <div class="alert alert-light border mb-0" role="status">Waiting for the return shipment to arrive at the warehouse.</div>
+  {{end}}
+</section>
+{{end}}
+
+{{if nextOrderStatuses .Order.Status}}
+<section class="form-card mb-4" id="process-order">
+  <h2 class="h5">Process order</h2>
+  <form method="post" action="/employee/orders/{{.Order.ID}}/status" class="row g-3 align-items-end">
+    {{.CSRFField}}
+    <div class="col-md-9"><label class="form-label" for="next-status">Next status</label><select class="form-select" id="next-status" name="status" required>{{range nextOrderStatuses .Order.Status}}<option value="{{.}}">{{statusLabel .}}</option>{{end}}</select></div>
+    <div class="col-md-3 d-grid"><button class="btn btn-primary" type="submit">Update status</button></div>
+  </form>
+</section>
+{{end}}
+
+{{if eq .Order.Status "ready_for_shipping"}}
+<section class="form-card mb-4"><h2 class="h5">Shipping handover</h2><form method="post" action="/employee/orders/{{.Order.ID}}/shipment">{{.CSRFField}}<button class="btn btn-primary" type="submit">Hand over to shipping</button></form></section>
+{{else if and (not (nextOrderStatuses .Order.Status)) (not .Order.ReturnRequest)}}
+<div class="alert alert-light border">No further actions</div>
+{{end}}
+
+<section class="content-card">
+  <h2 class="h5 mb-3">Items</h2>
+  <div class="table-responsive"><table class="table data-table"><thead><tr><th>Product</th><th>SKU</th><th>Quantity</th><th>Total</th></tr></thead><tbody>{{range .Order.Items}}<tr><td>{{.ProductName}}</td><td>{{.ProductSKU}}</td><td>{{.Quantity}}</td><td>{{money .SubtotalCents}}</td></tr>{{end}}</tbody></table></div>
+</section>
+
+{{template "layouts/employee/end" .}}
+{{end}}

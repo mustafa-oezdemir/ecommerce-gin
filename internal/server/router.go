@@ -251,7 +251,7 @@ func registerRoutes(router *gin.Engine, database *gorm.DB, appMetrics *metrics.M
 	adminGroup.POST("/categories/:id", admin.UpdateCategory)
 	adminGroup.POST("/categories/:id/delete", admin.DeleteCategory)
 
-	employee := handlers.NewEmployeeHandler(database, imageStore)
+	employee := handlers.NewEmployeeHandler(database, imageStore, shippingService)
 	employeeGroup := router.Group("/employee")
 	employeeGroup.Use(requireAuth, middleware.RequireRoles(models.RoleAdmin, models.RoleEmployee))
 	employeeGroup.GET("/dashboard", employee.Dashboard)
@@ -272,6 +272,7 @@ func registerRoutes(router *gin.Engine, database *gorm.DB, appMetrics *metrics.M
 	employeeGroup.GET("/orders/:id", employee.ViewOrder)
 	employeeGroup.POST("/orders/:id/status", employee.UpdateOrderStatus)
 	employeeGroup.POST("/orders/:id/shipment", shippingHandler.Handover)
+	employeeGroup.POST("/orders/:id/return-received", employee.ConfirmWarehouseReturn)
 }
 
 func serveProductImage(imageStore *uploads.ImageStore, logger *slog.Logger) gin.HandlerFunc {

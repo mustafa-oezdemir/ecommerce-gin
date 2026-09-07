@@ -20,17 +20,21 @@ type EmployeeHandler struct {
 	database     *gorm.DB
 	orderService *services.OrderService
 	mailService  *services.MailService
+	shipping     *services.ShippingService
 	imageStore   *uploads.ImageStore
 }
 
-func NewEmployeeHandler(database *gorm.DB, imageStore *uploads.ImageStore) *EmployeeHandler {
+func NewEmployeeHandler(database *gorm.DB, imageStore *uploads.ImageStore, shippingService *services.ShippingService) *EmployeeHandler {
 	if database == nil {
 		panic("handlers: database is required")
 	}
 	if imageStore == nil {
 		panic("handlers: product image store is required")
 	}
-	return &EmployeeHandler{database: database, orderService: services.NewOrderService(database), mailService: services.NewMailServiceFromEnv(), imageStore: imageStore}
+	if shippingService == nil {
+		panic("handlers: shipping service is required")
+	}
+	return &EmployeeHandler{database: database, orderService: services.NewOrderService(database), mailService: services.NewMailServiceFromEnv(), shipping: shippingService, imageStore: imageStore}
 }
 
 func (h *EmployeeHandler) Dashboard(c *gin.Context) {
@@ -389,11 +393,36 @@ func (h *EmployeeHandler) ViewOrder(c *gin.Context) {
 		return
 	}
 	var order models.Order
-	if err := h.database.WithContext(c.Request.Context()).Preload("User").Preload("Payment").Preload("Shipment").Preload("Items.Product").Preload("Addresses").First(&order, uri.ID).Error; err != nil {
+	database := h.database.WithContext(c.Request.Context())
+	if err := database.Preload("User").Preload("Payment").Preload("ReturnRequest").Preload("Items.Product").Preload("Addresses").First(&order, uri.ID).Error; err != nil {
 		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}
-	c.HTML(http.StatusOK, "employee/orders/view", viewData(c, gin.H{"PageTitle": "Order Details", "Order": order}))
+	var outboundShipment models.OrderShipment
+	if err := database.Where("order_id = ? AND shipment_type = ?", order.ID, "outbound").First(&outboundShipment).Error; err == nil {
+		order.Shipment = outboundShipment
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		c.String(http.StatusInternalServerError, "Could not load shipment")
+		return
+	}
+	data := gin.H{"PageTitle": "Order Details", "Order": order, "Status": c.Query("status")}
+	if order.Shipment.ID != 0 {
+		data["ShipmentTrackingURL"] = h.shipping.TrackingURL(order.Shipment.TrackingNumber)
+	}
+	if order.ReturnRequest != nil {
+		var returnShipment models.OrderShipment
+		err := database.Where("order_id = ? AND shipment_type = ?", order.ID, "return").First(&returnShipment).Error
+		if err == nil {
+			data["ReturnShipment"] = &returnShipment
+			data["ReturnTrackingURL"] = h.shipping.TrackingURL(returnShipment.TrackingNumber)
+			data["CanConfirmWarehouseReturn"] = returnShipment.Status == models.ReturnStatusReceivedAtWarehouse && order.ReturnRequest.Status == models.ReturnStatusReceivedAtWarehouse && order.ReturnRequest.WarehouseReturnConfirmedAt == nil
+		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+			c.String(http.StatusInternalServerError, "Could not load return shipment")
+			return
+		}
+		data["WarehouseReturnConfirmed"] = order.ReturnRequest.WarehouseReturnConfirmedAt != nil
+	}
+	c.HTML(http.StatusOK, "employee/orders/view", viewData(c, data))
 }
 
 func managementDashboardURL(c *gin.Context) string {
@@ -414,6 +443,10 @@ func (h *EmployeeHandler) UpdateOrderStatus(c *gin.Context) {
 		c.String(http.StatusBadRequest, "Invalid order status")
 		return
 	}
+	if models.OrderStatus(req.Status) == models.OrderStatusCancelled {
+		c.String(http.StatusForbidden, "Order cancellation is only available to the customer")
+		return
+	}
 	err := h.orderService.UpdateStatus(c.Request.Context(), uri.ID, models.OrderStatus(req.Status))
 	if err != nil {
 		if errors.Is(err, services.ErrInvalidTransition) {
@@ -432,4 +465,24 @@ func (h *EmployeeHandler) UpdateOrderStatus(c *gin.Context) {
 		go h.mailService.SendOrderStatusChanged(order.User, order)
 	}
 	c.Redirect(http.StatusFound, "/employee/orders")
+}
+
+func (h *EmployeeHandler) ConfirmWarehouseReturn(c *gin.Context) {
+	var uri validation.ProductIDURI
+	if err := c.ShouldBindUri(&uri); err != nil {
+		c.AbortWithStatus(http.StatusNotFound)
+		return
+	}
+	if err := h.shipping.ConfirmWarehouseReturn(c.Request.Context(), uri.ID); err != nil {
+		switch {
+		case errors.Is(err, gorm.ErrRecordNotFound):
+			c.AbortWithStatus(http.StatusNotFound)
+		case errors.Is(err, services.ErrReturnNotAtWarehouse), errors.Is(err, services.ErrReturnAlreadyConfirmed):
+			c.String(http.StatusConflict, err.Error())
+		default:
+			c.String(http.StatusInternalServerError, "Could not confirm warehouse return")
+		}
+		return
+	}
+	c.Redirect(http.StatusSeeOther, "/employee/orders/"+strconv.FormatUint(uint64(uri.ID), 10)+"?status=return-confirmed")
 }

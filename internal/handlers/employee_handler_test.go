@@ -3,6 +3,7 @@ package handlers
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
@@ -11,6 +12,23 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
+
+func TestEmployeeCannotCancelOrderThroughStatusEndpoint(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	handler := &EmployeeHandler{}
+	recorder := httptest.NewRecorder()
+	context, _ := gin.CreateTestContext(recorder)
+	context.Request = httptest.NewRequest(http.MethodPost, "/employee/orders/68/status", strings.NewReader("status=cancelled"))
+	context.Request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	context.Params = gin.Params{{Key: "id", Value: "68"}}
+
+	handler.UpdateOrderStatus(context)
+	context.Writer.WriteHeaderNow()
+
+	if recorder.Code != http.StatusForbidden {
+		t.Fatalf("got status %d, want %d", recorder.Code, http.StatusForbidden)
+	}
+}
 
 func TestActivateProductMakesInactiveProductAvailable(t *testing.T) {
 	gin.SetMode(gin.TestMode)

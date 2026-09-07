@@ -22,6 +22,8 @@ var (
 	ErrInvalidShippingCallback = errors.New("invalid shipping callback")
 	ErrDeliveryNotConfirmed    = errors.New("shipment has not been delivered")
 	ErrInvalidReturnRequest    = errors.New("invalid return request")
+	ErrReturnNotAtWarehouse    = errors.New("return shipment has not reached the warehouse")
+	ErrReturnAlreadyConfirmed  = errors.New("warehouse return was already confirmed")
 )
 
 type ShippingService struct {
@@ -299,8 +301,11 @@ func (service *ShippingService) CancelOrder(ctx context.Context, userID, orderID
 		return ErrInvalidTransition
 	}
 	var order models.Order
-	if err := service.database.WithContext(ctx).First(&order, "id = ? AND user_id = ?", orderID, userID).Error; err != nil {
+	if err := service.database.WithContext(ctx).Preload("ReturnRequest").First(&order, "id = ? AND user_id = ?", orderID, userID).Error; err != nil {
 		return err
+	}
+	if order.ReturnRequest != nil {
+		return ErrInvalidTransition
 	}
 	switch order.Status {
 	case models.OrderStatusCancelled:
@@ -350,6 +355,42 @@ func (service *ShippingService) CancelOrder(ctx context.Context, userID, orderID
 	default:
 		return ErrInvalidTransition
 	}
+}
+
+func (service *ShippingService) ConfirmWarehouseReturn(ctx context.Context, orderID uint) error {
+	if orderID == 0 {
+		return ErrReturnNotAtWarehouse
+	}
+	return service.database.WithContext(ctx).Transaction(func(transaction *gorm.DB) error {
+		var returnRequest models.ReturnRequest
+		if err := transaction.Clauses(clause.Locking{Strength: "UPDATE"}).Where("order_id = ?", orderID).First(&returnRequest).Error; err != nil {
+			return err
+		}
+		if returnRequest.WarehouseReturnConfirmedAt != nil {
+			return ErrReturnAlreadyConfirmed
+		}
+		var shipment models.OrderShipment
+		if err := transaction.Where("order_id = ? AND shipment_type = ?", orderID, "return").First(&shipment).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return ErrReturnNotAtWarehouse
+			}
+			return err
+		}
+		if returnRequest.Status != models.ReturnStatusReceivedAtWarehouse || shipment.Status != models.ReturnStatusReceivedAtWarehouse {
+			return ErrReturnNotAtWarehouse
+		}
+		now := time.Now().UTC()
+		result := transaction.Model(&models.ReturnRequest{}).
+			Where("id = ? AND warehouse_return_confirmed_at IS NULL", returnRequest.ID).
+			Update("warehouse_return_confirmed_at", now)
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected != 1 {
+			return ErrReturnAlreadyConfirmed
+		}
+		return nil
+	})
 }
 
 func (service *ShippingService) ApplyCallback(ctx context.Context, callback ShippingCallback) error {

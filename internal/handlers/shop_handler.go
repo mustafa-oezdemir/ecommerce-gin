@@ -242,7 +242,7 @@ func (h *ShopHandler) OrderDetail(c *gin.Context) {
 		return
 	}
 	data := gin.H{"PageTitle": "Order Details", "Order": order}
-	canCancel := order.Status == models.OrderStatusPaid || order.Status == models.OrderStatusPreparing || order.Status == models.OrderStatusReadyForShipping || order.Status == models.OrderStatusProcessing
+	canCancel := order.ReturnRequest == nil && (order.Status == models.OrderStatusPaid || order.Status == models.OrderStatusPreparing || order.Status == models.OrderStatusReadyForShipping || order.Status == models.OrderStatusProcessing)
 	if h.shipping.Enabled() {
 		shipment, shippingErr := h.shipping.RefreshOrderShipment(c.Request.Context(), order.ID, c.GetString(middleware.RequestIDKey))
 		if shippingErr != nil && !errors.Is(shippingErr, shippingapi.ErrNotFound) {
@@ -258,7 +258,7 @@ func (h *ShopHandler) OrderDetail(c *gin.Context) {
 			data["Shipment"] = shipment
 			data["ShipmentTrackingURL"] = h.shipping.TrackingURL(shipment.TrackingNumber)
 			data["ShipmentQRCodeURL"] = h.shipping.QRCodeURL(shipment.TrackingNumber)
-			if order.Status == models.OrderStatusShipped && shipment.Status != "delivered" && shipment.Status != "cancelled" {
+			if order.ReturnRequest == nil && order.Status == models.OrderStatusShipped && shipment.Status != "delivered" && shipment.Status != "cancelled" {
 				canCancel = true
 			}
 			if timeline, timelineErr := h.shipping.Timeline(c.Request.Context(), shipment.TrackingNumber, c.GetString(middleware.RequestIDKey)); timelineErr == nil {

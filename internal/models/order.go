@@ -25,20 +25,17 @@ const (
 func AllowedOrderStatusTransitions(from OrderStatus) []OrderStatus {
 	switch from {
 	case OrderStatusPendingPayment:
-		return []OrderStatus{OrderStatusPaid, OrderStatusPaymentFailed, OrderStatusCancelled}
+		return []OrderStatus{OrderStatusPaid, OrderStatusPaymentFailed}
 	case OrderStatusPaid:
-		return []OrderStatus{OrderStatusPreparing, OrderStatusCancelled, OrderStatusRefunded}
+		return []OrderStatus{OrderStatusPreparing, OrderStatusRefunded}
 	case OrderStatusPending:
-		return []OrderStatus{OrderStatusPreparing, OrderStatusCancelled}
+		return []OrderStatus{OrderStatusPreparing}
 	case OrderStatusPreparing, OrderStatusProcessing:
-		return []OrderStatus{OrderStatusReadyForShipping, OrderStatusCancelled}
+		return []OrderStatus{OrderStatusReadyForShipping}
 	case OrderStatusReadyForShipping:
 		// Shipping handover is performed only through ShippingService.Handover.
 		// Logistics lifecycle statuses are owned by shipping-service.
-		return []OrderStatus{OrderStatusCancelled}
-	case OrderStatusShipped:
-		// A shipment can only be cancelled before shipping-service receives it.
-		return []OrderStatus{OrderStatusCancelled}
+		return nil
 	default:
 		return nil
 	}
@@ -119,16 +116,19 @@ func (reason ReturnReason) Valid() bool {
 
 type ReturnRequest struct {
 	gorm.Model
-	OrderID              uint         `gorm:"not null;uniqueIndex"`
-	UserID               uint         `gorm:"not null;index"`
-	Reason               ReturnReason `gorm:"size:32;not null"`
-	Note                 string       `gorm:"size:1000"`
-	OriginalShipmentID   string       `gorm:"size:64;not null;uniqueIndex"`
-	ReturnShipmentID     string       `gorm:"size:64;not null;uniqueIndex"`
-	ReturnTrackingNumber string       `gorm:"size:64;not null;uniqueIndex"`
-	Status               string       `gorm:"size:50;not null"`
-	Items                []ReturnItem
+	OrderID                    uint         `gorm:"not null;uniqueIndex"`
+	UserID                     uint         `gorm:"not null;index"`
+	Reason                     ReturnReason `gorm:"size:32;not null"`
+	Note                       string       `gorm:"size:1000"`
+	OriginalShipmentID         string       `gorm:"size:64;not null;uniqueIndex"`
+	ReturnShipmentID           string       `gorm:"size:64;not null;uniqueIndex"`
+	ReturnTrackingNumber       string       `gorm:"size:64;not null;uniqueIndex"`
+	Status                     string       `gorm:"size:50;not null"`
+	WarehouseReturnConfirmedAt *time.Time
+	Items                      []ReturnItem
 }
+
+const ReturnStatusReceivedAtWarehouse = "return_received_at_warehouse"
 
 type ReturnItem struct {
 	gorm.Model

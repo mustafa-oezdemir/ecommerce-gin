@@ -19,3 +19,9 @@ func TestProductDiscoveryMigrationPreservesVariantCombinations(t *testing.T) {
 		}
 	}
 }
+
+func TestWarehouseReturnConfirmationMigrationStaysInCommerceDomain(t *testing.T) {
+	if !strings.Contains(warehouseReturnConfirmationSchema, "warehouse_return_confirmed_at") || !strings.Contains(warehouseReturnConfirmationSchema, "ALTER TABLE return_requests") {
+		t.Fatal("warehouse return confirmation migration is missing")
+	}
+}

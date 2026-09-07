@@ -209,6 +209,93 @@ func TestCustomerDeliveryConfirmationAndReturnAreIdempotent(t *testing.T) {
 	if err := database.Model(&models.ReturnRequest{}).Where("order_id = ?", order.ID).Count(&count).Error; err != nil || count != 1 {
 		t.Fatalf("expected one return request, got %d: %v", count, err)
 	}
+	if err := service.CancelOrder(t.Context(), order.UserID, order.ID, "cancel-after-return"); !errors.Is(err, ErrInvalidTransition) {
+		t.Fatalf("order with an active return was cancellable: %v", err)
+	}
+}
+
+func TestCustomerCancellationEnforcesOwnershipAndRejectsDeliveredOrders(t *testing.T) {
+	database := checkoutIntegrationDatabase(t)
+	fixture := newCheckoutFixture(t, database, 2, 1)
+	order := createShippingOrderFixture(t, database, fixture)
+	service := NewShippingService(database, &shippingClientStub{})
+
+	if err := service.CancelOrder(t.Context(), fixture.users[1].ID, order.ID, "other-customer"); !errors.Is(err, gorm.ErrRecordNotFound) {
+		t.Fatalf("another customer cancelled the order: %v", err)
+	}
+	if err := service.CancelOrder(t.Context(), order.UserID, order.ID, "owner-cancel"); err != nil {
+		t.Fatalf("owner could not cancel eligible order: %v", err)
+	}
+	var cancelled models.Order
+	if err := database.First(&cancelled, order.ID).Error; err != nil || cancelled.Status != models.OrderStatusCancelled {
+		t.Fatalf("eligible order was not cancelled: status=%s err=%v", cancelled.Status, err)
+	}
+
+	deliveredOrder := createShippingOrderFixture(t, database, fixture)
+	if err := database.Model(&models.Order{}).Where("id = ?", deliveredOrder.ID).Update("status", models.OrderStatusShipped).Error; err != nil {
+		t.Fatal(err)
+	}
+	delivered := &shippingapi.Shipment{ShipmentID: "shp_delivered", OrderID: fmt.Sprint(deliveredOrder.ID), TrackingNumber: "PHE-DE-DELIVERED", ShipmentType: "outbound", Status: "delivered", StatusLabel: "Delivered"}
+	deliveredService := NewShippingService(database, &shippingClientStub{shipment: delivered})
+	if err := deliveredService.CancelOrder(t.Context(), deliveredOrder.UserID, deliveredOrder.ID, "delivered-cancel"); !errors.Is(err, ErrInvalidTransition) {
+		t.Fatalf("delivered order cancellation = %v, want invalid transition", err)
+	}
+}
+
+func TestWarehouseReturnConfirmationRequiresCallbackAndIsIdempotent(t *testing.T) {
+	database := checkoutIntegrationDatabase(t)
+	fixture := newCheckoutFixture(t, database, 1, 1)
+	order := createShippingOrderFixture(t, database, fixture)
+	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
+	returnShipmentID := "shp_return_" + suffix
+	trackingNumber := "RET-DE-" + suffix
+	request := models.ReturnRequest{
+		OrderID: order.ID, UserID: order.UserID, Reason: models.ReturnReasonDefective,
+		OriginalShipmentID: "shp_outbound_" + suffix, ReturnShipmentID: returnShipmentID,
+		ReturnTrackingNumber: trackingNumber, Status: "return_in_transit",
+	}
+	if err := database.Create(&request).Error; err != nil {
+		t.Fatal(err)
+	}
+	cache := models.OrderShipment{OrderID: order.ID, ShipmentID: returnShipmentID, TrackingNumber: trackingNumber, ShipmentType: "return", Status: "return_in_transit", StatusLabel: "Return in transit"}
+	if err := database.Create(&cache).Error; err != nil {
+		t.Fatal(err)
+	}
+	service := NewShippingService(database, &shippingClientStub{})
+	if err := service.ConfirmWarehouseReturn(t.Context(), order.ID); !errors.Is(err, ErrReturnNotAtWarehouse) {
+		t.Fatalf("confirmation before warehouse callback = %v", err)
+	}
+
+	eventID := "evt_return_warehouse_" + suffix
+	t.Cleanup(func() {
+		database.Unscoped().Where("shipping_event_id = ?", eventID).Delete(&models.Notification{})
+		database.Where("event_id = ?", eventID).Delete(&models.ShippingEventReceipt{})
+	})
+	callback := ShippingCallback{
+		EventID: eventID, EventType: "status_changed", ShipmentID: returnShipmentID,
+		OrderID: fmt.Sprint(order.ID), TrackingNumber: trackingNumber, ShipmentType: "return",
+		Status: "return_received_at_warehouse", StatusLabel: "Received at warehouse", OccurredAt: time.Now().UTC(),
+	}
+	if err := service.ApplyCallback(t.Context(), callback); err != nil {
+		t.Fatalf("apply warehouse callback: %v", err)
+	}
+	if err := service.ApplyCallback(t.Context(), callback); err != nil {
+		t.Fatalf("replay warehouse callback: %v", err)
+	}
+	if err := service.ConfirmWarehouseReturn(t.Context(), order.ID); err != nil {
+		t.Fatalf("confirm warehouse return: %v", err)
+	}
+	var confirmed models.ReturnRequest
+	if err := database.First(&confirmed, request.ID).Error; err != nil || confirmed.WarehouseReturnConfirmedAt == nil {
+		t.Fatalf("warehouse confirmation was not saved: confirmed=%+v err=%v", confirmed.WarehouseReturnConfirmedAt, err)
+	}
+	if err := service.ConfirmWarehouseReturn(t.Context(), order.ID); !errors.Is(err, ErrReturnAlreadyConfirmed) {
+		t.Fatalf("duplicate confirmation = %v, want already confirmed", err)
+	}
+	var receipts int64
+	if err := database.Model(&models.ShippingEventReceipt{}).Where("event_id = ?", eventID).Count(&receipts).Error; err != nil || receipts != 1 {
+		t.Fatalf("warehouse callback receipts=%d err=%v", receipts, err)
+	}
 }
 
 func createShippingOrderFixture(t *testing.T, database *gorm.DB, fixture checkoutFixture) models.Order {
