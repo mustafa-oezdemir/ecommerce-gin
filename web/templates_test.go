@@ -376,6 +376,85 @@ func TestEmployeeProductsTemplateRendersInactiveProductActivation(t *testing.T) 
 	}
 }
 
+func TestDashboardLowStockAndPendingCardsAreAccessibleLinks(t *testing.T) {
+	templates, err := ParseTemplates()
+	if err != nil {
+		t.Fatalf("parse templates: %v", err)
+	}
+	tests := []struct {
+		name     string
+		template string
+		data     map[string]any
+		want     []string
+	}{
+		{
+			name: "employee", template: "employee_dashboard.tmpl",
+			data: map[string]any{"PendingOrders": int64(12), "LowStockProducts": int64(8)},
+			want: []string{`class="card stat-card stat-card-link h-100" href="/employee/orders?status=pending"`, `aria-label="View 12 pending orders"`, `href="/employee/products?stock_status=low"`, `aria-label="View 8 low-stock products"`},
+		},
+		{
+			name: "admin", template: "admin_dashboard.tmpl",
+			data: map[string]any{"PendingOrders": int64(12), "LowStock": int64(8), "RevenueCents": int64(0)},
+			want: []string{`class="card stat-card stat-card-link h-100" href="/admin/orders?status=pending"`, `aria-label="View 12 pending orders"`, `href="/employee/products?stock_status=low"`, `aria-label="View 8 low-stock products"`},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var output bytes.Buffer
+			if err := templates.ExecuteTemplate(&output, tt.template, tt.data); err != nil {
+				t.Fatalf("execute dashboard: %v", err)
+			}
+			for _, want := range tt.want {
+				if !strings.Contains(output.String(), want) {
+					t.Errorf("dashboard does not contain %q", want)
+				}
+			}
+		})
+	}
+}
+
+func TestManagementTemplatesShowRemovableFiltersAndEmptyStates(t *testing.T) {
+	templates, err := ParseTemplates()
+	if err != nil {
+		t.Fatalf("parse templates: %v", err)
+	}
+	tests := []struct {
+		name     string
+		template string
+		data     map[string]any
+		want     []string
+	}{
+		{
+			name: "low stock products", template: "employee_products.tmpl",
+			data: map[string]any{"Products": []models.Product{}, "LowStockFilter": true, "SelectedStockStatus": "low", "SelectedAvailability": "all", "DashboardURL": "/employee/dashboard", "ImageMaxMB": 5, "ImageLimit": 8},
+			want: []string{"Low Stock Products", `name="stock_status"`, `value="low" selected`, `aria-label="Remove low-stock filter"`, `href="/employee/dashboard"`, "No low-stock products."},
+		},
+		{
+			name: "employee pending orders", template: "employee_orders.tmpl",
+			data: map[string]any{"Orders": []models.Order{}, "PendingFilter": true, "SelectedStatus": "pending", "SelectedSort": "id_desc", "Statuses": []models.OrderStatus{models.OrderStatusPending}, "DashboardURL": "/employee/dashboard"},
+			want: []string{"Pending Orders", `value="pending" selected`, `aria-label="Remove pending filter"`, `href="/employee/dashboard"`, "No pending orders."},
+		},
+		{
+			name: "admin pending orders", template: "admin_orders.tmpl",
+			data: map[string]any{"Orders": []models.Order{}, "PendingFilter": true, "SelectedStatus": "pending", "SelectedSort": "id_desc", "Statuses": []models.OrderStatus{models.OrderStatusPending}, "DashboardURL": "/admin/dashboard"},
+			want: []string{"Pending Orders", `value="pending" selected`, `aria-label="Remove pending filter"`, `href="/admin/dashboard"`, "No pending orders."},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var output bytes.Buffer
+			if err := templates.ExecuteTemplate(&output, tt.template, tt.data); err != nil {
+				t.Fatalf("execute filtered list: %v", err)
+			}
+			for _, want := range tt.want {
+				if !strings.Contains(output.String(), want) {
+					t.Errorf("filtered list does not contain %q", want)
+				}
+			}
+		})
+	}
+}
+
 func TestEveryPageTemplateUsesSharedShell(t *testing.T) {
 	entries, err := fs.ReadDir(templateFS, "templates")
 	if err != nil {

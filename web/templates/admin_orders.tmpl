@@ -20,11 +20,12 @@
       <div class="card-body p-4">
         <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
           <div>
-            <h1 class="h4 mb-1">All Orders</h1>
+            <h1 class="h4 mb-1">{{if .PendingFilter}}Pending Orders{{else}}All Orders{{end}}</h1>
             <p class="text-muted small mb-0">Filter by user or status, then sort the results.</p>
           </div>
           <span class="badge rounded-pill text-bg-light">{{len .Orders}} orders</span>
         </div>
+        {{if .PendingFilter}}<div class="d-flex flex-wrap align-items-center gap-2 mb-3" aria-label="Active filters"><span class="text-muted small">Filter:</span><a class="badge rounded-pill text-bg-warning text-decoration-none" href="/admin/orders" aria-label="Remove pending filter">Pending ×</a><a class="ms-auto small" href="{{.DashboardURL}}">← Back to Dashboard</a></div>{{end}}
         <form method="get" action="/admin/orders" class="row g-3 align-items-end mb-4">
           <div class="col-md-6 col-lg-4">
             <label class="form-label" for="order-user">User</label>
@@ -69,7 +70,7 @@
                 <td>{{money .TotalCents}}</td>
               </tr>
               {{else}}
-              <tr><td colspan="4" class="text-muted">No orders found.</td></tr>
+              <tr><td colspan="4" class="text-muted text-center py-4">{{if .PendingFilter}}No pending orders.{{else}}No orders found.{{end}}</td></tr>
               {{end}}
             </tbody>
           </table>

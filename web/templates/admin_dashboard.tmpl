@@ -10,6 +10,9 @@
   <style>
     body { background: linear-gradient(180deg, #f8fafc 0%, #eef4ff 100%); }
     .stat-card { border: 0; border-radius: 1.1rem; box-shadow: 0 12px 28px rgba(15,23,42,0.08); }
+    .stat-card-link { color: inherit; text-decoration: none; transition: transform .15s ease, box-shadow .15s ease; }
+    .stat-card-link:hover { color: inherit; transform: translateY(-2px); box-shadow: 0 16px 34px rgba(15,23,42,0.13); }
+    .stat-card-link:focus-visible { outline: 3px solid #0d6efd; outline-offset: 3px; }
   </style>
 	</head>
 	<body>
@@ -55,20 +58,20 @@
 					</div>
 				</div>
 				<div class="col-md-6 col-xl-3">
-					<div class="card stat-card h-100">
+					<a class="card stat-card stat-card-link h-100" href="/admin/orders?status=pending" aria-label="View {{.PendingOrders}} pending orders">
 						<div class="card-body">
 							<span class="text-muted small">Pending Orders</span>
 							<div class="display-6 fw-bold mt-2">{{ .PendingOrders }}</div>
 						</div>
-					</div>
+					</a>
 				</div>
 				<div class="col-md-6 col-xl-3">
-					<div class="card stat-card h-100">
+					<a class="card stat-card stat-card-link h-100" href="/employee/products?stock_status=low" aria-label="View {{.LowStock}} low-stock products">
 						<div class="card-body">
 							<span class="text-muted small">Low Stock</span>
 							<div class="display-6 fw-bold mt-2">{{ .LowStock }}</div>
 						</div>
-					</div>
+					</a>
 				</div>
 				<div class="col-md-6 col-xl-3">
 					<div class="card stat-card h-100">

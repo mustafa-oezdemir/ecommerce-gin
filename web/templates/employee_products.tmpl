@@ -28,10 +28,18 @@
     <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
       <div>
         <h1 class="h3 mb-1">Product Management</h1>
-        <p class="text-muted mb-0">Find products and manage their details.</p>
+        <p class="text-muted mb-0">{{if .LowStockFilter}}Low Stock Products{{else}}Find products and manage their details.{{end}}</p>
       </div>
       <span class="badge rounded-pill text-bg-light">{{len .Products}} products</span>
     </div>
+
+    {{if .LowStockFilter}}
+    <div class="d-flex flex-wrap align-items-center gap-2 mb-4" aria-label="Active filters">
+      <span class="text-muted small">Filter:</span>
+      <a class="badge rounded-pill text-bg-warning text-decoration-none" href="/employee/products" aria-label="Remove low-stock filter">Low Stock ×</a>
+      <a class="ms-auto small" href="{{.DashboardURL}}">← Back to Dashboard</a>
+    </div>
+    {{end}}
 
     <details class="card panel-card toggle-card mb-4" id="new-product">
       <summary class="card-body p-3 d-flex align-items-center justify-content-between gap-3">
@@ -160,18 +168,18 @@
     <section class="card panel-card">
       <div class="card-body p-4">
         <form method="get" action="/employee/products" class="row g-3 align-items-end mb-4">
-          <div class="col-md-5">
+          <div class="col-md-6 col-lg-3">
             <label class="form-label" for="product-search">Product</label>
             <input class="form-control" id="product-search" name="q" value="{{.Search}}" maxlength="100" placeholder="Search by product name">
           </div>
-          <div class="col-md-3">
+          <div class="col-md-6 col-lg-3">
             <label class="form-label" for="product-category">Category</label>
             <select class="form-select" id="product-category" name="category_id">
               <option value="">All categories</option>
               {{range .Categories}}<option value="{{.ID}}"{{if eq .ID $.SelectedCategoryID}} selected{{end}}>{{.Name}}</option>{{end}}
             </select>
           </div>
-          <div class="col-md-2">
+          <div class="col-md-4 col-lg-2">
             <label class="form-label" for="product-availability">Status</label>
             <select class="form-select" id="product-availability" name="availability">
               <option value="all"{{if eq .SelectedAvailability "all"}} selected{{end}}>All</option>
@@ -179,9 +187,16 @@
               <option value="inactive"{{if eq .SelectedAvailability "inactive"}} selected{{end}}>Inactive</option>
             </select>
           </div>
-          <div class="col-md-2 d-flex gap-2">
+          <div class="col-md-4 col-lg-2">
+            <label class="form-label" for="product-stock-status">Stock</label>
+            <select class="form-select" id="product-stock-status" name="stock_status">
+              <option value="">All stock levels</option>
+              <option value="low"{{if .LowStockFilter}} selected{{end}}>Low Stock</option>
+            </select>
+          </div>
+          <div class="col-md-4 col-lg-2 d-flex gap-2">
             <button class="btn btn-primary flex-grow-1" type="submit">Filter</button>
-            {{if or .Search .SelectedCategoryID (ne .SelectedAvailability "all")}}<a class="btn btn-outline-secondary" href="/employee/products">Reset</a>{{end}}
+            {{if or .Search .SelectedCategoryID (ne .SelectedAvailability "all") .LowStockFilter}}<a class="btn btn-outline-secondary" href="/employee/products">Reset</a>{{end}}
           </div>
         </form>
 
@@ -204,7 +219,7 @@
                 </td>
               </tr>
               {{else}}
-              <tr><td colspan="7" class="text-muted text-center py-4">No products match these filters.</td></tr>
+              <tr><td colspan="7" class="text-muted text-center py-4">{{if .LowStockFilter}}No low-stock products.{{else}}No products match these filters.{{end}}</td></tr>
               {{end}}
             </tbody>
           </table>

@@ -112,6 +112,36 @@ func TestAccountRoutesRequireAuthenticationAndCSRF(t *testing.T) {
 	}
 }
 
+func TestFilteredManagementRoutesRequireAuthentication(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	handler, err := NewRouter(RouterConfig{
+		Environment:       "test",
+		SessionSecret:     "a-session-secret-that-is-long-enough",
+		CSRFKey:           []byte("12345678901234567890123456789012"),
+		SecurityKey:       []byte("abcdefghijklmnopqrstuvwx12345678"),
+		Database:          &gorm.DB{},
+		Metrics:           metrics.New(prometheus.NewRegistry()),
+		Logger:            slog.New(slog.NewTextHandler(io.Discard, nil)),
+		ImageStore:        testImageStore(t),
+		ProfileImageStore: testImageStore(t),
+		LogReader:         testLogReader(t),
+	})
+	if err != nil {
+		t.Fatalf("build router: %v", err)
+	}
+	for _, path := range []string{
+		"/employee/products?stock_status=low",
+		"/employee/orders?status=pending",
+		"/admin/orders?status=pending",
+	} {
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
+		if response.Code != http.StatusFound || response.Header().Get("Location") != "/login" {
+			t.Errorf("GET %s = %d location %q, want login redirect", path, response.Code, response.Header().Get("Location"))
+		}
+	}
+}
+
 func TestNewRouterRegistersVersionedProductAPI(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	handler, err := NewRouter(RouterConfig{

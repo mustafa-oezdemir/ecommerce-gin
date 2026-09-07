@@ -108,6 +108,7 @@ func (h *EmployeeHandler) ListProducts(c *gin.Context) {
 		"SelectedCategoryID":   uint(selectedCategoryID),
 		"SelectedAvailability": selectedAvailability,
 		"SelectedStockStatus":  selectedStockStatus,
+		"LowStockFilter":       selectedStockStatus == stockStatusLow,
 		"DashboardURL":         managementDashboardURL(c),
 	}
 	if editID, err := strconv.ParseUint(strings.TrimSpace(c.Query("edit")), 10, 64); err == nil && editID > 0 {
@@ -323,6 +324,7 @@ func (h *EmployeeHandler) ListOrders(c *gin.Context) {
 		"UserSearch":     userSearch,
 		"SelectedStatus": string(selectedStatus),
 		"SelectedSort":   selectedSort,
+		"PendingFilter":  selectedStatus == models.OrderStatusPending,
 		"DashboardURL":   managementDashboardURL(c),
 	}))
 }

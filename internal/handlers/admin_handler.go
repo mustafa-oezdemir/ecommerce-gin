@@ -286,6 +286,7 @@ func (h *AdminHandler) ListOrders(c *gin.Context) {
 		"UserSearch":     userSearch,
 		"SelectedStatus": string(selectedStatus),
 		"SelectedSort":   selectedSort,
+		"PendingFilter":  selectedStatus == models.OrderStatusPending,
 		"DashboardURL":   "/admin/dashboard",
 	}))
 }
