@@ -59,7 +59,8 @@ func (service *PaymentCardService) Get(ctx context.Context, userID, cardID uint)
 }
 
 func (service *PaymentCardService) Add(ctx context.Context, input AddPaymentCardInput) (*models.SavedPaymentCard, error) {
-	if !service.Enabled() || input.UserID == 0 || input.ExpMonth < 1 || input.ExpMonth > 12 || input.ExpYear < time.Now().UTC().Year() || len(strings.TrimSpace(input.CVC)) != 3 {
+	now := time.Now().UTC()
+	if !service.Enabled() || input.UserID == 0 || input.ExpMonth < 1 || input.ExpMonth > 12 || input.ExpYear < now.Year() || (input.ExpYear == now.Year() && input.ExpMonth < int(now.Month())) || len(strings.TrimSpace(input.CVC)) != 3 {
 		return nil, ErrPaymentCardInvalid
 	}
 	tokenized, err := service.banking.TokenizeCard(ctx, banking.TokenizeCardRequest{
@@ -70,14 +71,15 @@ func (service *PaymentCardService) Add(ctx context.Context, input AddPaymentCard
 	}
 	card := models.SavedPaymentCard{UserID: input.UserID, ProviderToken: tokenized.Token, Brand: tokenized.Brand, Last4: tokenized.Last4, ExpMonth: tokenized.ExpMonth, ExpYear: tokenized.ExpYear, IsDefault: input.IsDefault}
 	err = service.database.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if input.IsDefault {
-			if err := tx.Model(&models.SavedPaymentCard{}).Where("user_id = ?", input.UserID).Update("is_default", false).Error; err != nil {
-				return err
-			}
-		}
 		var existing models.SavedPaymentCard
 		lookup := tx.Where("user_id = ? AND brand = ? AND last4 = ? AND exp_month = ? AND exp_year = ?", input.UserID, card.Brand, card.Last4, card.ExpMonth, card.ExpYear).First(&existing)
 		if lookup.Error == nil {
+			card.IsDefault = existing.IsDefault || input.IsDefault
+			if input.IsDefault {
+				if err := tx.Model(&models.SavedPaymentCard{}).Where("user_id = ? AND id <> ?", input.UserID, existing.ID).Update("is_default", false).Error; err != nil {
+					return err
+				}
+			}
 			card.ID = existing.ID
 			return tx.Model(&existing).Updates(map[string]any{"provider_token": card.ProviderToken, "is_default": card.IsDefault}).Error
 		}
@@ -90,6 +92,8 @@ func (service *PaymentCardService) Add(ctx context.Context, input AddPaymentCard
 				return err
 			}
 			card.IsDefault = count == 0
+		} else if err := tx.Model(&models.SavedPaymentCard{}).Where("user_id = ?", input.UserID).Update("is_default", false).Error; err != nil {
+			return err
 		}
 		return tx.Create(&card).Error
 	})

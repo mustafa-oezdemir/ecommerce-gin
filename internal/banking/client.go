@@ -50,7 +50,7 @@ func (client *Client) CreatePaymentIntent(ctx context.Context, request CreatePay
 	if err != nil {
 		return nil, fmt.Errorf("encode banking payment intent: %w", err)
 	}
-	endpoint := client.apiURL.ResolveReference(&url.URL{Path: "/api/v1/merchant/payment-intents"})
+	endpoint := client.apiURL.ResolveReference(&url.URL{Path: "/merchant/payment-intents"})
 	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint.String(), bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("create banking request: %w", err)
@@ -102,7 +102,7 @@ func (client *Client) TokenizeCard(ctx context.Context, request TokenizeCardRequ
 		CVC        string `json:"cvc"`
 	}{client.merchantID, request.CardNumber, request.ExpMonth, request.ExpYear, request.CVC}
 	var result TokenizedCard
-	if err := client.post(ctx, "/api/v1/merchant/cards/tokenize", request.RequestID, payload, &result, http.StatusCreated); err != nil {
+	if err := client.post(ctx, "/merchant/cards/tokenize", request.RequestID, payload, &result, http.StatusCreated); err != nil {
 		return nil, err
 	}
 	if len(result.Token) != 64 || len(result.Last4) != 4 || result.Brand == "" || result.ExpMonth < 1 || result.ExpMonth > 12 {
@@ -121,7 +121,7 @@ func (client *Client) ApproveCardPayment(ctx context.Context, request ApproveCar
 		CVC        string `json:"cvc"`
 	}{client.merchantID, request.CardToken, request.CVC}
 	var result CardPayment
-	path := "/api/v1/merchant/payment-intents/" + url.PathEscape(request.PaymentIntentID) + "/card-approve"
+	path := "/merchant/payment-intents/" + url.PathEscape(request.PaymentIntentID) + "/card-approve"
 	if err := client.post(ctx, path, request.RequestID, payload, &result, http.StatusOK); err != nil {
 		return nil, err
 	}

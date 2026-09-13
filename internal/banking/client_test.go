@@ -12,7 +12,7 @@ import (
 func TestCreatePaymentIntentSendsImmutableMerchantRequest(t *testing.T) {
 	var server *httptest.Server
 	server = httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		if request.URL.Path != "/api/v1/merchant/payment-intents" || request.Header.Get("Authorization") != "Bearer "+strings.Repeat("t", 32) {
+		if request.URL.Path != "/merchant/payment-intents" || request.Header.Get("Authorization") != "Bearer "+strings.Repeat("t", 32) {
 			t.Fatalf("unexpected request path or authorization")
 		}
 		if request.Header.Get("Idempotency-Key") != "0123456789abcdef0123456789abcdef" || request.Header.Get("X-Request-ID") != "request-1" {

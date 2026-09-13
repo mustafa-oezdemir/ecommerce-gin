@@ -61,7 +61,7 @@
 
 						<section class="card checkout-card"><div class="card-body p-4">
 								<h2 class="h5"><span class="step me-2">3</span> Payment Method</h2>
-								<p class="small text-muted">Card details are entered only in provider-hosted fields. PehliOne never stores card numbers or CVC values.</p>
+								<p class="small text-muted">PehliOne stores only a Banking token and masked card details. Your CVC is sent to Banking for this payment only and is never saved.</p>
 								<div class="row g-3">
 								<div class="col-md-6"><label class="payment-option d-block"><input class="form-check-input me-2" type="radio" name="payment_method" value="debit_card" data-card-method {{if not .Cards}}disabled{{end}} required> Debit Card</label></div>
 									<div class="col-md-6">
