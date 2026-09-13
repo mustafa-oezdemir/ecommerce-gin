@@ -190,11 +190,11 @@ func TestCheckoutTemplateUsesServerSummaryAndSafePaymentOptions(t *testing.T) {
 		TotalCents    int64
 	}{Cart: &models.Cart{Items: []models.CartItem{{Product: product, Quantity: 2}}}, SubtotalCents: 4000, ShippingCents: 499, TotalCents: 4499}
 	var output bytes.Buffer
-	if err := templates.ExecuteTemplate(&output, "checkout/index", map[string]any{"CurrentUser": &user, "Addresses": []models.UserAddress{address}, "Summary": summary, "IdempotencyKey": strings.Repeat("a", 64), "CSRFField": template.HTML("csrf")}); err != nil {
+	if err := templates.ExecuteTemplate(&output, "checkout/index", map[string]any{"CurrentUser": &user, "Addresses": []models.UserAddress{address}, "Summary": summary, "IdempotencyKey": strings.Repeat("a", 64), "CSRFField": template.HTML("csrf"), "BankingEnabled": true}); err != nil {
 		t.Fatal(err)
 	}
 	body := output.String()
-	for _, expected := range []string{"action=\"/checkout\"", "name=\"idempotency_key\"", "value=\"debit_card\"", "value=\"credit_card\"", "value=\"paypal\"", "value=\"klarna\"", "Go Book × 2", "44,99 €", "src=\"/static/checkout.js\""} {
+	for _, expected := range []string{"action=\"/checkout\"", "name=\"idempotency_key\"", "value=\"debit_card\"", "value=\"credit_card\"", "value=\"paypal\"", "value=\"klarna\"", "value=\"pehlione_bank\"", "Go Book × 2", "44,99 €", "src=\"/static/checkout.js\""} {
 		if !strings.Contains(body, expected) {
 			t.Errorf("checkout template missing %q", expected)
 		}

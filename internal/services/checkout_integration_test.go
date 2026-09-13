@@ -296,6 +296,41 @@ func TestWebhookProcessingIsIdempotent(t *testing.T) {
 	}
 }
 
+func TestBankingCheckoutBecomesPaidOnlyAfterMatchingWebhook(t *testing.T) {
+	database := checkoutIntegrationDatabase(t)
+	fixture := newCheckoutFixture(t, database, 1, 1)
+	if err := database.Create(&models.CartItem{CartID: fixture.carts[0].ID, ProductID: fixture.products[0].ID, Quantity: 1}).Error; err != nil {
+		t.Fatal(err)
+	}
+	client := &bankingClientStub{}
+	checkout := NewCheckoutService(database, NewRoutedPaymentGateway("test", client))
+	result, err := checkout.Checkout(t.Context(), CheckoutInput{UserID: fixture.users[0].ID, ShippingAddressID: fixture.addresses[0].ID, BillingSameAsShipping: true, PaymentMethod: models.PaymentMethodPehlioneBank, IdempotencyKey: fmt.Sprintf("%064x", 780), RequestID: "request-780"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Order.Status != models.OrderStatusPendingPayment || result.Order.Payment.Status != models.PaymentStatusPending || result.ApprovalURL == "" {
+		t.Fatalf("unexpected pending checkout: %#v", result)
+	}
+	webhooks := NewPaymentWebhookService(database, "0123456789abcdef0123456789abcdef")
+	event := PaymentWebhook{EventID: "event-" + fmt.Sprint(result.Order.ID), ProviderPaymentID: "bank-payment-1", PaymentIntentID: "intent-123", MerchantReference: "ECOM-" + result.Order.OrderNumber, Amount: "14.99", Currency: "EUR", Status: models.PaymentStatusPaid}
+	tampered := event
+	tampered.EventID += "-tampered"
+	tampered.Amount = "1.00"
+	if _, err := webhooks.Process(t.Context(), models.PaymentMethodPehlioneBank.Provider(), tampered); !errors.Is(err, ErrInvalidWebhook) {
+		t.Fatalf("tampered amount error=%v", err)
+	}
+	if replay, err := webhooks.Process(t.Context(), models.PaymentMethodPehlioneBank.Provider(), event); err != nil || replay {
+		t.Fatalf("banking webhook replay=%v err=%v", replay, err)
+	}
+	var order models.Order
+	if err := database.Preload("Payment").First(&order, result.Order.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if order.Status != models.OrderStatusPaid || order.Payment.Status != models.PaymentStatusPaid || order.Payment.ProviderTransactionID == nil || *order.Payment.ProviderTransactionID != "bank-payment-1" {
+		t.Fatalf("webhook did not settle payment: %#v", order.Payment)
+	}
+}
+
 func TestSameIdempotencyKeyIsIsolatedByUser(t *testing.T) {
 	database := checkoutIntegrationDatabase(t)
 	fixture := newCheckoutFixture(t, database, 2, 2)

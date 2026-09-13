@@ -113,7 +113,7 @@ type CheckoutRequest struct {
 	ShippingAddressID     uint   `form:"shipping_address_id" binding:"required,gt=0"`
 	BillingAddressID      uint   `form:"billing_address_id" binding:"omitempty,gt=0"`
 	BillingSameAsShipping bool   `form:"billing_same_as_shipping"`
-	PaymentMethod         string `form:"payment_method" binding:"required,oneof=debit_card credit_card paypal klarna"`
+	PaymentMethod         string `form:"payment_method" binding:"required,oneof=debit_card credit_card paypal klarna pehlione_bank"`
 	IdempotencyKey        string `form:"idempotency_key" binding:"required,min=32,max=64"`
 	ProviderToken         string `form:"provider_token" binding:"omitempty,max=255"`
 }

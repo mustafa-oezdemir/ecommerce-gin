@@ -6,14 +6,16 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 
+	"github.com/mustafa-oezdemir/ecommerce-gin/internal/banking"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/models"
 )
 
 func TestPaymentMethodsAreExplicitlyValidated(t *testing.T) {
-	valid := []models.PaymentMethod{models.PaymentMethodDebitCard, models.PaymentMethodCreditCard, models.PaymentMethodPayPal, models.PaymentMethodKlarna}
+	valid := []models.PaymentMethod{models.PaymentMethodDebitCard, models.PaymentMethodCreditCard, models.PaymentMethodPayPal, models.PaymentMethodKlarna, models.PaymentMethodPehlioneBank}
 	for _, method := range valid {
 		if !method.Valid() || method.Provider() == "" {
 			t.Fatalf("payment method %q is not configured", method)
@@ -21,6 +23,30 @@ func TestPaymentMethodsAreExplicitlyValidated(t *testing.T) {
 	}
 	if models.PaymentMethod("cash").Valid() || models.PaymentMethod("cash").Provider() != "" {
 		t.Fatal("unknown payment method was accepted")
+	}
+}
+
+type bankingClientStub struct {
+	request banking.CreatePaymentIntentRequest
+}
+
+func (client *bankingClientStub) CreatePaymentIntent(_ context.Context, request banking.CreatePaymentIntentRequest) (*banking.PaymentIntent, error) {
+	client.request = request
+	return &banking.PaymentIntent{PaymentIntentID: "intent-123", Status: "AWAITING_CUSTOMER", ApprovalURL: "http://localhost:3000/pay/intent-123"}, nil
+}
+
+func TestRoutedGatewayCreatesPendingBankingIntent(t *testing.T) {
+	client := &bankingClientStub{}
+	gateway := NewRoutedPaymentGateway("test", client)
+	result, err := gateway.CreatePayment(t.Context(), PaymentRequest{UserID: 7, Method: models.PaymentMethodPehlioneBank, AmountCents: 14999, Currency: "EUR", IdempotencyKey: strings.Repeat("a", 64), OrderReference: "ECOM-ORD-0000000123", RequestID: "request-1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Status != models.PaymentStatusPending || result.PaymentIntentID != "intent-123" || result.ApprovalURL == "" {
+		t.Fatalf("unexpected result: %#v", result)
+	}
+	if client.request.Amount != "149.99" || client.request.OrderReference != "ECOM-ORD-0000000123" || client.request.RequestID != "request-1" {
+		t.Fatalf("unexpected banking request: %#v", client.request)
 	}
 }
 

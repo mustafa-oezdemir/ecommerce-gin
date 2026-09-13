@@ -13,6 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/csrf"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/api"
+	"github.com/mustafa-oezdemir/ecommerce-gin/internal/banking"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/handlers"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/logging"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/metrics"
@@ -43,6 +44,8 @@ type RouterConfig struct {
 	ShippingClient                shippingapi.Client
 	ShippingCallbackToken         string
 	ShippingPreviousCallbackToken string
+	BankingClient                 banking.PaymentIntentClient
+	BankingWebhookSecret          string
 }
 
 func NewRouter(config RouterConfig) (http.Handler, error) {
@@ -105,7 +108,7 @@ func NewRouter(config RouterConfig) (http.Handler, error) {
 	router.StaticFS("/static", http.FS(staticFiles))
 	router.GET("/media/products/:filename", serveProductImage(config.ImageStore, config.Logger))
 	router.GET("/media/profiles/:filename", serveStoredImage(config.ProfileImageStore))
-	registerRoutes(router, config.Database, config.Metrics, config.ImageStore, config.ProfileImageStore, config.LogReader, config.SecurityKey, config.Environment, config.WebhookSecret, config.ShippingClient, config.ShippingCallbackToken, config.ShippingPreviousCallbackToken)
+	registerRoutes(router, config.Database, config.Metrics, config.ImageStore, config.ProfileImageStore, config.LogReader, config.SecurityKey, config.Environment, config.WebhookSecret, config.BankingWebhookSecret, config.BankingClient, config.ShippingClient, config.ShippingCallbackToken, config.ShippingPreviousCallbackToken)
 	api.RegisterRoutes(router, config.Database)
 
 	protectOptions := []csrf.Option{
@@ -137,7 +140,7 @@ func NewRouter(config RouterConfig) (http.Handler, error) {
 	return csrfAwareHandler, nil
 }
 
-func registerRoutes(router *gin.Engine, database *gorm.DB, appMetrics *metrics.Metrics, imageStore, profileImageStore *uploads.ImageStore, logReader *logging.Reader, securityKey []byte, environment, webhookSecret string, shippingClient shippingapi.Client, shippingCallbackTokens ...string) {
+func registerRoutes(router *gin.Engine, database *gorm.DB, appMetrics *metrics.Metrics, imageStore, profileImageStore *uploads.ImageStore, logReader *logging.Reader, securityKey []byte, environment, webhookSecret, bankingWebhookSecret string, bankingClient banking.PaymentIntentClient, shippingClient shippingapi.Client, shippingCallbackTokens ...string) {
 	health := handlers.NewHealthHandler(database, appMetrics)
 	router.GET("/health/live", health.Live)
 	router.GET("/health/ready", health.Ready)
@@ -150,7 +153,7 @@ func registerRoutes(router *gin.Engine, database *gorm.DB, appMetrics *metrics.M
 	shippingService := services.NewShippingService(database, shippingClient, mailService)
 	shippingHandler := handlers.NewShippingHandler(shippingService, shippingCallbackTokens...)
 	shop := handlers.NewShopHandler(database, shippingService)
-	checkout := handlers.NewCheckoutHandler(database, environment, webhookSecret)
+	checkout := handlers.NewCheckoutHandler(database, environment, webhookSecret, bankingWebhookSecret, bankingClient)
 	requireAuth := middleware.RequireAuth(database)
 	optionalAuth := middleware.OptionalAuth(database)
 	router.GET("/", optionalAuth, shop.Home)
@@ -169,6 +172,8 @@ func registerRoutes(router *gin.Engine, database *gorm.DB, appMetrics *metrics.M
 	customer.GET("/checkout", checkout.Show)
 	customer.POST("/checkout", checkout.Place)
 	customer.GET("/checkout/success", checkout.Success)
+	customer.GET("/checkout/banking/return", checkout.BankingReturn)
+	customer.GET("/api/orders/:id/payment-status", checkout.PaymentStatus)
 	customer.GET("/account/addresses", checkout.ListAddresses)
 	customer.GET("/account/addresses/new", checkout.NewAddress)
 	customer.GET("/account/addresses/:id/edit", checkout.EditAddress)

@@ -68,6 +68,12 @@ type Config struct {
 	CSRFKey                       []byte
 	SecurityEncryptionKey         []byte
 	PaymentWebhookSecret          string
+	BankingAPIURL                 string
+	BankingPublicURL              string
+	BankingMerchantID             string
+	BankingServiceToken           string
+	BankingWebhookSecret          string
+	BankingTimeout                time.Duration
 	ShippingServiceURL            string
 	ShippingPublicURL             string
 	ShippingServiceToken          string
@@ -132,6 +138,12 @@ func Load() *Config {
 	csrfSecret := strings.TrimSpace(os.Getenv("CSRF_SECRET"))
 	securitySecret := strings.TrimSpace(os.Getenv("SECURITY_ENCRYPTION_KEY"))
 	paymentWebhookSecret := strings.TrimSpace(os.Getenv("PAYMENT_WEBHOOK_SECRET"))
+	bankingAPIURL := strings.TrimRight(strings.TrimSpace(os.Getenv("BANKING_API_URL")), "/")
+	bankingPublicURL := strings.TrimRight(strings.TrimSpace(os.Getenv("BANKING_PUBLIC_URL")), "/")
+	bankingMerchantID := strings.TrimSpace(os.Getenv("BANKING_MERCHANT_ID"))
+	bankingServiceToken := strings.TrimSpace(os.Getenv("BANKING_SERVICE_TOKEN"))
+	bankingWebhookSecret := strings.TrimSpace(os.Getenv("BANKING_WEBHOOK_SECRET"))
+	bankingTimeout := envDuration("BANKING_API_TIMEOUT", 5*time.Second)
 	shippingServiceURL := strings.TrimRight(firstEnvironment("SHIPPING_API_URL", "SHIPPING_SERVICE_URL"), "/")
 	shippingPublicURL := strings.TrimRight(firstEnvironment("SHIPPING_PUBLIC_URL"), "/")
 	shippingServiceToken := firstEnvironment("SHIPPING_API_TOKEN", "ECOMMERCE_TO_SHIPPING_TOKEN")
@@ -168,6 +180,27 @@ func Load() *Config {
 		shippingPublicURL, _, err = validatePublicURL("SHIPPING_PUBLIC_URL", shippingPublicURL, appEnv == "production")
 		if err != nil {
 			log.Fatal(err)
+		}
+	}
+	bankingValues := []string{bankingAPIURL, bankingPublicURL, bankingMerchantID, bankingServiceToken, bankingWebhookSecret}
+	bankingConfigured := false
+	for _, value := range bankingValues {
+		bankingConfigured = bankingConfigured || value != ""
+	}
+	if bankingConfigured {
+		if bankingAPIURL == "" || bankingPublicURL == "" || bankingMerchantID == "" || len(bankingServiceToken) < 32 || len(bankingWebhookSecret) < 32 {
+			log.Fatal("BANKING_API_URL, BANKING_PUBLIC_URL, BANKING_MERCHANT_ID, BANKING_SERVICE_TOKEN, and BANKING_WEBHOOK_SECRET are required together with 32-character secrets")
+		}
+		bankingAPIURL, _, err = validatePublicURL("BANKING_API_URL", bankingAPIURL, false)
+		if err != nil {
+			log.Fatal(err)
+		}
+		bankingPublicURL, _, err = validatePublicURL("BANKING_PUBLIC_URL", bankingPublicURL, appEnv == "production")
+		if err != nil {
+			log.Fatal(err)
+		}
+		if bankingTimeout <= 0 {
+			log.Fatal("BANKING_API_TIMEOUT must be positive")
 		}
 	}
 	if shippingServiceURL != "" && shippingPublicURL == "" {
@@ -345,6 +378,12 @@ func Load() *Config {
 		CSRFKey:                       csrfKey,
 		SecurityEncryptionKey:         securityKey,
 		PaymentWebhookSecret:          paymentWebhookSecret,
+		BankingAPIURL:                 bankingAPIURL,
+		BankingPublicURL:              bankingPublicURL,
+		BankingMerchantID:             bankingMerchantID,
+		BankingServiceToken:           bankingServiceToken,
+		BankingWebhookSecret:          bankingWebhookSecret,
+		BankingTimeout:                bankingTimeout,
 		ShippingServiceURL:            shippingServiceURL,
 		ShippingPublicURL:             shippingPublicURL,
 		ShippingServiceToken:          shippingServiceToken,

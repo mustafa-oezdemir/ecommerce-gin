@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sort"
+	"strings"
 
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/metrics"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/models"
@@ -33,6 +34,7 @@ type CheckoutInput struct {
 	PaymentMethod         models.PaymentMethod
 	IdempotencyKey        string
 	ProviderToken         string
+	RequestID             string
 }
 
 type CheckoutSummary struct {
@@ -45,8 +47,9 @@ type CheckoutSummary struct {
 }
 
 type CheckoutResult struct {
-	Order  *models.Order
-	Replay bool
+	Order       *models.Order
+	ApprovalURL string
+	Replay      bool
 }
 
 type CheckoutService struct {
@@ -174,13 +177,16 @@ func (s *CheckoutService) Checkout(ctx context.Context, input CheckoutInput) (*C
 			items = append(items, models.OrderItem{ProductID: product.ID, ProductName: product.Name, ProductSKU: fmt.Sprintf("SKU-%08d", product.ID), UnitPriceCents: product.PriceCents, Quantity: cartItem.Quantity, SubtotalCents: lineTotal})
 		}
 		chargedAmount = subtotal + checkoutShippingCents
-		paymentResult, err = s.gateway.CreatePayment(ctx, PaymentRequest{UserID: input.UserID, Method: input.PaymentMethod, AmountCents: chargedAmount, Currency: "EUR", IdempotencyKey: input.IdempotencyKey, ProviderToken: input.ProviderToken})
-		if err != nil || paymentResult == nil || (paymentResult.Status != models.PaymentStatusPaid && paymentResult.Status != models.PaymentStatusAuthorized) {
-			return ErrPaymentFailed
-		}
-		orderStatus := models.OrderStatusPaid
-		if paymentResult.Status == models.PaymentStatusAuthorized {
-			orderStatus = models.OrderStatusPendingPayment
+		bankingPayment := input.PaymentMethod == models.PaymentMethodPehlioneBank
+		orderStatus := models.OrderStatusPendingPayment
+		if !bankingPayment {
+			paymentResult, err = s.gateway.CreatePayment(ctx, PaymentRequest{UserID: input.UserID, Method: input.PaymentMethod, AmountCents: chargedAmount, Currency: "EUR", IdempotencyKey: input.IdempotencyKey, ProviderToken: input.ProviderToken, RequestID: input.RequestID})
+			if err != nil || paymentResult == nil || (paymentResult.Status != models.PaymentStatusPaid && paymentResult.Status != models.PaymentStatusAuthorized) {
+				return ErrPaymentFailed
+			}
+			if paymentResult.Status == models.PaymentStatusPaid {
+				orderStatus = models.OrderStatusPaid
+			}
 		}
 		order := models.Order{UserID: input.UserID, Status: orderStatus, IdempotencyKey: input.IdempotencyKey, PaymentMethod: input.PaymentMethod, Currency: "EUR", SubtotalCents: subtotal, ShippingCents: checkoutShippingCents, TotalCents: chargedAmount}
 		if err := tx.Create(&order).Error; err != nil {
@@ -189,6 +195,12 @@ func (s *CheckoutService) Checkout(ctx context.Context, input CheckoutInput) (*C
 		order.OrderNumber = fmt.Sprintf("ORD-%010d", order.ID)
 		if err := tx.Model(&order).Update("order_number", order.OrderNumber).Error; err != nil {
 			return err
+		}
+		if bankingPayment {
+			paymentResult, err = s.gateway.CreatePayment(ctx, PaymentRequest{UserID: input.UserID, Method: input.PaymentMethod, AmountCents: chargedAmount, Currency: "EUR", IdempotencyKey: input.IdempotencyKey, OrderReference: "ECOM-" + order.OrderNumber, RequestID: input.RequestID})
+			if err != nil || paymentResult == nil || paymentResult.Status != models.PaymentStatusPending || paymentResult.PaymentIntentID == "" || paymentResult.ApprovalURL == "" {
+				return ErrPaymentFailed
+			}
 		}
 		for index := range items {
 			items[index].OrderID = order.ID
@@ -207,7 +219,10 @@ func (s *CheckoutService) Checkout(ctx context.Context, input CheckoutInput) (*C
 		if err := tx.Create(&addresses).Error; err != nil {
 			return fmt.Errorf("snapshot checkout addresses: %w", err)
 		}
-		payment := models.Payment{OrderID: order.ID, UserID: input.UserID, Provider: input.PaymentMethod.Provider(), Method: input.PaymentMethod, ProviderPaymentID: paymentResult.ProviderPaymentID, Status: paymentResult.Status, AmountCents: chargedAmount, Currency: "EUR", IdempotencyKey: input.IdempotencyKey, Brand: paymentResult.Brand, Last4: paymentResult.Last4}
+		payment := models.Payment{OrderID: order.ID, UserID: input.UserID, Provider: input.PaymentMethod.Provider(), Method: input.PaymentMethod, ProviderPaymentID: paymentResult.ProviderPaymentID, Status: paymentResult.Status, AmountCents: chargedAmount, Currency: "EUR", IdempotencyKey: input.IdempotencyKey, Brand: paymentResult.Brand, Last4: paymentResult.Last4, ApprovalURL: paymentResult.ApprovalURL}
+		if paymentResult.PaymentIntentID != "" {
+			payment.PaymentIntentID = &paymentResult.PaymentIntentID
+		}
 		if err := tx.Create(&payment).Error; err != nil {
 			return fmt.Errorf("create payment: %w", err)
 		}
@@ -228,7 +243,7 @@ func (s *CheckoutService) Checkout(ctx context.Context, input CheckoutInput) (*C
 		}
 		recordCheckoutMetric("replay")
 		slog.InfoContext(ctx, "checkout idempotency replay", "event", "idempotency_replay", "user_id", input.UserID)
-		return &CheckoutResult{Order: order, Replay: true}, nil
+		return &CheckoutResult{Order: order, ApprovalURL: order.Payment.ApprovalURL, Replay: true}, nil
 	}
 	if err != nil {
 		if paymentResult != nil && paymentResult.Status == models.PaymentStatusPaid {
@@ -244,7 +259,23 @@ func (s *CheckoutService) Checkout(ctx context.Context, input CheckoutInput) (*C
 		metric.OrderValueCents.Observe(float64(created.TotalCents))
 	}
 	slog.InfoContext(ctx, "checkout completed", "event", "order_created", "order_id", created.ID, "payment_provider", input.PaymentMethod.Provider())
-	return &CheckoutResult{Order: &created}, nil
+	return &CheckoutResult{Order: &created, ApprovalURL: created.Payment.ApprovalURL}, nil
+}
+
+func (s *CheckoutService) BankingOrder(ctx context.Context, userID uint, paymentIntentID string) (*models.Order, error) {
+	paymentIntentID = strings.TrimSpace(paymentIntentID)
+	if userID == 0 || paymentIntentID == "" || len(paymentIntentID) > 128 {
+		return nil, ErrInvalidPayment
+	}
+	var order models.Order
+	err := s.database.WithContext(ctx).Preload("Items").Preload("Addresses").Preload("Payment").
+		Joins("JOIN payments ON payments.order_id = orders.id").
+		Where("orders.user_id = ? AND payments.provider = ? AND payments.payment_intent_id = ?", userID, models.PaymentMethodPehlioneBank.Provider(), paymentIntentID).
+		First(&order).Error
+	if err != nil {
+		return nil, err
+	}
+	return &order, nil
 }
 
 func (s *CheckoutService) loadReplay(ctx context.Context, userID uint, key, requestHash string) (*models.Order, error) {

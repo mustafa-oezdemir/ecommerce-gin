@@ -7,8 +7,10 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
+	"github.com/mustafa-oezdemir/ecommerce-gin/internal/banking"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/models"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -27,6 +29,8 @@ type PaymentRequest struct {
 	Currency       string
 	IdempotencyKey string
 	ProviderToken  string
+	OrderReference string
+	RequestID      string
 }
 
 type PaymentResult struct {
@@ -34,6 +38,8 @@ type PaymentResult struct {
 	Status            models.PaymentStatus
 	Brand             string
 	Last4             string
+	PaymentIntentID   string
+	ApprovalURL       string
 }
 
 type PaymentGateway interface {
@@ -41,6 +47,49 @@ type PaymentGateway interface {
 	ConfirmPayment(context.Context, string) (*PaymentResult, error)
 	GetPaymentStatus(context.Context, string) (models.PaymentStatus, error)
 	RefundPayment(context.Context, string, int64) error
+}
+
+type RoutedPaymentGateway struct {
+	reference PaymentGateway
+	banking   banking.PaymentIntentClient
+}
+
+func NewRoutedPaymentGateway(environment string, bankingClient banking.PaymentIntentClient) *RoutedPaymentGateway {
+	return &RoutedPaymentGateway{reference: NewReferencePaymentGateway(environment), banking: bankingClient}
+}
+
+func (gateway *RoutedPaymentGateway) CreatePayment(ctx context.Context, request PaymentRequest) (*PaymentResult, error) {
+	if request.Method != models.PaymentMethodPehlioneBank {
+		return gateway.reference.CreatePayment(ctx, request)
+	}
+	if gateway.banking == nil || request.OrderReference == "" {
+		return nil, ErrPaymentFailed
+	}
+	intent, err := gateway.banking.CreatePaymentIntent(ctx, banking.CreatePaymentIntentRequest{
+		OrderReference: request.OrderReference,
+		Amount:         formatPaymentAmount(request.AmountCents),
+		Currency:       request.Currency,
+		IdempotencyKey: request.IdempotencyKey,
+		RequestID:      request.RequestID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create PehliOne Bank payment intent: %w", err)
+	}
+	return &PaymentResult{ProviderPaymentID: intent.PaymentIntentID, PaymentIntentID: intent.PaymentIntentID, ApprovalURL: intent.ApprovalURL, Status: models.PaymentStatusPending}, nil
+}
+
+func (gateway *RoutedPaymentGateway) ConfirmPayment(ctx context.Context, paymentID string) (*PaymentResult, error) {
+	return gateway.reference.ConfirmPayment(ctx, paymentID)
+}
+func (gateway *RoutedPaymentGateway) GetPaymentStatus(ctx context.Context, paymentID string) (models.PaymentStatus, error) {
+	return gateway.reference.GetPaymentStatus(ctx, paymentID)
+}
+func (gateway *RoutedPaymentGateway) RefundPayment(ctx context.Context, paymentID string, amount int64) error {
+	return gateway.reference.RefundPayment(ctx, paymentID, amount)
+}
+
+func formatPaymentAmount(cents int64) string {
+	return fmt.Sprintf("%d.%02d", cents/100, cents%100)
 }
 
 // ReferencePaymentGateway models provider tokenization/idempotency without ever
@@ -86,6 +135,10 @@ func (gateway *ReferencePaymentGateway) RefundPayment(_ context.Context, payment
 type PaymentWebhook struct {
 	EventID           string               `json:"event_id"`
 	ProviderPaymentID string               `json:"provider_payment_id"`
+	PaymentIntentID   string               `json:"payment_intent_id,omitempty"`
+	MerchantReference string               `json:"merchant_reference,omitempty"`
+	Amount            string               `json:"amount,omitempty"`
+	Currency          string               `json:"currency,omitempty"`
 	Status            models.PaymentStatus `json:"status"`
 }
 
@@ -113,7 +166,7 @@ func (s *PaymentWebhookService) Process(ctx context.Context, provider string, ev
 	if provider == "" || event.EventID == "" || event.ProviderPaymentID == "" {
 		return false, ErrInvalidWebhook
 	}
-	if event.Status != models.PaymentStatusPaid && event.Status != models.PaymentStatusFailed && event.Status != models.PaymentStatusRefunded {
+	if event.Status != models.PaymentStatusPaid && event.Status != models.PaymentStatusFailed && event.Status != models.PaymentStatusCancelled && event.Status != models.PaymentStatusRefunded {
 		return false, ErrInvalidWebhook
 	}
 	replayed := false
@@ -127,20 +180,44 @@ func (s *PaymentWebhookService) Process(ctx context.Context, provider string, ev
 			return err
 		}
 		var payment models.Payment
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("provider = ? AND provider_payment_id = ?", provider, event.ProviderPaymentID).First(&payment).Error; err != nil {
+		if provider == models.PaymentMethodPehlioneBank.Provider() {
+			if event.PaymentIntentID == "" || event.MerchantReference == "" || event.Currency != "EUR" {
+				return ErrInvalidWebhook
+			}
+			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("provider = ? AND payment_intent_id = ?", provider, event.PaymentIntentID).First(&payment).Error; err != nil {
+				return ErrInvalidWebhook
+			}
+			var order models.Order
+			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&order, payment.OrderID).Error; err != nil {
+				return ErrInvalidWebhook
+			}
+			amountCents, err := parsePaymentAmount(event.Amount)
+			if err != nil || amountCents != payment.AmountCents || event.Currency != payment.Currency || event.MerchantReference != "ECOM-"+order.OrderNumber {
+				return ErrInvalidWebhook
+			}
+			if payment.ProviderTransactionID != nil && *payment.ProviderTransactionID != event.ProviderPaymentID {
+				return ErrInvalidWebhook
+			}
+		} else if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("provider = ? AND provider_payment_id = ?", provider, event.ProviderPaymentID).First(&payment).Error; err != nil {
 			return ErrInvalidWebhook
 		}
 		if !canTransitionPaymentStatus(payment.Status, event.Status) {
 			return ErrInvalidWebhook
 		}
-		releaseStock := payment.Status != models.PaymentStatusFailed && event.Status == models.PaymentStatusFailed
-		if err := tx.Model(&payment).Update("status", event.Status).Error; err != nil {
+		releaseStock := payment.Status != models.PaymentStatusFailed && payment.Status != models.PaymentStatusCancelled && (event.Status == models.PaymentStatusFailed || event.Status == models.PaymentStatusCancelled)
+		paymentUpdates := map[string]any{"status": event.Status}
+		if provider == models.PaymentMethodPehlioneBank.Provider() {
+			paymentUpdates["provider_transaction_id"] = event.ProviderPaymentID
+		}
+		if err := tx.Model(&payment).Updates(paymentUpdates).Error; err != nil {
 			return err
 		}
 		orderStatus := models.OrderStatusPaid
 		switch event.Status {
 		case models.PaymentStatusFailed:
 			orderStatus = models.OrderStatusPaymentFailed
+		case models.PaymentStatusCancelled:
+			orderStatus = models.OrderStatusCancelled
 		case models.PaymentStatusRefunded:
 			orderStatus = models.OrderStatusRefunded
 		}
@@ -161,6 +238,26 @@ func (s *PaymentWebhookService) Process(ctx context.Context, provider string, ev
 		return nil
 	})
 	return replayed, err
+}
+
+func parsePaymentAmount(value string) (int64, error) {
+	parts := strings.Split(strings.TrimSpace(value), ".")
+	if len(parts) != 2 || len(parts[1]) != 2 || parts[0] == "" {
+		return 0, ErrInvalidWebhook
+	}
+	whole, err := strconv.ParseInt(parts[0], 10, 64)
+	if err != nil || whole < 0 {
+		return 0, ErrInvalidWebhook
+	}
+	fraction, err := strconv.ParseInt(parts[1], 10, 64)
+	if err != nil || fraction < 0 || fraction > 99 || whole > (1<<63-1-fraction)/100 {
+		return 0, ErrInvalidWebhook
+	}
+	amount := whole*100 + fraction
+	if amount <= 0 {
+		return 0, ErrInvalidWebhook
+	}
+	return amount, nil
 }
 
 func canTransitionPaymentStatus(from, to models.PaymentStatus) bool {

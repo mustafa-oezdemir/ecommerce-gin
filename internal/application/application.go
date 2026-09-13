@@ -13,6 +13,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
+	"github.com/mustafa-oezdemir/ecommerce-gin/internal/banking"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/config"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/db"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/logging"
@@ -101,6 +102,14 @@ func Run() (runErr error) {
 		}
 		shippingClient = client
 	}
+	var bankingClient banking.PaymentIntentClient
+	if cfg.BankingAPIURL != "" {
+		client, err := banking.NewClient(cfg.BankingAPIURL, cfg.BankingPublicURL, cfg.BankingMerchantID, cfg.BankingServiceToken, cfg.BankingTimeout)
+		if err != nil {
+			return fmt.Errorf("configure banking API client: %w", err)
+		}
+		bankingClient = client
+	}
 	applicationHandler, err := appserver.NewRouter(appserver.RouterConfig{
 		Environment: cfg.AppEnv, PublicURLHost: cfg.AppURLHost, TrustedProxies: cfg.TrustedProxies,
 		SessionSecret: cfg.SessionSecret, SessionSecure: cfg.SessionSecure, CSRFKey: cfg.CSRFKey,
@@ -108,6 +117,8 @@ func Run() (runErr error) {
 		Metrics: appMetrics, Logger: slog.Default(), ImageStore: imageStore, ProfileImageStore: profileImageStore,
 		LogReader: logReader, ShippingClient: shippingClient, ShippingCallbackToken: cfg.ShippingCallbackToken,
 		ShippingPreviousCallbackToken: cfg.ShippingPreviousCallbackToken,
+		BankingClient:                 bankingClient,
+		BankingWebhookSecret:          cfg.BankingWebhookSecret,
 	})
 	if err != nil {
 		return fmt.Errorf("build application router: %w", err)

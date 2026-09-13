@@ -51,15 +51,16 @@ type OrderAddress struct {
 type PaymentMethod string
 
 const (
-	PaymentMethodDebitCard  PaymentMethod = "debit_card"
-	PaymentMethodCreditCard PaymentMethod = "credit_card"
-	PaymentMethodPayPal     PaymentMethod = "paypal"
-	PaymentMethodKlarna     PaymentMethod = "klarna"
+	PaymentMethodDebitCard    PaymentMethod = "debit_card"
+	PaymentMethodCreditCard   PaymentMethod = "credit_card"
+	PaymentMethodPayPal       PaymentMethod = "paypal"
+	PaymentMethodKlarna       PaymentMethod = "klarna"
+	PaymentMethodPehlioneBank PaymentMethod = "pehlione_bank"
 )
 
 func (method PaymentMethod) Valid() bool {
 	switch method {
-	case PaymentMethodDebitCard, PaymentMethodCreditCard, PaymentMethodPayPal, PaymentMethodKlarna:
+	case PaymentMethodDebitCard, PaymentMethodCreditCard, PaymentMethodPayPal, PaymentMethodKlarna, PaymentMethodPehlioneBank:
 		return true
 	default:
 		return false
@@ -74,6 +75,8 @@ func (method PaymentMethod) Provider() string {
 		return "paypal"
 	case PaymentMethodKlarna:
 		return "klarna"
+	case PaymentMethodPehlioneBank:
+		return "pehlione_bank"
 	default:
 		return ""
 	}
@@ -93,17 +96,20 @@ const (
 
 type Payment struct {
 	gorm.Model
-	OrderID           uint          `gorm:"not null;uniqueIndex"`
-	UserID            uint          `gorm:"not null;uniqueIndex:idx_payment_user_key;index"`
-	Provider          string        `gorm:"size:32;not null;uniqueIndex:idx_payment_provider_id"`
-	Method            PaymentMethod `gorm:"size:32;not null"`
-	ProviderPaymentID string        `gorm:"size:128;not null;uniqueIndex:idx_payment_provider_id"`
-	Status            PaymentStatus `gorm:"size:32;not null;index"`
-	AmountCents       int64         `gorm:"not null"`
-	Currency          string        `gorm:"size:3;not null"`
-	IdempotencyKey    string        `gorm:"size:64;not null;uniqueIndex:idx_payment_user_key"`
-	Brand             string        `gorm:"size:32"`
-	Last4             string        `gorm:"size:4"`
+	OrderID               uint          `gorm:"not null;uniqueIndex"`
+	UserID                uint          `gorm:"not null;uniqueIndex:idx_payment_user_key;index"`
+	Provider              string        `gorm:"size:32;not null;uniqueIndex:idx_payment_provider_id"`
+	Method                PaymentMethod `gorm:"size:32;not null"`
+	ProviderPaymentID     string        `gorm:"size:128;not null;uniqueIndex:idx_payment_provider_id"`
+	PaymentIntentID       *string       `gorm:"size:128;uniqueIndex:idx_payment_provider_intent"`
+	ProviderTransactionID *string       `gorm:"size:128;uniqueIndex:idx_payment_provider_transaction"`
+	ApprovalURL           string        `gorm:"size:512"`
+	Status                PaymentStatus `gorm:"size:32;not null;index"`
+	AmountCents           int64         `gorm:"not null"`
+	Currency              string        `gorm:"size:3;not null"`
+	IdempotencyKey        string        `gorm:"size:64;not null;uniqueIndex:idx_payment_user_key"`
+	Brand                 string        `gorm:"size:32"`
+	Last4                 string        `gorm:"size:4"`
 }
 
 type CheckoutAttempt struct {

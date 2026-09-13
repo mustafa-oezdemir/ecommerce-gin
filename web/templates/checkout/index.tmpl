@@ -73,6 +73,9 @@
 									<div class="col-md-6">
 										<label class="payment-option d-block"><input class="form-check-input me-2" type="radio" name="payment_method" value="klarna" required> Klarna</label>
 									</div>
+									{{if .BankingEnabled}}<div class="col-md-6">
+										<label class="payment-option d-block"><input class="form-check-input me-2" type="radio" name="payment_method" value="pehlione_bank" required> Überweisung / PehliOne Bank</label>
+									</div>{{end}}
 								</div>
 							</div>
 						</section>

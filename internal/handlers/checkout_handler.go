@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/mustafa-oezdemir/ecommerce-gin/internal/banking"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/metrics"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/middleware"
 	"github.com/mustafa-oezdemir/ecommerce-gin/internal/models"
@@ -22,21 +23,25 @@ import (
 const maxWebhookBodyBytes int64 = 1 << 20
 
 type CheckoutHandler struct {
-	checkout  *services.CheckoutService
-	addresses *services.AddressService
-	orders    *services.OrderService
-	webhooks  *services.PaymentWebhookService
-	mailer    *services.MailService
+	checkout        *services.CheckoutService
+	addresses       *services.AddressService
+	orders          *services.OrderService
+	webhooks        *services.PaymentWebhookService
+	bankingWebhooks *services.PaymentWebhookService
+	mailer          *services.MailService
+	bankingEnabled  bool
 }
 
-func NewCheckoutHandler(database *gorm.DB, environment, webhookSecret string) *CheckoutHandler {
-	gateway := services.NewReferencePaymentGateway(environment)
+func NewCheckoutHandler(database *gorm.DB, environment, webhookSecret, bankingWebhookSecret string, bankingClient banking.PaymentIntentClient) *CheckoutHandler {
+	gateway := services.NewRoutedPaymentGateway(environment, bankingClient)
 	return &CheckoutHandler{
-		checkout:  services.NewCheckoutService(database, gateway),
-		addresses: services.NewAddressService(database),
-		orders:    services.NewOrderService(database),
-		webhooks:  services.NewPaymentWebhookService(database, webhookSecret),
-		mailer:    services.NewMailServiceFromEnv(),
+		checkout:        services.NewCheckoutService(database, gateway),
+		addresses:       services.NewAddressService(database),
+		orders:          services.NewOrderService(database),
+		webhooks:        services.NewPaymentWebhookService(database, webhookSecret),
+		bankingWebhooks: services.NewPaymentWebhookService(database, bankingWebhookSecret),
+		mailer:          services.NewMailServiceFromEnv(),
+		bankingEnabled:  bankingClient != nil,
 	}
 }
 
@@ -66,7 +71,7 @@ func (h *CheckoutHandler) Show(c *gin.Context) {
 		return
 	}
 	c.Header("Cache-Control", "no-store")
-	c.HTML(http.StatusOK, "checkout/index", viewData(c, gin.H{"Summary": summary, "Addresses": addresses, "IdempotencyKey": key}))
+	c.HTML(http.StatusOK, "checkout/index", viewData(c, gin.H{"Summary": summary, "Addresses": addresses, "IdempotencyKey": key, "BankingEnabled": h.bankingEnabled}))
 }
 
 func (h *CheckoutHandler) Place(c *gin.Context) {
@@ -87,6 +92,7 @@ func (h *CheckoutHandler) Place(c *gin.Context) {
 		UserID: user.ID, ShippingAddressID: request.ShippingAddressID, BillingAddressID: request.BillingAddressID,
 		BillingSameAsShipping: request.BillingSameAsShipping, PaymentMethod: models.PaymentMethod(request.PaymentMethod),
 		IdempotencyKey: request.IdempotencyKey, ProviderToken: request.ProviderToken,
+		RequestID: c.GetString(middleware.RequestIDKey),
 	})
 	if err != nil {
 		h.checkoutError(c, err)
@@ -95,7 +101,45 @@ func (h *CheckoutHandler) Place(c *gin.Context) {
 	if !result.Replay {
 		go h.mailer.SendOrderCreated(*user, *result.Order)
 	}
+	if result.ApprovalURL != "" {
+		c.Redirect(http.StatusSeeOther, result.ApprovalURL)
+		return
+	}
 	c.Redirect(http.StatusSeeOther, "/checkout/success?order_id="+strconv.FormatUint(uint64(result.Order.ID), 10))
+}
+
+func (h *CheckoutHandler) BankingReturn(c *gin.Context) {
+	user, ok := middleware.CurrentUser(c)
+	if !ok {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+	order, err := h.checkout.BankingOrder(c.Request.Context(), user.ID, c.Query("payment_intent"))
+	if err != nil {
+		c.AbortWithStatus(http.StatusNotFound)
+		return
+	}
+	c.Redirect(http.StatusSeeOther, "/checkout/success?order_id="+strconv.FormatUint(uint64(order.ID), 10))
+}
+
+func (h *CheckoutHandler) PaymentStatus(c *gin.Context) {
+	user, ok := middleware.CurrentUser(c)
+	if !ok {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+	orderID, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || orderID == 0 {
+		c.AbortWithStatus(http.StatusNotFound)
+		return
+	}
+	order, err := h.orders.GetUserOrder(c.Request.Context(), user.ID, uint(orderID))
+	if err != nil {
+		c.AbortWithStatus(http.StatusNotFound)
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusOK, gin.H{"order_id": order.ID, "order_status": order.Status, "payment_status": order.Payment.Status})
 }
 
 func (h *CheckoutHandler) Success(c *gin.Context) {
@@ -115,7 +159,11 @@ func (h *CheckoutHandler) Success(c *gin.Context) {
 		return
 	}
 	c.Header("Cache-Control", "no-store")
-	c.HTML(http.StatusOK, "checkout/success", viewData(c, gin.H{"Order": order}))
+	c.HTML(http.StatusOK, "checkout/success", viewData(c, gin.H{
+		"Order": order,
+		"PaymentPending": order.Payment.Status == models.PaymentStatusPending || order.Payment.Status == models.PaymentStatusAuthorized,
+		"PaymentFailed": order.Payment.Status == models.PaymentStatusFailed || order.Payment.Status == models.PaymentStatusCancelled,
+	}))
 }
 
 func (h *CheckoutHandler) ListAddresses(c *gin.Context) {
@@ -216,7 +264,7 @@ func (h *CheckoutHandler) DeleteAddress(c *gin.Context) {
 
 func (h *CheckoutHandler) Webhook(c *gin.Context) {
 	provider := strings.TrimSpace(c.Param("provider"))
-	if provider != "card" && provider != "paypal" && provider != "klarna" {
+	if provider != "card" && provider != "paypal" && provider != "klarna" && provider != "pehlione_bank" {
 		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}
@@ -226,7 +274,11 @@ func (h *CheckoutHandler) Webhook(c *gin.Context) {
 		c.AbortWithStatus(http.StatusRequestEntityTooLarge)
 		return
 	}
-	if !h.webhooks.VerifySignature(body, c.GetHeader("X-Payment-Signature")) {
+	webhookService := h.webhooks
+	if provider == models.PaymentMethodPehlioneBank.Provider() {
+		webhookService = h.bankingWebhooks
+	}
+	if !webhookService.VerifySignature(body, c.GetHeader("X-Payment-Signature")) {
 		c.AbortWithStatus(http.StatusUnauthorized)
 		return
 	}
@@ -237,7 +289,7 @@ func (h *CheckoutHandler) Webhook(c *gin.Context) {
 		c.String(http.StatusBadRequest, "Invalid webhook")
 		return
 	}
-	replay, err := h.webhooks.Process(c.Request.Context(), provider, event)
+	replay, err := webhookService.Process(c.Request.Context(), provider, event)
 	if err != nil {
 		c.String(http.StatusBadRequest, "Invalid webhook")
 		return
