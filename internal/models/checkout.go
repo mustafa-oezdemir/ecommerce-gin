@@ -30,6 +30,19 @@ type UserAddress struct {
 	IsDefault    bool   `gorm:"not null;default:false"`
 }
 
+// SavedPaymentCard contains only a Banking-issued merchant token and display
+// metadata. Raw card numbers and CVC values never enter the E-Commerce store.
+type SavedPaymentCard struct {
+	gorm.Model
+	UserID        uint   `gorm:"not null;index;uniqueIndex:idx_saved_card_user_token;uniqueIndex:idx_saved_card_identity"`
+	ProviderToken string `gorm:"size:128;not null;uniqueIndex:idx_saved_card_user_token"`
+	Brand         string `gorm:"size:32;not null;uniqueIndex:idx_saved_card_identity"`
+	Last4         string `gorm:"size:4;not null;uniqueIndex:idx_saved_card_identity"`
+	ExpMonth      int    `gorm:"not null;uniqueIndex:idx_saved_card_identity"`
+	ExpYear       int    `gorm:"not null;uniqueIndex:idx_saved_card_identity"`
+	IsDefault     bool   `gorm:"not null;default:false"`
+}
+
 type OrderAddress struct {
 	ID           uint `gorm:"primaryKey"`
 	CreatedAt    time.Time

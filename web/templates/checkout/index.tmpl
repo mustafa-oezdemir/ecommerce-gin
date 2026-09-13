@@ -63,9 +63,9 @@
 								<h2 class="h5"><span class="step me-2">3</span> Payment Method</h2>
 								<p class="small text-muted">Card details are entered only in provider-hosted fields. PehliOne never stores card numbers or CVC values.</p>
 								<div class="row g-3">
-									<div class="col-md-6"><label class="payment-option d-block"><input class="form-check-input me-2" type="radio" name="payment_method" value="debit_card" required> Debit Card</label></div>
+								<div class="col-md-6"><label class="payment-option d-block"><input class="form-check-input me-2" type="radio" name="payment_method" value="debit_card" data-card-method {{if not .Cards}}disabled{{end}} required> Debit Card</label></div>
 									<div class="col-md-6">
-										<label class="payment-option d-block"><input class="form-check-input me-2" type="radio" name="payment_method" value="credit_card" required> Credit Card</label>
+										<label class="payment-option d-block"><input class="form-check-input me-2" type="radio" name="payment_method" value="credit_card" data-card-method {{if not .Cards}}disabled{{end}} required> Credit Card</label>
 									</div>
 									<div class="col-md-6">
 										<label class="payment-option d-block"><input class="form-check-input me-2" type="radio" name="payment_method" value="paypal" required> PayPal</label>
@@ -77,6 +77,12 @@
 										<label class="payment-option d-block"><input class="form-check-input me-2" type="radio" name="payment_method" value="pehlione_bank" required> Überweisung / PehliOne Bank</label>
 									</div>{{end}}
 								</div>
+								<div class="card-payment-panel mt-4" data-card-panel hidden>
+									<h3 class="h6 mb-3">Choose a Banking card</h3>
+									<div class="row g-3">{{range .Cards}}<div class="col-md-6"><label class="checkout-saved-card d-block"><input class="form-check-input me-2" type="radio" name="saved_card_id" value="{{.ID}}" {{if .IsDefault}}checked{{end}} data-saved-card><strong class="text-uppercase">{{.Brand}}</strong> •••• {{.Last4}}<span>Expires {{printf "%02d" .ExpMonth}}/{{.ExpYear}}</span></label></div>{{end}}</div>
+									<div class="row align-items-end g-3 mt-1"><div class="col-sm-6"><label class="form-label" for="checkout-cvc">CVC</label><input class="form-control" id="checkout-cvc" type="password" name="card_cvc" inputmode="numeric" autocomplete="cc-csc" minlength="3" maxlength="3" data-card-cvc><div class="form-text">Required for every payment. Never stored.</div></div><div class="col-sm-6"><a class="btn btn-outline-primary w-100" href="/account/payment-methods">Manage cards</a></div></div>
+								</div>
+								{{if not .Cards}}<div class="alert alert-info mt-3 mb-0">Add and verify a PehliOne Banking card before selecting card payment. <a href="/account/payment-methods">Add a card</a></div>{{end}}
 							</div>
 						</section>
 					</div>

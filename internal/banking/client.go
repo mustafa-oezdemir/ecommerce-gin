@@ -90,6 +90,82 @@ func (client *Client) CreatePaymentIntent(ctx context.Context, request CreatePay
 	return &intent, nil
 }
 
+func (client *Client) TokenizeCard(ctx context.Context, request TokenizeCardRequest) (*TokenizedCard, error) {
+	if len(strings.TrimSpace(request.CardNumber)) < 13 || request.ExpMonth < 1 || request.ExpMonth > 12 || request.ExpYear < time.Now().UTC().Year() || len(strings.TrimSpace(request.CVC)) != 3 {
+		return nil, ErrInvalidPaymentIntent
+	}
+	payload := struct {
+		MerchantID string `json:"merchant_id"`
+		CardNumber string `json:"card_number"`
+		ExpMonth   int    `json:"exp_month"`
+		ExpYear    int    `json:"exp_year"`
+		CVC        string `json:"cvc"`
+	}{client.merchantID, request.CardNumber, request.ExpMonth, request.ExpYear, request.CVC}
+	var result TokenizedCard
+	if err := client.post(ctx, "/api/v1/merchant/cards/tokenize", request.RequestID, payload, &result, http.StatusCreated); err != nil {
+		return nil, err
+	}
+	if len(result.Token) != 64 || len(result.Last4) != 4 || result.Brand == "" || result.ExpMonth < 1 || result.ExpMonth > 12 {
+		return nil, ErrInvalidPaymentIntent
+	}
+	return &result, nil
+}
+
+func (client *Client) ApproveCardPayment(ctx context.Context, request ApproveCardPaymentRequest) (*CardPayment, error) {
+	if strings.TrimSpace(request.PaymentIntentID) == "" || len(request.CardToken) != 64 || len(strings.TrimSpace(request.CVC)) != 3 {
+		return nil, ErrInvalidPaymentIntent
+	}
+	payload := struct {
+		MerchantID string `json:"merchant_id"`
+		CardToken  string `json:"card_token"`
+		CVC        string `json:"cvc"`
+	}{client.merchantID, request.CardToken, request.CVC}
+	var result CardPayment
+	path := "/api/v1/merchant/payment-intents/" + url.PathEscape(request.PaymentIntentID) + "/card-approve"
+	if err := client.post(ctx, path, request.RequestID, payload, &result, http.StatusOK); err != nil {
+		return nil, err
+	}
+	if result.PaymentIntentID != request.PaymentIntentID || result.Status != "BOOKED" || result.PaymentID == "" || len(result.Last4) != 4 || result.Brand == "" {
+		return nil, ErrInvalidPaymentIntent
+	}
+	return &result, nil
+}
+
+func (client *Client) post(ctx context.Context, path, requestID string, payload, destination any, expectedStatus int) error {
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("encode banking request: %w", err)
+	}
+	endpoint := client.apiURL.ResolveReference(&url.URL{Path: path})
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint.String(), bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("create banking request: %w", err)
+	}
+	request.Header.Set("Authorization", "Bearer "+client.token)
+	request.Header.Set("Content-Type", "application/json")
+	if requestID != "" {
+		request.Header.Set("X-Request-ID", requestID)
+	}
+	response, err := client.httpClient.Do(request)
+	if err != nil {
+		return fmt.Errorf("send banking request: %w", err)
+	}
+	defer response.Body.Close()
+	responseBody, err := io.ReadAll(io.LimitReader(response.Body, maxResponseBytes+1))
+	if err != nil {
+		return fmt.Errorf("read banking response: %w", err)
+	}
+	if int64(len(responseBody)) > maxResponseBytes || response.StatusCode != expectedStatus {
+		return fmt.Errorf("banking request: status %d", response.StatusCode)
+	}
+	decoder := json.NewDecoder(bytes.NewReader(responseBody))
+	decoder.DisallowUnknownFields()
+	if decoder.Decode(destination) != nil || decoder.Decode(&struct{}{}) != io.EOF {
+		return ErrInvalidPaymentIntent
+	}
+	return nil
+}
+
 func parseOrigin(name, raw string, requireHTTPS bool) (*url.URL, error) {
 	parsed, err := url.Parse(strings.TrimSpace(raw))
 	if err != nil || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" || parsed.Path != "" && parsed.Path != "/" || parsed.Scheme != "http" && parsed.Scheme != "https" || requireHTTPS && parsed.Scheme != "https" {

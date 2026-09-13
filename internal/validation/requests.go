@@ -12,6 +12,15 @@ type LoginRequest struct {
 	Password string `form:"password" binding:"required,max=72"`
 }
 
+type RegisterRequest struct {
+	FirstName            string `form:"first_name" binding:"required,min=1,max=100"`
+	LastName             string `form:"last_name" binding:"required,min=1,max=100"`
+	Email                string `form:"email" binding:"required,email,max=254"`
+	Password             string `form:"password" binding:"required,min=12,max=72"`
+	PasswordConfirmation string `form:"password_confirmation" binding:"required,min=12,max=72"`
+	AcceptTerms          bool   `form:"accept_terms" binding:"required"`
+}
+
 type CreateUserRequest struct {
 	Name     string `form:"name" binding:"required,min=2,max=100"`
 	Email    string `form:"email" binding:"required,email,max=254"`
@@ -116,6 +125,20 @@ type CheckoutRequest struct {
 	PaymentMethod         string `form:"payment_method" binding:"required,oneof=debit_card credit_card paypal klarna pehlione_bank"`
 	IdempotencyKey        string `form:"idempotency_key" binding:"required,min=32,max=64"`
 	ProviderToken         string `form:"provider_token" binding:"omitempty,max=255"`
+	SavedCardID           uint   `form:"saved_card_id" binding:"omitempty,gt=0"`
+	CardCVC               string `form:"card_cvc" binding:"omitempty,len=3,numeric"`
+}
+
+type AddPaymentCardRequest struct {
+	CardNumber string `form:"card_number" binding:"required,min=13,max=23"`
+	ExpMonth   int    `form:"exp_month" binding:"required,gte=1,lte=12"`
+	ExpYear    int    `form:"exp_year" binding:"required,gte=2026,lte=2200"`
+	CVC        string `form:"cvc" binding:"required,len=3,numeric"`
+	IsDefault  bool   `form:"is_default"`
+}
+
+type PaymentCardIDURI struct {
+	ID uint `uri:"id" binding:"required,gt=0"`
 }
 
 type AddressRequest struct {

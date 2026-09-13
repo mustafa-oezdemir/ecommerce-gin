@@ -29,6 +29,7 @@ type PaymentRequest struct {
 	Currency       string
 	IdempotencyKey string
 	ProviderToken  string
+	CardCVC        string
 	OrderReference string
 	RequestID      string
 }
@@ -52,14 +53,17 @@ type PaymentGateway interface {
 type RoutedPaymentGateway struct {
 	reference PaymentGateway
 	banking   banking.PaymentIntentClient
+	cards     banking.CardClient
 }
 
 func NewRoutedPaymentGateway(environment string, bankingClient banking.PaymentIntentClient) *RoutedPaymentGateway {
-	return &RoutedPaymentGateway{reference: NewReferencePaymentGateway(environment), banking: bankingClient}
+	cardClient, _ := bankingClient.(banking.CardClient)
+	return &RoutedPaymentGateway{reference: NewReferencePaymentGateway(environment), banking: bankingClient, cards: cardClient}
 }
 
 func (gateway *RoutedPaymentGateway) CreatePayment(ctx context.Context, request PaymentRequest) (*PaymentResult, error) {
-	if request.Method != models.PaymentMethodPehlioneBank {
+	cardPayment := request.Method == models.PaymentMethodDebitCard || request.Method == models.PaymentMethodCreditCard
+	if !cardPayment && request.Method != models.PaymentMethodPehlioneBank {
 		return gateway.reference.CreatePayment(ctx, request)
 	}
 	if gateway.banking == nil || request.OrderReference == "" {
@@ -74,6 +78,16 @@ func (gateway *RoutedPaymentGateway) CreatePayment(ctx context.Context, request 
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create PehliOne Bank payment intent: %w", err)
+	}
+	if cardPayment {
+		if gateway.cards == nil || len(request.ProviderToken) != 64 || len(request.CardCVC) != 3 {
+			return nil, ErrInvalidPayment
+		}
+		payment, err := gateway.cards.ApproveCardPayment(ctx, banking.ApproveCardPaymentRequest{PaymentIntentID: intent.PaymentIntentID, CardToken: request.ProviderToken, CVC: request.CardCVC, RequestID: request.RequestID})
+		if err != nil {
+			return nil, fmt.Errorf("approve Banking card payment: %w", err)
+		}
+		return &PaymentResult{ProviderPaymentID: payment.PaymentID, PaymentIntentID: payment.PaymentIntentID, Status: models.PaymentStatusPaid, Brand: payment.Brand, Last4: payment.Last4}, nil
 	}
 	return &PaymentResult{ProviderPaymentID: intent.PaymentIntentID, PaymentIntentID: intent.PaymentIntentID, ApprovalURL: intent.ApprovalURL, Status: models.PaymentStatusPending}, nil
 }

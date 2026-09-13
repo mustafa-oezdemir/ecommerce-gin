@@ -11,6 +11,20 @@ document.addEventListener("DOMContentLoaded", () => {
   };
   billingToggle?.addEventListener("change", updateBilling);
   updateBilling();
+
+  const cardMethods = form?.querySelectorAll("[data-card-method]") || [];
+  const cardPanel = form?.querySelector("[data-card-panel]");
+  const cardCVC = form?.querySelector("[data-card-cvc]");
+  const savedCards = form?.querySelectorAll("[data-saved-card]") || [];
+  const updateCardPanel = () => {
+    const selected = Array.from(cardMethods).some((input) => input.checked);
+    if (cardPanel) cardPanel.hidden = !selected;
+    if (cardCVC) cardCVC.required = selected;
+    savedCards.forEach((input) => { input.required = selected; });
+  };
+  form?.querySelectorAll('input[name="payment_method"]').forEach((input) => input.addEventListener("change", updateCardPanel));
+  updateCardPanel();
+
   form?.addEventListener("submit", () => {
     const button = form.querySelector("[data-place-order]");
     if (!button || button.disabled) return;

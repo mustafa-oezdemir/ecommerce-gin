@@ -30,10 +30,12 @@ type CheckoutHandler struct {
 	bankingWebhooks *services.PaymentWebhookService
 	mailer          *services.MailService
 	bankingEnabled  bool
+	cards           *services.PaymentCardService
 }
 
 func NewCheckoutHandler(database *gorm.DB, environment, webhookSecret, bankingWebhookSecret string, bankingClient banking.PaymentIntentClient) *CheckoutHandler {
 	gateway := services.NewRoutedPaymentGateway(environment, bankingClient)
+	cardClient, _ := bankingClient.(banking.CardClient)
 	return &CheckoutHandler{
 		checkout:        services.NewCheckoutService(database, gateway),
 		addresses:       services.NewAddressService(database),
@@ -42,6 +44,7 @@ func NewCheckoutHandler(database *gorm.DB, environment, webhookSecret, bankingWe
 		bankingWebhooks: services.NewPaymentWebhookService(database, bankingWebhookSecret),
 		mailer:          services.NewMailServiceFromEnv(),
 		bankingEnabled:  bankingClient != nil,
+		cards:           services.NewPaymentCardService(database, cardClient),
 	}
 }
 
@@ -65,13 +68,18 @@ func (h *CheckoutHandler) Show(c *gin.Context) {
 		c.String(http.StatusInternalServerError, "Could not load addresses")
 		return
 	}
+	cards, err := h.cards.List(c.Request.Context(), user.ID)
+	if err != nil {
+		c.String(http.StatusInternalServerError, "Could not load payment methods")
+		return
+	}
 	key, err := services.NewIdempotencyKey()
 	if err != nil {
 		c.String(http.StatusInternalServerError, "Could not start checkout")
 		return
 	}
 	c.Header("Cache-Control", "no-store")
-	c.HTML(http.StatusOK, "checkout/index", viewData(c, gin.H{"Summary": summary, "Addresses": addresses, "IdempotencyKey": key, "BankingEnabled": h.bankingEnabled}))
+	c.HTML(http.StatusOK, "checkout/index", viewData(c, gin.H{"Summary": summary, "Addresses": addresses, "Cards": cards, "IdempotencyKey": key, "BankingEnabled": h.bankingEnabled}))
 }
 
 func (h *CheckoutHandler) Place(c *gin.Context) {
@@ -88,10 +96,23 @@ func (h *CheckoutHandler) Place(c *gin.Context) {
 		h.checkoutError(c, services.ErrInvalidCheckout)
 		return
 	}
+	method := models.PaymentMethod(request.PaymentMethod)
+	if method == models.PaymentMethodDebitCard || method == models.PaymentMethodCreditCard {
+		if request.SavedCardID == 0 || len(request.CardCVC) != 3 {
+			h.checkoutError(c, services.ErrInvalidCheckout)
+			return
+		}
+		card, err := h.cards.Get(c.Request.Context(), user.ID, request.SavedCardID)
+		if err != nil {
+			h.checkoutError(c, services.ErrInvalidCheckout)
+			return
+		}
+		request.ProviderToken = card.ProviderToken
+	}
 	result, err := h.checkout.Checkout(c.Request.Context(), services.CheckoutInput{
 		UserID: user.ID, ShippingAddressID: request.ShippingAddressID, BillingAddressID: request.BillingAddressID,
-		BillingSameAsShipping: request.BillingSameAsShipping, PaymentMethod: models.PaymentMethod(request.PaymentMethod),
-		IdempotencyKey: request.IdempotencyKey, ProviderToken: request.ProviderToken,
+		BillingSameAsShipping: request.BillingSameAsShipping, PaymentMethod: method,
+		IdempotencyKey: request.IdempotencyKey, ProviderToken: request.ProviderToken, SavedCardID: request.SavedCardID, CardCVC: request.CardCVC,
 		RequestID: c.GetString(middleware.RequestIDKey),
 	})
 	if err != nil {
@@ -106,6 +127,55 @@ func (h *CheckoutHandler) Place(c *gin.Context) {
 		return
 	}
 	c.Redirect(http.StatusSeeOther, "/checkout/success?order_id="+strconv.FormatUint(uint64(result.Order.ID), 10))
+}
+
+func (h *CheckoutHandler) ListPaymentCards(c *gin.Context) {
+	user, ok := middleware.CurrentUser(c)
+	if !ok {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+	cards, err := h.cards.List(c.Request.Context(), user.ID)
+	if err != nil {
+		c.String(http.StatusInternalServerError, "Could not load payment methods")
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	c.HTML(http.StatusOK, "account/payment-methods/index", viewData(c, gin.H{"PageTitle": "Payment Methods", "Cards": cards, "BankingEnabled": h.cards.Enabled()}))
+}
+
+func (h *CheckoutHandler) AddPaymentCard(c *gin.Context) {
+	user, ok := middleware.CurrentUser(c)
+	if !ok {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+	var request validation.AddPaymentCardRequest
+	if c.ShouldBind(&request) != nil {
+		c.HTML(http.StatusBadRequest, "account/payment-methods/index", viewData(c, gin.H{"PageTitle": "Payment Methods", "error": "Enter valid Banking card details.", "BankingEnabled": h.cards.Enabled()}))
+		return
+	}
+	_, err := h.cards.Add(c.Request.Context(), services.AddPaymentCardInput{UserID: user.ID, CardNumber: request.CardNumber, ExpMonth: request.ExpMonth, ExpYear: request.ExpYear, CVC: request.CVC, IsDefault: request.IsDefault, RequestID: c.GetString(middleware.RequestIDKey)})
+	if err != nil {
+		cards, _ := h.cards.List(c.Request.Context(), user.ID)
+		c.HTML(http.StatusBadRequest, "account/payment-methods/index", viewData(c, gin.H{"PageTitle": "Payment Methods", "Cards": cards, "error": "Banking could not verify this card. Check the card number, expiry date, and CVC.", "BankingEnabled": h.cards.Enabled()}))
+		return
+	}
+	c.Redirect(http.StatusSeeOther, "/account/payment-methods?status=added")
+}
+
+func (h *CheckoutHandler) DeletePaymentCard(c *gin.Context) {
+	user, ok := middleware.CurrentUser(c)
+	if !ok {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+	var uri validation.PaymentCardIDURI
+	if c.ShouldBindUri(&uri) != nil || h.cards.Delete(c.Request.Context(), user.ID, uri.ID) != nil {
+		c.AbortWithStatus(http.StatusNotFound)
+		return
+	}
+	c.Redirect(http.StatusSeeOther, "/account/payment-methods?status=deleted")
 }
 
 func (h *CheckoutHandler) BankingReturn(c *gin.Context) {
@@ -160,9 +230,9 @@ func (h *CheckoutHandler) Success(c *gin.Context) {
 	}
 	c.Header("Cache-Control", "no-store")
 	c.HTML(http.StatusOK, "checkout/success", viewData(c, gin.H{
-		"Order": order,
+		"Order":          order,
 		"PaymentPending": order.Payment.Status == models.PaymentStatusPending || order.Payment.Status == models.PaymentStatusAuthorized,
-		"PaymentFailed": order.Payment.Status == models.PaymentStatusFailed || order.Payment.Status == models.PaymentStatusCancelled,
+		"PaymentFailed":  order.Payment.Status == models.PaymentStatusFailed || order.Payment.Status == models.PaymentStatusCancelled,
 	}))
 }
 

@@ -54,6 +54,12 @@ func TestNewRouterBuildsApplicationRoutes(t *testing.T) {
 	if staticResponse.Code != http.StatusOK || !strings.Contains(staticResponse.Body.String(), "delete-account-form") {
 		t.Fatalf("embedded static asset was not served: %d %s", staticResponse.Code, staticResponse.Body.String())
 	}
+
+	registerResponse := httptest.NewRecorder()
+	handler.ServeHTTP(registerResponse, httptest.NewRequest(http.MethodGet, "/register", nil))
+	if registerResponse.Code != http.StatusOK || !strings.Contains(registerResponse.Body.String(), `action="/register"`) {
+		t.Fatalf("register page = %d %s", registerResponse.Code, registerResponse.Body.String())
+	}
 }
 
 func TestAccountRoutesRequireAuthenticationAndCSRF(t *testing.T) {
@@ -94,6 +100,7 @@ func TestAccountRoutesRequireAuthenticationAndCSRF(t *testing.T) {
 		"/account/addresses/1",
 		"/account/addresses/1/delete",
 		"/checkout",
+		"/register",
 		"/admin/users/7/delete",
 		"/admin/categories/7",
 		"/admin/categories/7/delete",

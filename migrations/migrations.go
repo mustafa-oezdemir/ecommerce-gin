@@ -70,6 +70,9 @@ var warehouseReturnConfirmationSchema string
 //go:embed 000021_banking_payments.sql
 var bankingPaymentsSchema string
 
+//go:embed 000022_saved_payment_cards.sql
+var savedPaymentCardsSchema string
+
 type migration struct {
 	version string
 	sql     string
@@ -102,6 +105,7 @@ func Apply(db *gorm.DB) error {
 			{version: "000019_product_discovery", sql: productDiscoverySchema},
 			{version: "000020_warehouse_return_confirmation", sql: warehouseReturnConfirmationSchema},
 			{version: "000021_banking_payments", sql: bankingPaymentsSchema},
+			{version: "000022_saved_payment_cards", sql: savedPaymentCardsSchema},
 		} {
 			var count int64
 			if err := tx.Raw("SELECT COUNT(*) FROM schema_migrations WHERE version = ?", migration.version).Scan(&count).Error; err != nil {

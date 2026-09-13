@@ -34,6 +34,8 @@ type CheckoutInput struct {
 	PaymentMethod         models.PaymentMethod
 	IdempotencyKey        string
 	ProviderToken         string
+	SavedCardID           uint
+	CardCVC               string
 	RequestID             string
 }
 
@@ -177,9 +179,11 @@ func (s *CheckoutService) Checkout(ctx context.Context, input CheckoutInput) (*C
 			items = append(items, models.OrderItem{ProductID: product.ID, ProductName: product.Name, ProductSKU: fmt.Sprintf("SKU-%08d", product.ID), UnitPriceCents: product.PriceCents, Quantity: cartItem.Quantity, SubtotalCents: lineTotal})
 		}
 		chargedAmount = subtotal + checkoutShippingCents
+		cardPayment := input.PaymentMethod == models.PaymentMethodDebitCard || input.PaymentMethod == models.PaymentMethodCreditCard
 		bankingPayment := input.PaymentMethod == models.PaymentMethodPehlioneBank
+		delayedPayment := bankingPayment || cardPayment
 		orderStatus := models.OrderStatusPendingPayment
-		if !bankingPayment {
+		if !delayedPayment {
 			paymentResult, err = s.gateway.CreatePayment(ctx, PaymentRequest{UserID: input.UserID, Method: input.PaymentMethod, AmountCents: chargedAmount, Currency: "EUR", IdempotencyKey: input.IdempotencyKey, ProviderToken: input.ProviderToken, RequestID: input.RequestID})
 			if err != nil || paymentResult == nil || (paymentResult.Status != models.PaymentStatusPaid && paymentResult.Status != models.PaymentStatusAuthorized) {
 				return ErrPaymentFailed
@@ -196,10 +200,22 @@ func (s *CheckoutService) Checkout(ctx context.Context, input CheckoutInput) (*C
 		if err := tx.Model(&order).Update("order_number", order.OrderNumber).Error; err != nil {
 			return err
 		}
-		if bankingPayment {
-			paymentResult, err = s.gateway.CreatePayment(ctx, PaymentRequest{UserID: input.UserID, Method: input.PaymentMethod, AmountCents: chargedAmount, Currency: "EUR", IdempotencyKey: input.IdempotencyKey, OrderReference: "ECOM-" + order.OrderNumber, RequestID: input.RequestID})
-			if err != nil || paymentResult == nil || paymentResult.Status != models.PaymentStatusPending || paymentResult.PaymentIntentID == "" || paymentResult.ApprovalURL == "" {
+		if delayedPayment {
+			paymentResult, err = s.gateway.CreatePayment(ctx, PaymentRequest{UserID: input.UserID, Method: input.PaymentMethod, AmountCents: chargedAmount, Currency: "EUR", IdempotencyKey: input.IdempotencyKey, OrderReference: "ECOM-" + order.OrderNumber, ProviderToken: input.ProviderToken, CardCVC: input.CardCVC, RequestID: input.RequestID})
+			if err != nil || paymentResult == nil || paymentResult.PaymentIntentID == "" {
 				return ErrPaymentFailed
+			}
+			if bankingPayment && (paymentResult.Status != models.PaymentStatusPending || paymentResult.ApprovalURL == "") {
+				return ErrPaymentFailed
+			}
+			if cardPayment {
+				if paymentResult.Status != models.PaymentStatusPaid || paymentResult.ProviderPaymentID == "" || paymentResult.Last4 == "" {
+					return ErrPaymentFailed
+				}
+				order.Status = models.OrderStatusPaid
+				if err := tx.Model(&order).Update("status", order.Status).Error; err != nil {
+					return err
+				}
 			}
 		}
 		for index := range items {
@@ -297,7 +313,7 @@ func (s *CheckoutService) loadReplay(ctx context.Context, userID uint, key, requ
 }
 
 func checkoutRequestHash(input CheckoutInput) string {
-	value := fmt.Sprintf("%d:%d:%t:%s", input.ShippingAddressID, input.BillingAddressID, input.BillingSameAsShipping, input.PaymentMethod)
+	value := fmt.Sprintf("%d:%d:%t:%s:%d", input.ShippingAddressID, input.BillingAddressID, input.BillingSameAsShipping, input.PaymentMethod, input.SavedCardID)
 	digest := sha256.Sum256([]byte(value))
 	return hex.EncodeToString(digest[:])
 }

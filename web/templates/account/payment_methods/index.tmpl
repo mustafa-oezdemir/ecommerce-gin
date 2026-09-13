@@ -1,0 +1,36 @@
+{{define "account/payment-methods/index"}}
+{{template "layouts/account/start" .}}
+{{template "partials/breadcrumbs" (dict "HomeURL" "/account" "HomeLabel" "Account" "Current" "Payment Methods")}}
+{{template "partials/page-header" (dict "Title" "Payment Methods" "Description" "Connect a virtual card issued by PehliOne Banking.")}}
+{{if .error}}<div class="alert alert-danger" role="alert">{{.error}}</div>{{end}}
+{{if eq .Status "added"}}<div class="alert alert-success" role="status">Your Banking card was added securely.</div>{{end}}
+<div class="row g-4">
+  <div class="col-lg-7">
+    <section class="content-card h-100">
+      <div class="d-flex justify-content-between align-items-start gap-3 mb-4"><div><span class="auth-kicker">Saved cards</span><h2 class="h4 mb-1">Your wallet</h2><p class="text-muted mb-0">Only Banking tokens and masked details are stored here.</p></div><span class="payment-security-mark" aria-label="Secure card storage">⌁</span></div>
+      <div class="saved-card-grid">{{$root := .}}{{range .Cards}}
+        <article class="saved-card">
+          <div class="d-flex justify-content-between align-items-center"><strong class="text-uppercase">{{.Brand}}</strong>{{if .IsDefault}}<span class="status-badge status-delivered">Default</span>{{end}}</div>
+          <div class="saved-card-number">•••• •••• •••• {{.Last4}}</div>
+          <div class="d-flex justify-content-between"><span>Expires {{printf "%02d" .ExpMonth}}/{{.ExpYear}}</span><form method="post" action="/account/payment-methods/{{.ID}}/delete">{{$root.CSRFField}}<button class="btn btn-sm btn-link text-danger p-0" type="submit">Remove</button></form></div>
+        </article>
+      {{else}}<div class="empty-state"><h2>No cards connected</h2><p>Add a virtual card from your PehliOne Banking account.</p></div>{{end}}</div>
+    </section>
+  </div>
+  <div class="col-lg-5">
+    <section class="form-card">
+      <span class="auth-kicker">Banking verification</span><h2 class="h4">Add a card</h2>
+      <p class="small text-muted">Enter the virtual card details shown by Banking. The card number and CVC are sent directly to Banking for verification and are never saved by PehliOne Shop.</p>
+      {{if .BankingEnabled}}<form method="post" action="/account/payment-methods" autocomplete="off">
+        {{.CSRFField}}
+        <div class="mb-3"><label class="form-label" for="card-number">Card number</label><input class="form-control form-control-lg font-monospace" id="card-number" name="card_number" inputmode="numeric" autocomplete="cc-number" minlength="16" maxlength="23" placeholder="4000 0000 0000 0000" required></div>
+        <div class="row g-3"><div class="col-6"><label class="form-label" for="exp-month">Expiry month</label><input class="form-control" id="exp-month" type="number" name="exp_month" min="1" max="12" inputmode="numeric" autocomplete="cc-exp-month" required></div><div class="col-6"><label class="form-label" for="exp-year">Expiry year</label><input class="form-control" id="exp-year" type="number" name="exp_year" min="2026" max="2200" inputmode="numeric" autocomplete="cc-exp-year" required></div></div>
+        <div class="mt-3"><label class="form-label" for="card-cvc">CVC</label><input class="form-control" id="card-cvc" type="password" name="cvc" inputmode="numeric" autocomplete="cc-csc" minlength="3" maxlength="3" required></div>
+        <div class="form-check mt-3"><input class="form-check-input" id="default-card" type="checkbox" name="is_default" value="true"><label class="form-check-label" for="default-card">Use as default card</label></div>
+        <button class="btn btn-primary w-100 mt-4" type="submit">Verify with Banking and add</button>
+      </form>{{else}}<div class="alert alert-warning mb-0">Banking integration is not configured.</div>{{end}}
+    </section>
+  </div>
+</div>
+{{template "layouts/account/end" .}}
+{{end}}

@@ -30,6 +30,32 @@ func TestStaticFSContainsCSPCompatibleScripts(t *testing.T) {
 	}
 }
 
+func TestRegisterTemplateRendersModernCustomerForm(t *testing.T) {
+	templates, err := ParseTemplates()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var output bytes.Buffer
+	if err := templates.ExecuteTemplate(&output, "auth/register", map[string]any{
+		"CSRFField": template.HTML(`<input type="hidden" name="_csrf">`),
+		"FirstName": "Mustafa",
+		"LastName":  "Özdemir",
+		"Email":     "mustafa@example.com",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	body := output.String()
+	for _, expected := range []string{
+		`class="auth-shell mx-auto"`, `action="/register"`, `name="first_name" value="Mustafa"`,
+		`name="last_name" value="Özdemir"`, `name="email" value="mustafa@example.com"`,
+		`name="password_confirmation"`, `name="accept_terms"`, `href="/login"`,
+	} {
+		if !strings.Contains(body, expected) {
+			t.Errorf("register template is missing %q", expected)
+		}
+	}
+}
+
 func TestProfilePhotoHasBoundedCircularPresentation(t *testing.T) {
 	assets, err := StaticFS()
 	if err != nil {

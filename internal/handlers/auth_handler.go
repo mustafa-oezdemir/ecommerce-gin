@@ -1,10 +1,13 @@
 package handlers
 
 import (
+	"errors"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
@@ -38,7 +41,68 @@ func NewAuthHandler(database *gorm.DB, security *services.AccountSecurityService
 }
 
 func (h *AuthHandler) ShowLogin(c *gin.Context) {
-	c.HTML(http.StatusOK, "auth/login", viewData(c, nil))
+	data := gin.H{}
+	if c.Query("status") == "registered" {
+		data["success"] = "Your account is ready. Log in to start shopping."
+	}
+	c.HTML(http.StatusOK, "auth/login", viewData(c, data))
+}
+
+func (h *AuthHandler) ShowRegister(c *gin.Context) {
+	c.HTML(http.StatusOK, "auth/register", viewData(c, nil))
+}
+
+func (h *AuthHandler) Register(c *gin.Context) {
+	var req validation.RegisterRequest
+	if err := c.ShouldBind(&req); err != nil {
+		h.renderRegister(c, http.StatusBadRequest, req, "Complete every field and use a password of at least 12 characters.")
+		return
+	}
+	firstName := strings.TrimSpace(req.FirstName)
+	lastName := strings.TrimSpace(req.LastName)
+	email := strings.ToLower(strings.TrimSpace(req.Email))
+	if utf8.RuneCountInString(firstName) < 1 || utf8.RuneCountInString(lastName) < 1 || email == "" {
+		h.renderRegister(c, http.StatusBadRequest, req, "Enter a valid first name, last name, and email address.")
+		return
+	}
+	if req.Password != req.PasswordConfirmation {
+		h.renderRegister(c, http.StatusBadRequest, req, "The passwords do not match.")
+		return
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		slog.ErrorContext(c.Request.Context(), "registration password hashing failed", "error", err)
+		h.renderRegister(c, http.StatusInternalServerError, req, "Your account could not be created. Please try again.")
+		return
+	}
+	user := models.User{
+		Name:      firstName + " " + lastName,
+		FirstName: firstName,
+		LastName:  lastName,
+		Email:     email,
+		Password:  string(hash),
+		Role:      models.RoleCustomer,
+	}
+	if err := h.database.WithContext(c.Request.Context()).Create(&user).Error; err != nil {
+		if errors.Is(err, gorm.ErrDuplicatedKey) {
+			h.renderRegister(c, http.StatusConflict, req, "An account with this email address already exists.")
+			return
+		}
+		slog.ErrorContext(c.Request.Context(), "customer registration failed", "error", err)
+		h.renderRegister(c, http.StatusInternalServerError, req, "Your account could not be created. Please try again.")
+		return
+	}
+	slog.InfoContext(c.Request.Context(), "customer registered", "user_id", user.ID)
+	c.Redirect(http.StatusSeeOther, "/login?status=registered")
+}
+
+func (h *AuthHandler) renderRegister(c *gin.Context, status int, req validation.RegisterRequest, message string) {
+	c.HTML(status, "auth/register", viewData(c, gin.H{
+		"error":     message,
+		"FirstName": strings.TrimSpace(req.FirstName),
+		"LastName":  strings.TrimSpace(req.LastName),
+		"Email":     strings.ToLower(strings.TrimSpace(req.Email)),
+	}))
 }
 
 func (h *AuthHandler) Login(c *gin.Context) {

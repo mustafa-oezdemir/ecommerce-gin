@@ -31,6 +31,83 @@ func TestLoginCreatesNormalSessionWhenTwoFactorIsDisabled(t *testing.T) {
 	testLoginSessionFlow(t, false, "/", true)
 }
 
+func TestRegisterCreatesCustomerAccount(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	sqlDatabase, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = sqlDatabase.Close() })
+	database, err := gorm.Open(mysql.New(mysql.Config{Conn: sqlDatabase, SkipInitializeWithVersion: true}), &gorm.Config{SkipDefaultTransaction: true, Logger: logger.New(nilLogWriter{}, logger.Config{LogLevel: logger.Silent})})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mock.ExpectExec("INSERT INTO `users`").WillReturnResult(sqlmock.NewResult(42, 1))
+
+	handler := NewAuthHandler(database, services.NewAccountSecurityService(database, bytes.Repeat([]byte{0x47}, 32), nil))
+	router := gin.New()
+	router.POST("/register", handler.Register)
+	form := url.Values{
+		"first_name":            {" Mustafa "},
+		"last_name":             {" Özdemir "},
+		"email":                 {"MUSTAFA@EXAMPLE.COM"},
+		"password":              {"a-secure-passphrase"},
+		"password_confirmation": {"a-secure-passphrase"},
+		"accept_terms":          {"true"},
+	}
+	request := httptest.NewRequest(http.MethodPost, "/register", strings.NewReader(form.Encode()))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusSeeOther || response.Header().Get("Location") != "/login?status=registered" {
+		t.Fatalf("register = %d location %q", response.Code, response.Header().Get("Location"))
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRegisterRejectsMismatchedPasswords(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	sqlDatabase, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = sqlDatabase.Close() })
+	database, err := gorm.Open(mysql.New(mysql.Config{Conn: sqlDatabase, SkipInitializeWithVersion: true}), &gorm.Config{SkipDefaultTransaction: true, Logger: logger.New(nilLogWriter{}, logger.Config{LogLevel: logger.Silent})})
+	if err != nil {
+		t.Fatal(err)
+	}
+	templates, err := web.ParseTemplates()
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := NewAuthHandler(database, services.NewAccountSecurityService(database, bytes.Repeat([]byte{0x48}, 32), nil))
+	router := gin.New()
+	router.SetHTMLTemplate(templates)
+	router.POST("/register", handler.Register)
+	form := url.Values{
+		"first_name":            {"Mustafa"},
+		"last_name":             {"Özdemir"},
+		"email":                 {"mustafa@example.com"},
+		"password":              {"a-secure-passphrase"},
+		"password_confirmation": {"another-passphrase"},
+		"accept_terms":          {"true"},
+	}
+	request := httptest.NewRequest(http.MethodPost, "/register", strings.NewReader(form.Encode()))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "The passwords do not match") {
+		t.Fatalf("register mismatch = %d body %q", response.Code, response.Body.String())
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestLoginRequiresChallengeBeforeSessionWhenTwoFactorIsEnabled(t *testing.T) {
 	testLoginSessionFlow(t, true, "/auth/two-factor-challenge", false)
 }
