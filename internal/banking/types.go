@@ -12,9 +12,18 @@ type CreatePaymentIntentRequest struct {
 }
 
 type PaymentIntent struct {
-	PaymentIntentID string `json:"payment_intent_id"`
-	Status          string `json:"status"`
-	ApprovalURL     string `json:"approval_url"`
+	PaymentIntentID   string `json:"payment_intent_id"`
+	MerchantID        string `json:"merchant_id"`
+	MerchantName      string `json:"merchant_name"`
+	BeneficiaryIBAN   string `json:"beneficiary_iban"`
+	MerchantReference string `json:"merchant_reference"`
+	Amount            string `json:"amount"`
+	Currency          string `json:"currency"`
+	Status            string `json:"status"`
+	PaymentID         string `json:"payment_id,omitempty"`
+	ReturnURL         string `json:"return_url"`
+	ExpiresAt         string `json:"expires_at"`
+	ApprovalURL       string `json:"approval_url"`
 }
 
 type PaymentIntentClient interface {
@@ -45,11 +54,19 @@ type ApproveCardPaymentRequest struct {
 }
 
 type CardPayment struct {
-	PaymentIntentID string `json:"payment_intent_id"`
-	Status          string `json:"status"`
-	PaymentID       string `json:"payment_id"`
-	Brand           string `json:"brand"`
-	Last4           string `json:"last4"`
+	PaymentIntentID   string `json:"payment_intent_id"`
+	MerchantID        string `json:"merchant_id"`
+	MerchantName      string `json:"merchant_name"`
+	BeneficiaryIBAN   string `json:"beneficiary_iban"`
+	MerchantReference string `json:"merchant_reference"`
+	Amount            string `json:"amount"`
+	Currency          string `json:"currency"`
+	Status            string `json:"status"`
+	PaymentID         string `json:"payment_id"`
+	ReturnURL         string `json:"return_url"`
+	ExpiresAt         string `json:"expires_at"`
+	Brand             string `json:"brand"`
+	Last4             string `json:"last4"`
 }
 
 type CardClient interface {

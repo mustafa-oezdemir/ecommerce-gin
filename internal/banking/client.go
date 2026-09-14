@@ -84,7 +84,13 @@ func (client *Client) CreatePaymentIntent(ctx context.Context, request CreatePay
 	if err != nil || approval.Scheme != client.publicOrigin.Scheme || approval.Host != client.publicOrigin.Host || !strings.HasPrefix(approval.EscapedPath(), "/pay/") || approval.RawQuery != "" || approval.Fragment != "" {
 		return nil, ErrInvalidPaymentIntent
 	}
-	if strings.TrimSpace(intent.PaymentIntentID) == "" || len(intent.PaymentIntentID) > 128 || intent.Status != "AWAITING_CUSTOMER" {
+	if strings.TrimSpace(intent.PaymentIntentID) == "" || len(intent.PaymentIntentID) > 128 ||
+		intent.MerchantID != client.merchantID || strings.TrimSpace(intent.MerchantName) == "" || strings.TrimSpace(intent.BeneficiaryIBAN) == "" ||
+		intent.MerchantReference != request.OrderReference || intent.Amount != request.Amount || intent.Currency != request.Currency ||
+		intent.Status != "AWAITING_CUSTOMER" || strings.TrimSpace(intent.ReturnURL) == "" {
+		return nil, ErrInvalidPaymentIntent
+	}
+	if expiresAt, parseErr := time.Parse(time.RFC3339, intent.ExpiresAt); parseErr != nil || !expiresAt.After(time.Now().UTC()) {
 		return nil, ErrInvalidPaymentIntent
 	}
 	return &intent, nil
@@ -125,7 +131,10 @@ func (client *Client) ApproveCardPayment(ctx context.Context, request ApproveCar
 	if err := client.post(ctx, path, request.RequestID, payload, &result, http.StatusOK); err != nil {
 		return nil, err
 	}
-	if result.PaymentIntentID != request.PaymentIntentID || result.Status != "BOOKED" || result.PaymentID == "" || len(result.Last4) != 4 || result.Brand == "" {
+	if result.PaymentIntentID != request.PaymentIntentID || result.MerchantID != client.merchantID ||
+		strings.TrimSpace(result.MerchantName) == "" || strings.TrimSpace(result.BeneficiaryIBAN) == "" || result.MerchantReference == "" ||
+		result.Amount == "" || result.Currency != "EUR" || result.Status != "BOOKED" || result.PaymentID == "" ||
+		strings.TrimSpace(result.ReturnURL) == "" || len(result.Last4) != 4 || result.Brand == "" {
 		return nil, ErrInvalidPaymentIntent
 	}
 	return &result, nil
